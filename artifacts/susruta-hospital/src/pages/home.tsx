@@ -65,7 +65,7 @@ function TexturedSection({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.20,
+          opacity: 0.50,
           maskImage: "radial-gradient(circle 200px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
           WebkitMaskImage: "radial-gradient(circle 200px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
         }}
