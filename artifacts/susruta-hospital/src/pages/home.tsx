@@ -265,7 +265,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
                   <p className="font-serif font-bold text-base text-primary leading-tight">
                     {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">B.A.M.S. (Gold Medalist) · M.D.(Ay) · Ph.D.(Ay)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D. (Ay), F.R.A.V., D.Yoga</p>
                 </div>
                 <div className="flex-shrink-0 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                   <Award size={14} className="text-yellow-600" />
@@ -326,20 +326,18 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
                 <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto" />
               </div>
               <div className="mt-5 bg-[#f7f7f7] border border-primary/20 p-6 rounded-2xl">
-                <h3 className="font-serif font-bold text-lg mb-3 text-primary">
+                <h3 className="font-serif font-bold text-xl text-primary leading-tight">
                   {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
                 </h3>
-                <ul className="space-y-1.5 text-sm text-muted-foreground font-medium">
-                  <li>✦ B.A.M.S. (Gold Medalist)</li>
-                  <li>✦ M.D. (Ay)</li>
-                  <li>✦ Ph.D. (Ay)</li>
-                  <li>✦ F.R.A.V.</li>
-                  <li>✦ Diploma in Yoga</li>
-                </ul>
+                <p className="mt-1.5 text-sm font-medium text-foreground/70 leading-relaxed">
+                  {lang === "en"
+                    ? "B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D. (Ay), F.R.A.V., D.Yoga"
+                    : "బి.ఎ.ఎం.ఎస్. (గోల్డ్ మెడలిస్ట్), ఎం.డి. (ఆయు.), పి.హెచ్.డి. (ఆయు.), ఎఫ్.ఆర్.ఎ.వి., డి.యోగ"}
+                </p>
                 <div className="mt-4 pt-4 border-t border-primary/10">
                   <p className="text-sm text-muted-foreground font-semibold uppercase tracking-wide mb-1">{tr("about.position", lang)}</p>
                   <p className="text-sm font-semibold text-foreground">{tr("about.specialist", lang)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Susruta Hospital, Tirupati</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">Susruta Hospital, Tirupati</p>
                 </div>
               </div>
             </div>
@@ -426,10 +424,10 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
                   <div className={`flex flex-col md:flex-row items-center gap-4 ${!isLeft ? "md:flex-row-reverse" : ""}`}>
                     <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
                       <div className="flex items-start justify-between gap-3 mb-2">
-                        <h4 className="font-serif font-bold text-base text-foreground leading-snug">{award[lang].title}</h4>
-                        <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full">{award.year}</span>
+                        <h4 className="font-serif font-bold text-lg text-foreground leading-snug">{award[lang].title}</h4>
+                        <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-sm font-bold rounded-full">{award.year}</span>
                       </div>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{award[lang].inst}</p>
+                      <p className="text-muted-foreground text-base leading-relaxed">{award[lang].inst}</p>
                     </div>
                     <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
                       <Trophy size={16} />
