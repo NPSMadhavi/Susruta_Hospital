@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { motion, useInView, AnimatePresence } from "framer-motion";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useLanguage } from "@/store/use-language";
-import { translations } from "@/lib/i18n";
+import { t as tr } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import {
   useListOpenMonths,
@@ -14,143 +15,260 @@ import {
 import {
   Award, Leaf, ShieldCheck, Clock, Trophy, Activity,
   Droplets, Heart, MapPin, Phone, Mail, Star, Quote,
-  CheckCircle2, ChevronLeft, ChevronRight, Calendar, Info
+  CheckCircle2, Calendar, Info,
 } from "lucide-react";
-import { format, parseISO, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths } from "date-fns";
+import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
 
+// ─── Scroll animation wrapper ───────────────────────────────
+function Reveal({
+  children,
+  delay = 0,
+  direction = "up",
+  className = "",
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  direction?: "up" | "left" | "right" | "none";
+  className?: string;
+}) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const variants = {
+    hidden: {
+      opacity: 0,
+      y: direction === "up" ? 40 : 0,
+      x: direction === "left" ? -40 : direction === "right" ? 40 : 0,
+    },
+    visible: { opacity: 1, y: 0, x: 0 },
+  };
+  return (
+    <motion.div
+      ref={ref}
+      variants={variants}
+      initial="hidden"
+      animate={inView ? "visible" : "hidden"}
+      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+// ─── Section Header ──────────────────────────────────────────
+function SectionHeader({ label, title, subtitle }: { label: string; title: string; subtitle?: string }) {
+  return (
+    <div className="text-center max-w-2xl mx-auto">
+      <Reveal>
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary font-semibold text-xs uppercase tracking-wider mb-4">
+          <Leaf size={13} /> {label}
+        </div>
+        <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">{title}</h2>
+        {subtitle && <p className="text-muted-foreground text-lg leading-relaxed">{subtitle}</p>}
+      </Reveal>
+    </div>
+  );
+}
+
+// ─── Main page ───────────────────────────────────────────────
 export default function Home() {
   const { lang } = useLanguage();
-  const t = (key: keyof typeof translations) => translations[key]?.[lang] || key;
-
   return (
     <PublicLayout>
-      <HeroSection lang={lang} t={t} />
+      <HeroSection lang={lang} />
       <AboutSection lang={lang} />
       <AchievementsSection lang={lang} />
       <ServicesSection lang={lang} />
-      <AppointmentsSection lang={lang} t={t} />
+      <AppointmentsSection lang={lang} />
       <TestimonialsSection lang={lang} />
-      <ContactSection lang={lang} t={t} />
+      <ContactSection lang={lang} />
     </PublicLayout>
   );
 }
 
-// ─────────────────────────── HERO ───────────────────────────
-function HeroSection({ lang, t }: { lang: string; t: (k: any) => string }) {
+// ─── HERO ────────────────────────────────────────────────────
+const HERO_TEXTS: Array<{ en: string; te: string }> = [
+  { en: "Experience Nature's Touch for Your Health", te: "మీ ఆరోగ్యం కోసం ప్రకృతి స్పర్శను అనుభవించండి" },
+  { en: "Heal with Ancient Wisdom & Modern Care", te: "పురాతన జ్ఞానంతో ఆధునిక సంరక్షణతో స్వస్థత పొందండి" },
+  { en: "30+ Years of Ayurvedic Excellence", te: "30+ సంవత్సరాల ఆయుర్వేద శ్రేష్ఠత" },
+  { en: "Trusted Healing in the Heart of Tirupati", te: "తిరుపతి హృదయంలో విశ్వసనీయ వైద్యం" },
+];
+
+function HeroSection({ lang }: { lang: "en" | "te" }) {
+  const [textIdx, setTextIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setTextIdx((i) => (i + 1) % HERO_TEXTS.length), 3500);
+    return () => clearInterval(id);
+  }, []);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 88;
+      window.scrollTo({ top, behavior: "smooth" });
+    }
+  };
+
   return (
-    <section id="home" className="relative pt-20 pb-28 overflow-hidden bg-gradient-to-br from-[#f0f7f0] via-white to-[#e8f5e8]">
-      <div className="absolute inset-0 -z-10 opacity-20"
-        style={{ backgroundImage: `url(${new URL('../../../public/images/ayurveda-pattern.png', import.meta.url).href})`, backgroundSize: '400px' }}>
-      </div>
+    <section id="home" className="relative pt-16 pb-24 overflow-hidden bg-gradient-to-br from-[#f0f7f0] via-white to-[#eaf6ea]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
 
-          {/* Text */}
-          <div className="flex-1 space-y-7 text-center lg:text-left z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm">
-              <Leaf size={15} />
-              <span>{lang === "en" ? "Authentic Ayurvedic Healing" : "ప్రామాణికమైన ఆయుర్వేద వైద్యం"}</span>
+          {/* ── Left: Text (stable except headline) ── */}
+          <div className="flex-1 space-y-6 text-center lg:text-left z-10">
+
+            {/* Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm"
+            >
+              <Leaf size={15} /> {tr("hero.badge", lang)}
+            </motion.div>
+
+            {/* Rotating headline – only this part changes */}
+            <div className="h-[9rem] md:h-[8rem] lg:h-[7rem] flex items-start">
+              <AnimatePresence mode="wait">
+                <motion.h1
+                  key={textIdx}
+                  initial={{ opacity: 0, y: 28 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -28 }}
+                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                  className="text-4xl md:text-5xl lg:text-5xl font-serif font-bold text-foreground leading-[1.15] w-full"
+                >
+                  {HERO_TEXTS[textIdx][lang]}
+                </motion.h1>
+              </AnimatePresence>
             </div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground leading-[1.15]">
-              {lang === "en" ? (
-                <>Experience <span className="text-primary">Nature's</span><br />Touch for Your Health</>
-              ) : (
-                <>మీ ఆరోగ్యం కోసం<br /><span className="text-primary">ప్రకృతి</span> స్పర్శను అనుభవించండి</>
-              )}
-            </h1>
+            {/* Sub text – stable */}
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }}
+              className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed"
+            >
+              {tr("hero.subtitle", lang)}
+            </motion.p>
 
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              {lang === "en"
-                ? "Led by Dr. P. Murali Krishna — Gold Medalist, Ph.D., and former Principal of S.V. Ayurvedic College — bringing three decades of authentic healing to Tirupati."
-                : "డాక్టర్ పి. మురళీకృష్ణ గారి నేతృత్వంలో — గోల్డ్ మెడలిస్ట్, పి.హెచ్.డి., మరియు ఎస్.వి. ఆయుర్వేద కళాశాల మాజీ ప్రిన్సిపాల్ — తిరుపతికి మూడు దశాబ్దాల ప్రామాణికమైన వైద్యాన్ని అందిస్తున్నారు."}
-            </p>
+            {/* CTA Buttons – stable */}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.6 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+            >
+              <button
+                onClick={() => scrollTo("appointments")}
+                className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
+              >
+                {tr("btn.book", lang)}
+              </button>
+              <button
+                onClick={() => scrollTo("about")}
+                className="px-8 py-3.5 border-2 border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
+              >
+                {tr("btn.meet", lang)}
+              </button>
+            </motion.div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <a href="#appointments" onClick={(e) => { e.preventDefault(); document.getElementById("appointments")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-                className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all hover:-translate-y-0.5 text-center">
-                {t("btn.book")}
-              </a>
-              <a href="#about" onClick={(e) => { e.preventDefault(); document.getElementById("about")?.scrollIntoView({ behavior: "smooth" }); }}
-                className="px-8 py-3.5 border-2 border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/5 transition-all text-center">
-                {lang === "en" ? "Meet the Doctor" : "డాక్టర్‌ ని కలవండి"}
-              </a>
-            </div>
-
-            {/* Stats */}
-            <div className="flex flex-wrap gap-6 justify-center lg:justify-start pt-4">
+            {/* Stats – stable */}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
+              className="flex flex-wrap gap-6 justify-center lg:justify-start pt-2"
+            >
               {[
-                { num: "30+", label: lang === "en" ? "Years Experience" : "సంవత్సరాల అనుభవం" },
-                { num: "10+", label: lang === "en" ? "National Awards" : "జాతీయ అవార్డులు" },
-                { num: "147+", label: lang === "en" ? "Lectures Given" : "ఇచ్చిన ఉపన్యాసాలు" },
-                { num: "30+", label: lang === "en" ? "Publications" : "ప్రచురణలు" },
+                { num: "30+", key: "stat.experience" },
+                { num: "10+", key: "stat.awards" },
+                { num: "147+", key: "stat.lectures" },
+                { num: "30+", key: "stat.publications" },
               ].map((s) => (
-                <div key={s.label} className="text-center">
+                <div key={s.key} className="text-center">
                   <div className="text-2xl font-bold font-serif text-primary">{s.num}</div>
-                  <div className="text-xs text-muted-foreground font-medium">{s.label}</div>
+                  <div className="text-xs text-muted-foreground font-medium">{tr(s.key as any, lang)}</div>
                 </div>
               ))}
-            </div>
+            </motion.div>
           </div>
 
-          {/* Doctor Photo */}
-          <div className="w-full max-w-xs lg:max-w-sm xl:max-w-md flex-shrink-0 relative">
-            <div className="absolute -inset-4 bg-gradient-to-tr from-primary/20 to-green-200/40 rounded-[3rem] blur-2xl -z-10"></div>
-            <div className="rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl">
+          {/* ── Right: Doctor photo – fully stable ── */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full max-w-[340px] lg:max-w-[380px] xl:max-w-[420px] flex-shrink-0"
+          >
+            {/* Glow blob */}
+            <div className="absolute -inset-6 bg-gradient-to-tr from-primary/15 to-green-200/30 rounded-[3rem] blur-3xl -z-10 pointer-events-none" />
+
+            {/* Photo card */}
+            <div className="relative rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl shadow-primary/10">
               <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto object-cover" />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 text-white">
-                <h3 className="font-serif font-bold text-xl">{lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}</h3>
-                <p className="text-white/80 text-sm">B.A.M.S. (Gold Medalist), M.D.(Ay), Ph.D.(Ay)</p>
-              </div>
             </div>
-            <div className="absolute -bottom-5 -left-5 bg-white p-4 rounded-2xl shadow-xl border border-border flex items-center gap-3">
-              <div className="bg-yellow-100 p-2.5 rounded-xl text-yellow-600"><Award size={22} /></div>
+
+            {/* Name + credentials BELOW the photo (not overlapping) */}
+            <div className="mt-4 mx-2 bg-white border border-border rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-3">
               <div>
-                <p className="font-bold text-sm text-foreground">Gold Medalist</p>
-                <p className="text-xs text-muted-foreground">Nagarjuna University</p>
+                <p className="font-serif font-bold text-base text-primary leading-tight">
+                  {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">B.A.M.S. (Gold Medalist) · M.D.(Ay) · Ph.D.(Ay)</p>
+              </div>
+              <div className="flex-shrink-0 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <Award size={14} className="text-yellow-600" />
+                <span className="text-xs font-bold text-yellow-700">{lang === "en" ? "Gold Medalist" : "గోల్డ్ మెడలిస్ట్"}</span>
               </div>
             </div>
-          </div>
+          </motion.div>
+
         </div>
       </div>
 
-      {/* Feature Cards */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Floating feature cards */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
-            { icon: <ShieldCheck size={28} />, title: lang === "en" ? "Expert Doctor" : "నిపుణుడైన డాక్టర్", desc: lang === "en" ? "Retired Principal & highly qualified specialist with over 3 decades of experience." : "3 దశాబ్దాలకు పైగా అనుభవంతో విశ్రాంత ప్రిన్సిపాల్ & అత్యంత అర్హులైన నిపుణుడు." },
-            { icon: <Leaf size={28} />, title: lang === "en" ? "Authentic Ayurveda" : "ప్రామాణిక ఆయుర్వేదం", desc: lang === "en" ? "Traditional Panchakarma and genuine herbal treatments for chronic and acute ailments." : "దీర్ఘకాలిక వ్యాధులకు సాంప్రదాయ పంచకర్మ మరియు ప్రామాణిక మూలికా చికిత్సలు." },
-            { icon: <Clock size={28} />, title: lang === "en" ? "Easy Booking" : "సులభమైన బుకింగ్", desc: lang === "en" ? "Check real-time availability and book your appointment online in minutes." : "నిజ సమయ లభ్యతను తనిఖీ చేసి నిమిషాల్లో మీ అపాయింట్‌మెంట్ ఆన్‌లైన్‌లో బుక్ చేయండి." },
-          ].map((f, i) => (
-            <div key={i} className={`bg-white p-8 rounded-3xl border border-border/60 shadow-sm flex flex-col items-center text-center gap-4 ${i === 1 ? "border-primary/30 shadow-md shadow-primary/10 -mt-2 md:-mt-6" : ""}`}>
-              <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${i === 1 ? "bg-primary text-white shadow-lg shadow-primary/30" : "bg-primary/10 text-primary"}`}>
-                {f.icon}
-              </div>
-              <h3 className="text-lg font-serif font-bold">{f.title}</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
+            { icon: <ShieldCheck size={26} />, delay: 0, key: "expert" },
+            { icon: <Leaf size={26} />, delay: 0.1, key: "authentic", featured: true },
+            { icon: <Clock size={26} />, delay: 0.2, key: "booking" },
+          ].map((f, i) => {
+            const content = [
+              { title: { en: "Expert Doctor", te: "నిపుణుడైన డాక్టర్" }, desc: { en: "Retired Principal with 3+ decades of experience in Ayurveda.", te: "3 దశాబ్దాలకు పైగా అనుభవం గల విశ్రాంత ప్రిన్సిపాల్." } },
+              { title: { en: "Authentic Ayurveda", te: "ప్రామాణిక ఆయుర్వేదం" }, desc: { en: "Traditional Panchakarma and genuine herbal treatments.", te: "సాంప్రదాయ పంచకర్మ మరియు ప్రామాణిక మూలికా చికిత్సలు." } },
+              { title: { en: "Easy Booking", te: "సులభమైన బుకింగ్" }, desc: { en: "Check availability and book your appointment online.", te: "లభ్యతను తనిఖీ చేసి ఆన్‌లైన్‌లో అపాయింట్‌మెంట్ బుక్ చేయండి." } },
+            ][i];
+            return (
+              <Reveal key={i} delay={f.delay}>
+                <div className={`p-7 rounded-3xl flex flex-col items-center text-center gap-4 border transition-shadow hover:shadow-md ${
+                  f.featured ? "bg-primary text-white border-primary shadow-lg shadow-primary/25" : "bg-white border-border/60 shadow-sm"
+                }`}>
+                  <div className={`h-13 w-13 rounded-2xl flex items-center justify-center p-3 ${f.featured ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
+                    {f.icon}
+                  </div>
+                  <h3 className={`text-base font-serif font-bold ${f.featured ? "text-white" : ""}`}>{content.title[lang]}</h3>
+                  <p className={`text-sm leading-relaxed ${f.featured ? "text-white/80" : "text-muted-foreground"}`}>{content.desc[lang]}</p>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-// ─────────────────────────── ABOUT ───────────────────────────
-function AboutSection({ lang }: { lang: string }) {
+// ─── ABOUT ───────────────────────────────────────────────────
+function AboutSection({ lang }: { lang: "en" | "te" }) {
   return (
     <section id="about" className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeader
-          label={lang === "en" ? "About The Doctor" : "డాక్టర్ గురించి"}
-          title={lang === "en" ? "Meet Vaidya Muralikrishna Parasaram" : "వైద్య మురళీకృష్ణ పరశురామ్"}
-          subtitle={lang === "en" ? "A lifetime dedicated to Ayurvedic excellence — academician, researcher, healer." : "ఆయుర్వేద శ్రేష్ఠతకు అంకితమైన జీవితం — శాస్త్రవేత్త, పరిశోధకుడు, వైద్యుడు."}
+          label={tr("about.label", lang)}
+          title={tr("about.title", lang)}
+          subtitle={tr("about.subtitle", lang)}
         />
 
         <div className="flex flex-col lg:flex-row gap-12 mt-14">
-          {/* Photo + credentials */}
-          <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
+          {/* Photo + credential card */}
+          <Reveal direction="left" className="w-full lg:w-72 xl:w-80 flex-shrink-0">
             <div className="sticky top-28">
               <div className="rounded-2xl overflow-hidden shadow-xl border-4 border-white ring-1 ring-border">
                 <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto" />
@@ -167,59 +285,61 @@ function AboutSection({ lang }: { lang: string }) {
                   <li>✦ Diploma in Yoga</li>
                 </ul>
                 <div className="mt-4 pt-4 border-t border-primary/10">
-                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">
-                    {lang === "en" ? "Current Position" : "ప్రస్తుత పదవి"}
-                  </p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {lang === "en" ? "Consultant Ayurvedic Specialist" : "సలహా ఆయుర్వేద నిపుణుడు"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Susruta Hospital, Tirupati</p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">{tr("about.position", lang)}</p>
+                  <p className="text-sm font-semibold text-foreground">{tr("about.specialist", lang)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Susruta Hospital, Tirupati</p>
                 </div>
               </div>
             </div>
-          </div>
+          </Reveal>
 
-          {/* Bio content */}
-          <div className="flex-1 prose prose-green max-w-none text-foreground/80">
-            <p className="text-lg leading-relaxed mb-6">
-              {lang === "en"
-                ? "Dr. P. Murali Krishna is a highly distinguished and decorated Ayurvedic Physician, Academician, and Researcher. He served as the Principal of the prestigious S.V. Ayurvedic College, T.T. Devasthanams, Tirupati — one of the most reputed Ayurvedic institutions in Andhra Pradesh."
-                : "డాక్టర్ పి. మురళీకృష్ణ అత్యంత గొప్ప మరియు అలంకరించబడిన ఆయుర్వేద వైద్యుడు, శాస్త్రవేత్త మరియు పరిశోధకుడు. ఆంధ్రప్రదేశ్‌లోని అత్యంత ప్రసిద్ధ ఆయుర్వేద సంస్థలలో ఒకటైన శ్రీ వేంకటేశ్వర ఆయుర్వేద కళాశాల, టి.టి. దేవస్థానాలు, తిరుపతిలో ప్రిన్సిపాల్‌గా పనిచేశారు."}
-            </p>
+          {/* Bio */}
+          <div className="flex-1 space-y-8">
+            <Reveal>
+              <p className="text-lg leading-relaxed text-foreground/80">{tr("about.intro", lang)}</p>
+            </Reveal>
 
-            <h3 className="font-serif text-2xl text-foreground font-bold mt-10 mb-4">
-              {lang === "en" ? "Academic Brilliance" : "విద్యా వైభవం"}
-            </h3>
-            <p className="leading-relaxed">
-              {lang === "en"
-                ? "His academic journey has been marked by excellence from the very start. He completed his B.A.M.S. as a Gold Medalist — receiving two gold medals from the Governor of Andhra Pradesh at the Nagarjuna University Convocation in 1988. He went on to acquire M.D.(Ay), Ph.D.(Ay), F.R.A.V., and a Diploma in Yoga."
-                : "అతని విద్యా ప్రయాణం మొదటి నుండే శ్రేష్ఠతతో గుర్తించబడింది. అతను బి.ఎ.ఎం.ఎస్.లో గోల్డ్ మెడలిస్ట్‌గా పాస్ అయ్యాడు — 1988 నాగార్జున యూనివర్సిటీ కన్వొకేషన్‌లో ఆంధ్రప్రదేశ్ గవర్నర్ నుండి రెండు బంగారు పతకాలు స్వీకరించాడు."}
-            </p>
+            <Reveal delay={0.1}>
+              <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.academic", lang)}</h3>
+              <p className="mt-3 text-foreground/70 leading-relaxed">
+                {lang === "en"
+                  ? "His academic journey has been marked by excellence from the start. He completed his B.A.M.S. as a Gold Medalist — receiving two gold medals from the Governor of Andhra Pradesh at Nagarjuna University Convocation in 1988. He then acquired M.D.(Ay), Ph.D.(Ay), F.R.A.V., and a Diploma in Yoga."
+                  : "అతని విద్యా ప్రయాణం మొదటి నుండే శ్రేష్ఠతతో గుర్తించబడింది. 1988 నాగార్జున విశ్వవిద్యాలయం కన్వొకేషన్‌లో ఆంధ్రప్రదేశ్ గవర్నర్ నుండి రెండు బంగారు పతకాలు స్వీకరించాడు. తరువాత M.D.(Ay), Ph.D.(Ay), F.R.A.V., మరియు యోగ డిప్లొమా పూర్తిచేశారు."}
+              </p>
+            </Reveal>
 
-            <h3 className="font-serif text-2xl text-foreground font-bold mt-10 mb-4">
-              {lang === "en" ? "Professional Experience" : "వృత్తిపరమైన అనుభవం"}
-            </h3>
-            <ul className="space-y-3">
-              <li><strong>{lang === "en" ? "Principal (Retd.)" : "ప్రిన్సిపాల్ (విశ్రాంత)"}</strong> — S.V. Ayurvedic College & Hospital, T.T. Devasthanams, Tirupati, AP</li>
-              <li><strong>{lang === "en" ? "Consultant Ayurvedic Specialist" : "సలహా ఆయుర్వేద నిపుణుడు"}</strong> — Susruta Hospital, Tirupati</li>
-              <li><strong>{lang === "en" ? "SBI Authorised Ayurvedic Doctor" : "ఎస్.బి.ఐ అధికృత ఆయుర్వేద డాక్టర్"}</strong></li>
-              <li><strong>{lang === "en" ? "Governing Body Member" : "పాలక మండలి సభ్యుడు"}</strong> — CCRAS, New Delhi (2015–2018)</li>
-              <li><strong>{lang === "en" ? "Key Note Speaker" : "ముఖ్య వక్త"}</strong> — {lang === "en" ? "First Australasian Conference on Panchakarma & Yoga, Adelaide, Australia (2013)" : "మొదటి ఆస్ట్రేలియన్ పంచకర్మ & యోగ సమావేశం, అడిలైడ్, ఆస్ట్రేలియా (2013)"}</li>
-              <li>{lang === "en" ? "International academic visits to Australia, UK, Singapore, France and Switzerland (2016, 2018)" : "ఆస్ట్రేలియా, యూకే, సింగపూర్, ఫ్రాన్స్ మరియు స్విట్జర్లాండ్‌కు అంతర్జాతీయ విద్యా పర్యటనలు (2016, 2018)"}</li>
-            </ul>
+            <Reveal delay={0.15}>
+              <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.experience", lang)}</h3>
+              <ul className="mt-3 space-y-2.5 text-foreground/70">
+                {[
+                  { en: "Principal (Retd.) — S.V. Ayurvedic College & Hospital, T.T. Devasthanams, Tirupati, AP", te: "ప్రిన్సిపాల్ (విశ్రాంత) — ఎస్.వి. ఆయుర్వేద కళాశాల, టి.టి. దేవస్థానాలు, తిరుపతి" },
+                  { en: "Consultant Ayurvedic Specialist — Susruta Hospital, Tirupati", te: "సలహా ఆయుర్వేద నిపుణుడు — సుశ్రుత హాస్పిటల్, తిరుపతి" },
+                  { en: "SBI Authorised Ayurvedic Doctor", te: "ఎస్.బి.ఐ అధికృత ఆయుర్వేద డాక్టర్" },
+                  { en: "Governing Body Member — CCRAS, New Delhi (2015–2018)", te: "పాలక మండలి సభ్యుడు — సిసిఆర్ఎఎస్, న్యూ ఢిల్లీ (2015–2018)" },
+                  { en: "Key Note Speaker — First Australasian Conference on Panchakarma & Yoga, Adelaide (2013)", te: "ముఖ్య వక్త — మొదటి ఆస్ట్రేలియన్ పంచకర్మ & యోగ సమావేశం, అడిలైడ్ (2013)" },
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-primary mt-1.5 text-xs">✦</span>
+                    <span>{item[lang]}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 my-10">
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
-                { num: "30+", label: lang === "en" ? "Publications" : "ప్రచురణలు" },
-                { num: "147+", label: lang === "en" ? "Guest Lectures" : "అతిథి ఉపన్యాసాలు" },
-                { num: "25+", label: lang === "en" ? "Sessions Chaired" : "అధ్యక్షత వహించిన సమావేశాలు" },
-                { num: "10+", label: lang === "en" ? "Major Awards" : "ప్రధాన అవార్డులు" },
-              ].map((s) => (
-                <div key={s.label} className="bg-[#f4faf4] border border-primary/20 p-5 rounded-2xl text-center">
-                  <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
-                  <div className="text-xs font-semibold text-muted-foreground">{s.label}</div>
-                </div>
+                { num: "30+", en: "Publications", te: "ప్రచురణలు" },
+                { num: "147+", en: "Guest Lectures", te: "అతిథి ఉపన్యాసాలు" },
+                { num: "25+", en: "Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
+                { num: "10+", en: "Major Awards", te: "ప్రధాన అవార్డులు" },
+              ].map((s, i) => (
+                <Reveal key={i} delay={i * 0.08}>
+                  <div className="bg-[#f4faf4] border border-primary/20 p-5 rounded-2xl text-center">
+                    <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
+                    <div className="text-xs font-semibold text-muted-foreground">{s[lang]}</div>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -229,66 +349,74 @@ function AboutSection({ lang }: { lang: string }) {
   );
 }
 
-// ─────────────────────────── ACHIEVEMENTS ───────────────────────────
-function AchievementsSection({ lang }: { lang: string }) {
-  const awards = [
-    { year: "1985", title: lang === "en" ? "AP State Medal" : "ఏపీ రాష్ట్ర పతకం", desc: lang === "en" ? "For best scientific paper on 'Ayurvedic Approach to Skin Diseases', Vijayawada" : "విజయవాడలో 'చర్మ వ్యాధులకు ఆయుర్వేద విధానం'పై ఉత్తమ శాస్త్రీయ పత్రం కోసం" },
-    { year: "1986", title: lang === "en" ? "Chavali Ramaiah Memorial Gold Medal" : "చావలి రమయ్య స్మారక బంగారు పతకం", desc: lang === "en" ? "Nagarjuna University — outstanding performance in final B.A.M.S." : "నాగార్జున విశ్వవిద్యాలయం — చివరి బి.ఎ.ఎం.ఎస్.లో అత్యుత్తమ ప్రదర్శన" },
-    { year: "1986", title: lang === "en" ? "Achanta Lakshmipathi Memorial Gold Medal" : "అచంట లక్ష్మీపతి స్మారక బంగారు పతకం", desc: lang === "en" ? "Nagarjuna University — for outstanding performance across all five B.A.M.S. years" : "అన్ని ఐదు బి.ఎ.ఎం.ఎస్. సంవత్సరాల్లో అత్యుత్తమ ప్రదర్శన కోసం" },
-    { year: "1992", title: lang === "en" ? "Baidyanath Foundation National Award" : "బైద్యనాథ్ ఫౌండేషన్ జాతీయ అవార్డు", desc: lang === "en" ? "For best scientific paper on 'Scientific basis of Ayurvedic Diagnostics' at Nagpur" : "నాగ్‌పూర్‌లో 'ఆయుర్వేద నిర్ధారణ యొక్క శాస్త్రీయ ఆధారం'పై ఉత్తమ పత్రానికి" },
-    { year: "1997", title: lang === "en" ? "Doctor of Science Honour" : "డాక్టర్ ఆఫ్ సైన్స్ గౌరవం", desc: lang === "en" ? "Conferred by Open International University for Complementary Medicine, Colombo" : "కొలంబో, ఓపెన్ ఇంటర్నేషనల్ యూనివర్సిటీ ఫర్ కాంప్లిమెంటరీ మెడిసిన్ ద్వారా ప్రదానం" },
-    { year: "2006", title: lang === "en" ? "Outstanding Young Person — JCI" : "అత్యుత్తమ యువ వ్యక్తి — జెసిఐ", desc: lang === "en" ? "JCI South East Zone — Coastal AP and Orissa" : "జెసిఐ సౌత్ ఈస్ట్ జోన్ — కోస్టల్ ఏపీ మరియు ఒరిస్సా" },
-    { year: "2006", title: lang === "en" ? "Outstanding Young Indian — JCI National" : "అత్యుత్తమ యువ భారతీయుడు — జెసిఐ జాతీయ", desc: lang === "en" ? "Junior Chamber International India — National Award, Bangalore" : "జూనియర్ ఛాంబర్ ఇంటర్నేషనల్ ఇండియా — జాతీయ అవార్డు, బెంగళూరు" },
-    { year: "2016", title: lang === "en" ? "Dhanvantari Award" : "ధన్వంతరి అవార్డు", desc: lang === "en" ? "Recognizing outstanding services in Ayurveda, Vijayawada" : "విజయవాడలో ఆయుర్వేదంలో అత్యుత్తమ సేవలను గుర్తించి" },
-    { year: "2017", title: lang === "en" ? "International Charaka Award" : "అంతర్జాతీయ చరక అవార్డు", desc: lang === "en" ? "AAPNA, USA — for excellence in Ayurvedic teaching, Belagavi" : "ఎఎపిఎన్ఎ, యుఎస్ఎ — ఆయుర్వేద బోధనలో శ్రేష్ఠతకు, బళ్ళారి" },
-    { year: "2023", title: lang === "en" ? "Ayurveda Sarvabhouma Award" : "ఆయుర్వేద సార్వభౌమ అవార్డు", desc: lang === "en" ? "National Sanskrit University, Tirupati" : "జాతీయ సంస్కృత విశ్వవిద్యాలయం, తిరుపతి" },
+// ─── ACHIEVEMENTS ─────────────────────────────────────────────
+function AchievementsSection({ lang }: { lang: "en" | "te" }) {
+  const awards: Array<{ year: string; en: { title: string; desc: string }; te: { title: string; desc: string } }> = [
+    { year: "1985", en: { title: "AP State Medal", desc: "Best scientific paper on 'Ayurvedic Approach to Skin Diseases', Vijayawada" }, te: { title: "ఏపీ రాష్ట్ర పతకం", desc: "విజయవాడలో 'చర్మ వ్యాధులకు ఆయుర్వేద విధానం'పై ఉత్తమ శాస్త్రీయ పత్రం" } },
+    { year: "1986", en: { title: "Chavali Ramaiah Memorial Gold Medal", desc: "Nagarjuna University — outstanding performance in final B.A.M.S." }, te: { title: "చావలి రమయ్య స్మారక బంగారు పతకం", desc: "నాగార్జున విశ్వవిద్యాలయం — చివరి B.A.M.S.లో అత్యుత్తమ ప్రదర్శన" } },
+    { year: "1986", en: { title: "Achanta Lakshmipathi Memorial Gold Medal", desc: "Nagarjuna University — outstanding performance across all five B.A.M.S. years" }, te: { title: "అచంట లక్ష్మీపతి స్మారక బంగారు పతకం", desc: "నాగార్జున విశ్వవిద్యాలయం — అన్ని ఐదు B.A.M.S. సంవత్సరాలలో శ్రేష్ఠ ప్రదర్శన" } },
+    { year: "1992", en: { title: "Baidyanath Foundation National Award", desc: "Best scientific paper on 'Scientific basis of Ayurvedic Diagnostics', Nagpur" }, te: { title: "బైద్యనాథ్ ఫౌండేషన్ జాతీయ అవార్డు", desc: "నాగ్‌పూర్‌లో 'ఆయుర్వేద నిర్ధారణ యొక్క శాస్త్రీయ ఆధారం'పై ఉత్తమ పత్రం" } },
+    { year: "1997", en: { title: "Doctor of Science Honour", desc: "Open International University for Complementary Medicine, Colombo" }, te: { title: "డాక్టర్ ఆఫ్ సైన్స్ గౌరవం", desc: "ఓపెన్ ఇంటర్నేషనల్ యూనివర్సిటీ ఫర్ కాంప్లిమెంటరీ మెడిసిన్, కొలంబో" } },
+    { year: "2006", en: { title: "Outstanding Young Person — JCI", desc: "JCI South East Zone — Coastal AP and Orissa" }, te: { title: "అత్యుత్తమ యువ వ్యక్తి — జెసిఐ", desc: "జెసిఐ సౌత్ ఈస్ట్ జోన్ — కోస్టల్ ఏపీ మరియు ఒరిస్సా" } },
+    { year: "2006", en: { title: "Outstanding Young Indian — JCI National", desc: "Junior Chamber International India — National Award, Bangalore" }, te: { title: "అత్యుత్తమ యువ భారతీయుడు — జెసిఐ జాతీయ", desc: "జూనియర్ ఛాంబర్ ఇంటర్నేషనల్ ఇండియా — జాతీయ అవార్డు, బెంగళూరు" } },
+    { year: "2016", en: { title: "Dhanvantari Award", desc: "Outstanding services in Ayurveda, Vijayawada" }, te: { title: "ధన్వంతరి అవార్డు", desc: "విజయవాడలో ఆయుర్వేదంలో అత్యుత్తమ సేవలు" } },
+    { year: "2017", en: { title: "International Charaka Award", desc: "AAPNA, USA — excellence in Ayurvedic teaching, Belagavi" }, te: { title: "అంతర్జాతీయ చరక అవార్డు", desc: "ఎఎపిఎన్ఎ, యుఎస్ఎ — ఆయుర్వేద బోధనలో శ్రేష్ఠత" } },
+    { year: "2023", en: { title: "Ayurveda Sarvabhouma Award", desc: "National Sanskrit University, Tirupati" }, te: { title: "ఆయుర్వేద సార్వభౌమ అవార్డు", desc: "జాతీయ సంస్కృత విశ్వవిద్యాలయం, తిరుపతి" } },
   ];
 
   return (
     <section id="achievements" className="py-24 bg-[#f4faf4]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeader
-          label={lang === "en" ? "Awards & Recognitions" : "అవార్డులు & గుర్తింపులు"}
-          title={lang === "en" ? "A Legacy of Excellence" : "శ్రేష్ఠత వారసత్వం"}
-          subtitle={lang === "en" ? "Over four decades of distinguished service to Ayurveda, recognised nationally and internationally." : "నాలుగు దశాబ్దాలకు పైగా ఆయుర్వేదానికి ప్రసిద్ధ సేవ, జాతీయంగా మరియు అంతర్జాతీయంగా గుర్తింపు పొందింది."}
+          label={tr("ach.label", lang)}
+          title={tr("ach.title", lang)}
+          subtitle={tr("ach.subtitle", lang)}
         />
 
-        {/* Timeline */}
         <div className="mt-14 relative">
-          <div className="absolute left-6 md:left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-primary/40 to-transparent -translate-x-1/2 hidden md:block"></div>
-          <div className="space-y-8">
-            {awards.map((award, i) => (
-              <div key={i} className={`flex flex-col md:flex-row items-start md:items-center gap-4 ${i % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"}`}>
-                {/* Card */}
-                <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md transition-all">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h4 className="font-serif font-bold text-base text-foreground leading-snug">{award.title}</h4>
-                    <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full">{award.year}</span>
+          {/* Vertical line */}
+          <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/60 via-primary/20 to-transparent -translate-x-1/2" />
+
+          <div className="space-y-10">
+            {awards.map((award, i) => {
+              const isLeft = i % 2 === 0;
+              return (
+                <Reveal key={i} delay={Math.min(i * 0.06, 0.4)} direction={isLeft ? "left" : "right"}>
+                  <div className={`flex flex-col md:flex-row items-center gap-4 ${!isLeft ? "md:flex-row-reverse" : ""}`}>
+                    {/* Card */}
+                    <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <h4 className="font-serif font-bold text-base text-foreground leading-snug">{award[lang].title}</h4>
+                        <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full">{award.year}</span>
+                      </div>
+                      <p className="text-muted-foreground text-sm leading-relaxed">{award[lang].desc}</p>
+                    </div>
+                    {/* Center icon */}
+                    <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
+                      <Trophy size={16} />
+                    </div>
+                    <div className="hidden md:block w-[calc(50%-2rem)]" />
                   </div>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{award.desc}</p>
-                </div>
-                {/* Center icon */}
-                <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
-                  <Trophy size={16} />
-                </div>
-                <div className="hidden md:block w-[calc(50%-2rem)]"></div>
-              </div>
-            ))}
+                </Reveal>
+              );
+            })}
           </div>
         </div>
 
         {/* Extra stats */}
         <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { num: "5", label: lang === "en" ? "CME Programs Organized" : "నిర్వహించిన CME కార్యక్రమాలు" },
-            { num: "25+", label: lang === "en" ? "Scientific Sessions Chaired" : "అధ్యక్షత వహించిన సెషన్‌లు" },
-            { num: "6", label: lang === "en" ? "Countries Visited" : "సందర్శించిన దేశాలు" },
-            { num: "200+", label: lang === "en" ? "Health Lectures (SVETA)" : "ఆరోగ్య ఉపన్యాసాలు (SVETA)" },
-          ].map((s) => (
-            <div key={s.label} className="bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm">
-              <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
-              <div className="text-xs font-semibold text-muted-foreground">{s.label}</div>
-            </div>
+            { num: "5", en: "CME Programs Organized", te: "CME కార్యక్రమాలు నిర్వహించారు" },
+            { num: "25+", en: "Scientific Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
+            { num: "6", en: "Countries Visited", te: "సందర్శించిన దేశాలు" },
+            { num: "200+", en: "Health Lectures (SVETA)", te: "ఆరోగ్య ఉపన్యాసాలు (SVETA)" },
+          ].map((s, i) => (
+            <Reveal key={i} delay={i * 0.08}>
+              <div className="bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm">
+                <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
+                <div className="text-xs font-semibold text-muted-foreground">{s[lang]}</div>
+              </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -296,58 +424,32 @@ function AchievementsSection({ lang }: { lang: string }) {
   );
 }
 
-// ─────────────────────────── SERVICES ───────────────────────────
-function ServicesSection({ lang }: { lang: string }) {
-  const services = [
-    {
-      icon: <Activity size={30} />,
-      title: lang === "en" ? "Ayurvedic Consultations" : "ఆయుర్వేద సంప్రదింపులు",
-      desc: lang === "en"
-        ? "Detailed personal consultation using Nadi Pariksha (Pulse diagnosis) and Prakriti analysis to determine the root cause of ailments."
-        : "వ్యాధి యొక్క మూల కారణాన్ని నిర్ణయించడానికి నాడీ పరీక్ష (పల్స్ నిర్ధారణ) మరియు ప్రకృతి విశ్లేషణను ఉపయోగించి వివరణాత్మక వ్యక్తిగత సంప్రదింపు.",
-    },
-    {
-      icon: <Droplets size={30} />,
-      title: lang === "en" ? "Panchakarma Therapy" : "పంచకర్మ చికిత్స",
-      desc: lang === "en"
-        ? "Authentic detoxification and rejuvenation therapies including Vamana, Virechana, Basti, Nasya, and Raktamokshana performed with traditional precision."
-        : "వమన, విరేచన, బస్తి, నస్య మరియు రక్తమోక్షణతో సహా సాంప్రదాయ ఖచ్చితత్వంతో ప్రామాణికమైన డిటాక్సిఫికేషన్ మరియు పునరుజ్జీవన చికిత్సలు.",
-    },
-    {
-      icon: <Heart size={30} />,
-      title: lang === "en" ? "Chronic Disease Management" : "దీర్ఘకాలిక వ్యాధి నిర్వహణ",
-      desc: lang === "en"
-        ? "Specialized Ayurvedic protocols for managing Arthritis, Diabetes, Skin disorders, Respiratory conditions, and Gastrointestinal problems."
-        : "ఆర్థ్రైటిస్, మధుమేహం, చర్మ వ్యాధులు, శ్వాసకోశ పరిస్థితులు మరియు జీర్ణ సమస్యల నిర్వహణ కోసం ప్రత్యేక ఆయుర్వేద ప్రోటోకాల్‌లు.",
-    },
-    {
-      icon: <Leaf size={30} />,
-      title: lang === "en" ? "Wellness & Rejuvenation" : "ఆరోగ్యం & పునరుజ్జీవనం",
-      desc: lang === "en"
-        ? "Rasayana therapies to boost immunity, reduce stress, improve vitality, and promote healthy aging with natural herbal formulations."
-        : "రోగనిరోధక శక్తిని పెంచడానికి, ఒత్తిడిని తగ్గించడానికి, శక్తిని మెరుగుపరచడానికి మరియు ఆరోగ్యకరమైన వృద్ధాప్యాన్ని ప్రోత్సహించడానికి రసాయన చికిత్సలు.",
-    },
+// ─── SERVICES ────────────────────────────────────────────────
+function ServicesSection({ lang }: { lang: "en" | "te" }) {
+  const services: Array<{ icon: React.ReactNode; en: { title: string; desc: string }; te: { title: string; desc: string } }> = [
+    { icon: <Activity size={28} />, en: { title: "Ayurvedic Consultations", desc: "Detailed personal consultation using Nadi Pariksha (Pulse diagnosis) and Prakriti analysis to determine the root cause of ailments." }, te: { title: "ఆయుర్వేద సంప్రదింపులు", desc: "వ్యాధి మూల కారణాన్ని నిర్ణయించడానికి నాడీ పరీక్ష మరియు ప్రకృతి విశ్లేషణను ఉపయోగించి వివరణాత్మక సంప్రదింపు." } },
+    { icon: <Droplets size={28} />, en: { title: "Panchakarma Therapy", desc: "Authentic detoxification and rejuvenation therapies including Vamana, Virechana, Basti, Nasya, and Raktamokshana." }, te: { title: "పంచకర్మ చికిత్స", desc: "వమన, విరేచన, బస్తి, నస్య మరియు రక్తమోక్షణతో సహా ప్రామాణికమైన డిటాక్సిఫికేషన్ మరియు పునరుజ్జీవన చికిత్సలు." } },
+    { icon: <Heart size={28} />, en: { title: "Chronic Disease Management", desc: "Specialized Ayurvedic protocols for Arthritis, Diabetes, Skin disorders, Respiratory conditions, and Gastrointestinal problems." }, te: { title: "దీర్ఘకాలిక వ్యాధి నిర్వహణ", desc: "ఆర్థ్రైటిస్, మధుమేహం, చర్మ వ్యాధులు, శ్వాసకోశ మరియు జీర్ణ సమస్యల నిర్వహణ కోసం ప్రత్యేక ఆయుర్వేద ప్రోటోకాల్‌లు." } },
+    { icon: <Leaf size={28} />, en: { title: "Wellness & Rejuvenation", desc: "Rasayana therapies to boost immunity, reduce stress, improve vitality, and promote healthy aging with herbal formulations." }, te: { title: "ఆరోగ్యం & పునరుజ్జీవనం", desc: "రోగనిరోధక శక్తి పెంచడానికి, ఒత్తిడి తగ్గించడానికి, శక్తి మెరుగుపరచడానికి రసాయన చికిత్సలు." } },
   ];
 
   return (
     <section id="services" className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={lang === "en" ? "Our Services" : "మా సేవలు"}
-          title={lang === "en" ? "Holistic Ayurvedic Care" : "సమగ్ర ఆయుర్వేద సంరక్షణ"}
-          subtitle={lang === "en" ? "Comprehensive treatments tailored to your unique mind-body constitution." : "మీ ప్రత్యేకమైన శరీర-మనస్సు నిర్మాణానికి అనుగుణంగా సమగ్ర చికిత్సలు."}
-        />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-8">
+        <SectionHeader label={tr("svc.label", lang)} title={tr("svc.title", lang)} subtitle={tr("svc.subtitle", lang)} />
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-7">
           {services.map((s, i) => (
-            <div key={i} className="group flex gap-6 p-8 bg-[#f8fcf8] border border-border/60 rounded-3xl hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-              <div className="h-14 w-14 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-                {s.icon}
+            <Reveal key={i} delay={i * 0.1} direction={i % 2 === 0 ? "left" : "right"}>
+              <div className="group flex gap-6 p-8 bg-[#f8fcf8] border border-border/60 rounded-3xl hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                <div className="h-14 w-14 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+                  {s.icon}
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif font-bold mb-3 text-foreground">{s[lang].title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{s[lang].desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-serif font-bold mb-3 text-foreground">{s.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{s.desc}</p>
-              </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -355,15 +457,14 @@ function ServicesSection({ lang }: { lang: string }) {
   );
 }
 
-// ─────────────────────────── APPOINTMENTS ───────────────────────────
-function AppointmentsSection({ lang, t }: { lang: string; t: (k: any) => string }) {
+// ─── APPOINTMENTS ─────────────────────────────────────────────
+function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: openMonths = [], isLoading: loadingMonths } = useListOpenMonths();
 
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [calendarDate, setCalendarDate] = useState<Date | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedSlot, setSelectedSlot] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [formData, setFormData] = useState({ patientName: "", patientPhone: "", patientEmail: "", reason: "" });
 
@@ -371,12 +472,7 @@ function AppointmentsSection({ lang, t }: { lang: string; t: (k: any) => string 
   const { data: slots = [], isLoading: loadingSlots } = useGetSlots({ date: selectedDate }, { query: { enabled: !!selectedDate } });
   const createMutation = useCreateAppointment();
 
-  // Set calendar to show selected month
-  const calendarMonth = useMemo(() => {
-    if (!selectedMonth) return null;
-    return parseISO(`${selectedMonth}-01`);
-  }, [selectedMonth]);
-
+  const calendarMonth = useMemo(() => selectedMonth ? parseISO(`${selectedMonth}-01`) : null, [selectedMonth]);
   const availableDatesSet = useMemo(() => new Set(availability?.availableDates || []), [availability]);
   const blockedDatesSet = useMemo(() => new Set(availability?.blockedDates || []), [availability]);
 
@@ -384,41 +480,38 @@ function AppointmentsSection({ lang, t }: { lang: string; t: (k: any) => string 
     if (!calendarMonth) return [];
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
-    const firstDay = getDay(startOfMonth(calendarMonth)); // 0=Sun
-    const totalDays = getDaysInMonth(calendarMonth);
+    const firstDay = getDay(startOfMonth(calendarMonth));
+    const total = getDaysInMonth(calendarMonth);
     const days: (string | null)[] = Array(firstDay).fill(null);
-    for (let d = 1; d <= totalDays; d++) {
-      const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      days.push(ds);
+    for (let d = 1; d <= total; d++) {
+      days.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
     }
     return days;
   }, [calendarMonth]);
 
   const today = new Date().toISOString().split("T")[0];
-
-  const morningSlots = slots.filter(s => s.time.includes("AM") || s.time === "01:00 PM");
-  const eveningSlots = slots.filter(s => {
-    const h = parseInt(s.time.split(":")[0]);
-    return s.time.includes("PM") && h >= 6;
-  });
+  const MORNING_TIMES = new Set(["10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","01:00 PM"]);
+  const morningSlots = slots.filter(s => MORNING_TIMES.has(s.time));
+  const eveningSlots = slots.filter(s => !MORNING_TIMES.has(s.time));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedSlot || !formData.patientName || !formData.patientPhone) return;
-    createMutation.mutate({
-      data: { ...formData, date: selectedDate, timeSlot: selectedSlot }
-    }, {
-      onSuccess: () => setIsSuccess(true),
-    });
+    createMutation.mutate(
+      { data: { ...formData, date: selectedDate, timeSlot: selectedSlot } },
+      { onSuccess: () => setIsSuccess(true) }
+    );
   };
 
   if (settings && !settings.appointmentBookingEnabled) {
     return (
       <section id="appointments" className="py-24 bg-[#f4faf4]">
         <div className="max-w-2xl mx-auto px-4 text-center">
-          <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-40" />
-          <h2 className="text-2xl font-serif font-bold mb-2">{lang === "en" ? "Online Booking Unavailable" : "ఆన్‌లైన్ బుకింగ్ అందుబాటులో లేదు"}</h2>
-          <p className="text-muted-foreground">{lang === "en" ? "Please call us to schedule your appointment." : "అపాయింట్‌మెంట్ షెడ్యూల్ చేయడానికి దయచేసి మాకు కాల్ చేయండి."}</p>
+          <Reveal>
+            <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
+            <h2 className="text-2xl font-serif font-bold mb-2">{tr("appt.label", lang)}</h2>
+            <p className="text-muted-foreground">{tr("appt.unavailable", lang)}</p>
+          </Reveal>
         </div>
       </section>
     );
@@ -426,247 +519,227 @@ function AppointmentsSection({ lang, t }: { lang: string; t: (k: any) => string 
 
   return (
     <section id="appointments" className="py-24 bg-[#f4faf4]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={lang === "en" ? "Book an Appointment" : "అపాయింట్‌మెంట్ బుక్ చేయండి"}
-          title={lang === "en" ? "Schedule Your Consultation" : "మీ సంప్రదింపు షెడ్యూల్ చేయండి"}
-          subtitle={lang === "en"
-            ? "Select an available date and time to meet Dr. P. Murali Krishna."
-            : "డాక్టర్ పి. మురళీకృష్ణను కలవడానికి అందుబాటులో ఉన్న తేదీ మరియు సమయాన్ని ఎంచుకోండి."}
-        />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <SectionHeader label={tr("appt.label", lang)} title={tr("appt.title", lang)} subtitle={tr("appt.subtitle", lang)} />
 
         <div className="mt-14">
           {isSuccess ? (
-            <div className="max-w-lg mx-auto bg-white p-12 rounded-3xl shadow-md border border-primary/20 text-center">
-              <div className="h-20 w-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 size={44} />
+            <Reveal>
+              <div className="max-w-lg mx-auto bg-white p-10 rounded-3xl shadow-md border border-primary/20 text-center">
+                <motion.div
+                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  className="h-20 w-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"
+                >
+                  <CheckCircle2 size={44} />
+                </motion.div>
+                <h3 className="text-2xl font-serif font-bold mb-3">{tr("appt.success", lang)}</h3>
+                <p className="text-muted-foreground mb-8">{tr("appt.success_msg", lang)}</p>
+                <Button onClick={() => { setIsSuccess(false); setSelectedDate(""); setSelectedSlot(""); setSelectedMonth(""); setFormData({ patientName: "", patientPhone: "", patientEmail: "", reason: "" }); }}>
+                  {tr("btn.book_another", lang)}
+                </Button>
               </div>
-              <h3 className="text-2xl font-serif font-bold mb-3">{lang === "en" ? "Appointment Request Sent!" : "అపాయింట్‌మెంట్ అభ్యర్థన పంపబడింది!"}</h3>
-              <p className="text-muted-foreground mb-2">
-                {lang === "en"
-                  ? `Your request for ${format(parseISO(selectedDate), "MMMM d, yyyy")} at ${selectedSlot} has been received.`
-                  : `${format(parseISO(selectedDate), "d MMMM yyyy")} న ${selectedSlot} కి మీ అభ్యర్థన స్వీకరించబడింది.`}
-              </p>
-              <p className="text-sm text-muted-foreground mb-8">{lang === "en" ? "Our staff will call you to confirm." : "మా సిబ్బంది నిర్ధారించడానికి మీకు కాల్ చేస్తారు."}</p>
-              <Button onClick={() => {
-                setIsSuccess(false); setSelectedDate(""); setSelectedSlot(""); setSelectedMonth("");
-                setFormData({ patientName: "", patientPhone: "", patientEmail: "", reason: "" });
-              }}>{lang === "en" ? "Book Another" : "మరొకటి బుక్ చేయండి"}</Button>
-            </div>
+            </Reveal>
           ) : (
-            <form onSubmit={handleSubmit}>
-              {/* Step 1: Month + Calendar */}
-              <div className="bg-white rounded-3xl shadow-sm border border-border/60 overflow-hidden mb-6">
-                <div className="bg-primary/5 border-b border-primary/10 px-6 py-4 flex items-center gap-3">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm font-bold">1</span>
-                  <h3 className="font-serif font-bold text-lg">{lang === "en" ? "Select Date & Time" : "తేదీ & సమయం ఎంచుకోండి"}</h3>
-                </div>
+            <form onSubmit={handleSubmit} className="space-y-5">
 
-                <div className="p-6">
-                  <div className="flex flex-col lg:flex-row gap-6">
-                    {/* Month Selector */}
-                    <div className="lg:w-56 flex-shrink-0">
-                      <label className="block text-sm font-semibold mb-2 text-foreground/80">{t("form.month")}</label>
-                      {loadingMonths ? (
-                        <div className="h-12 bg-muted animate-pulse rounded-xl"></div>
-                      ) : openMonths.length === 0 ? (
-                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-                          <Info size={16} className="inline mr-1.5" />
-                          {lang === "en" ? "No months are open for booking yet." : "ఇంకా ఏ నెల బుకింగ్ కోసం తెరవబడలేదు."}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {openMonths.filter(m => m.isOpen).map((m) => (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => { setSelectedMonth(m.month); setSelectedDate(""); setSelectedSlot(""); }}
-                              className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-left transition-all border ${
-                                selectedMonth === m.month
-                                  ? "bg-primary text-white border-primary shadow-md"
-                                  : "bg-muted/50 border-border hover:border-primary hover:text-primary"
-                              }`}
-                            >
-                              <Calendar size={14} className="inline mr-2 mb-0.5" />
-                              {format(parseISO(`${m.month}-01`), "MMMM yyyy")}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+              {/* ── Step 1: Date & Time ── */}
+              <Reveal>
+                <div className="bg-white rounded-3xl shadow-sm border border-border/60 overflow-hidden">
+                  <div className="bg-primary/5 border-b border-primary/10 px-6 py-4 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-primary text-white text-sm font-bold flex items-center justify-center">1</span>
+                    <h3 className="font-serif font-bold text-lg">{tr("appt.step1", lang)}</h3>
+                  </div>
 
-                      {/* Legend */}
-                      {selectedMonth && (
-                        <div className="mt-6 space-y-2 text-xs">
-                          <p className="font-semibold text-muted-foreground uppercase tracking-wide mb-3">{lang === "en" ? "Legend" : "గుర్తు"}</p>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-sm bg-primary"></div><span>{lang === "en" ? "Available" : "అందుబాటు"}</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-sm bg-muted border border-border"></div><span>{lang === "en" ? "Unavailable / Past" : "అందుబాటు లేదు"}</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-sm bg-destructive/20 border border-destructive/30"></div><span>{lang === "en" ? "Blocked" : "బ్లాక్ చేయబడింది"}</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-sm bg-primary/20 ring-2 ring-primary"></div><span>{lang === "en" ? "Selected" : "ఎంచుకున్నది"}</span></div>
-                        </div>
-                      )}
-                    </div>
+                  <div className="p-5 md:p-7">
+                    <div className="flex flex-col lg:flex-row gap-6">
 
-                    {/* Calendar Grid */}
-                    {selectedMonth && calendarMonth && (
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-serif font-bold text-lg text-primary">
-                            {format(calendarMonth, "MMMM yyyy")}
-                          </h4>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Info size={12} />
-                            {lang === "en" ? "Sundays: Morning only" : "ఆదివారాలు: ఉదయం మాత్రమే"}
+                      {/* Month list */}
+                      <div className="lg:w-52 flex-shrink-0">
+                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">{tr("form.month", lang)}</p>
+                        {loadingMonths ? (
+                          <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-11 bg-muted animate-pulse rounded-xl" />)}</div>
+                        ) : openMonths.filter(m => m.isOpen).length === 0 ? (
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 flex gap-2">
+                            <Info size={15} className="shrink-0 mt-0.5" />{tr("appt.no_months", lang)}
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 mb-2">
-                          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                            <div key={d} className="text-center text-xs font-bold text-muted-foreground py-1">
-                              {d}
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1">
-                          {calendarDays.map((day, idx) => {
-                            if (!day) return <div key={idx} />;
-                            const isAvailable = availableDatesSet.has(day);
-                            const isBlocked = blockedDatesSet.has(day);
-                            const isPast = day < today;
-                            const isSunday = new Date(day).getDay() === 0;
-                            const isSelected = selectedDate === day;
-
-                            let cls = "relative aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-semibold transition-all ";
-                            if (isSelected) cls += "bg-primary text-white ring-2 ring-primary ring-offset-1 shadow-md";
-                            else if (isBlocked) cls += "bg-red-50 text-red-300 border border-red-100 cursor-not-allowed";
-                            else if (isPast) cls += "bg-muted/40 text-muted-foreground/40 cursor-not-allowed";
-                            else if (isAvailable) cls += "bg-primary/10 text-primary hover:bg-primary hover:text-white cursor-pointer hover:shadow-md";
-                            else cls += "bg-muted/30 text-muted-foreground/50 cursor-not-allowed";
-
-                            const dayNum = day.split("-")[2];
-                            return (
+                        ) : (
+                          <div className="space-y-2">
+                            {openMonths.filter(m => m.isOpen).map((m) => (
                               <button
-                                key={day}
-                                type="button"
-                                disabled={!isAvailable || isPast}
-                                onClick={() => { setSelectedDate(day); setSelectedSlot(""); }}
-                                className={cls}
-                                title={isBlocked ? "Doctor unavailable" : isSunday ? "Morning slots only" : ""}
+                                key={m.id} type="button"
+                                onClick={() => { setSelectedMonth(m.month); setSelectedDate(""); setSelectedSlot(""); }}
+                                className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-left transition-all border flex items-center gap-2 ${
+                                  selectedMonth === m.month
+                                    ? "bg-primary text-white border-primary shadow-sm"
+                                    : "border-border hover:border-primary/40 hover:text-primary"
+                                }`}
                               >
-                                {dayNum}
-                                {isSunday && isAvailable && !isSelected && (
-                                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary/60"></span>
-                                )}
+                                <Calendar size={13} className="shrink-0" />
+                                {format(parseISO(`${m.month}-01`), "MMMM yyyy")}
                               </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                            ))}
+                          </div>
+                        )}
 
-                  {/* Time Slots */}
-                  {selectedDate && (
-                    <div className="mt-8 pt-6 border-t border-border/60">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Clock size={16} className="text-primary" />
-                        <h4 className="font-semibold text-foreground">
-                          {lang === "en"
-                            ? `Available slots for ${format(parseISO(selectedDate), "EEEE, MMMM d")}`
-                            : `${format(parseISO(selectedDate), "EEEE, d MMMM")} కి అందుబాటులో ఉన్న స్లాట్‌లు`}
-                          {new Date(selectedDate).getDay() === 0 && (
-                            <span className="ml-2 text-xs text-amber-600 font-normal">(Morning only — Sunday)</span>
-                          )}
-                        </h4>
+                        {/* Legend */}
+                        {selectedMonth && (
+                          <div className="mt-5 space-y-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-primary/20 ring-1 ring-primary/40 flex-shrink-0" />{tr("appt.legend_avail", lang)}</div>
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-muted border border-border flex-shrink-0" />{tr("appt.legend_unavail", lang)}</div>
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 flex-shrink-0" />{tr("appt.legend_blocked", lang)}</div>
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-primary flex-shrink-0" />{tr("appt.legend_selected", lang)}</div>
+                          </div>
+                        )}
                       </div>
 
-                      {loadingSlots ? (
-                        <div className="flex gap-2 flex-wrap">
-                          {[...Array(8)].map((_, i) => <div key={i} className="h-10 w-24 bg-muted animate-pulse rounded-lg"></div>)}
-                        </div>
-                      ) : (
-                        <div className="space-y-5">
-                          {/* Morning */}
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
-                              🌅 {lang === "en" ? "Morning — 10:00 AM to 1:00 PM" : "ఉదయం — 10:00 AM నుండి 1:00 PM వరకు"}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {morningSlots.map((slot) => (
-                                <SlotButton key={slot.time} slot={slot} selected={selectedSlot === slot.time} onClick={() => setSelectedSlot(slot.time)} />
-                              ))}
-                            </div>
+                      {/* Calendar */}
+                      {selectedMonth && calendarMonth ? (
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-serif font-bold text-lg text-primary">{format(calendarMonth, "MMMM yyyy")}</h4>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">
+                              <Info size={11} />{tr("appt.sunday_note", lang)}
+                            </span>
                           </div>
 
-                          {/* Evening — only if not Sunday */}
-                          {eveningSlots.length > 0 && (
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
-                                🌙 {lang === "en" ? "Evening — 6:00 PM to 10:00 PM" : "సాయంత్రం — 6:00 PM నుండి 10:00 PM వరకు"}
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {eveningSlots.map((slot) => (
-                                  <SlotButton key={slot.time} slot={slot} selected={selectedSlot === slot.time} onClick={() => setSelectedSlot(slot.time)} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          <div className="grid grid-cols-7 gap-1 mb-1">
+                            {(lang === "en" ? ["Su","Mo","Tu","We","Th","Fr","Sa"] : ["ఆది","సోమ","మంగ","బుధ","గురు","శుక్ర","శని"]).map(d => (
+                              <div key={d} className="text-center text-[11px] font-bold text-muted-foreground py-1">{d}</div>
+                            ))}
+                          </div>
+
+                          <div className="grid grid-cols-7 gap-1.5">
+                            {calendarDays.map((day, idx) => {
+                              if (!day) return <div key={idx} />;
+                              const isAvail = availableDatesSet.has(day);
+                              const isBlocked = blockedDatesSet.has(day);
+                              const isPast = day < today;
+                              const isSun = new Date(day).getDay() === 0;
+                              const isSel = selectedDate === day;
+
+                              let cls = "aspect-square flex items-center justify-center rounded-xl text-sm font-semibold transition-all ";
+                              if (isSel) cls += "bg-primary text-white shadow-md ring-2 ring-primary ring-offset-1";
+                              else if (isBlocked) cls += "bg-red-50 text-red-300 cursor-not-allowed text-xs";
+                              else if (isPast) cls += "text-muted-foreground/30 cursor-not-allowed";
+                              else if (isAvail) cls += "bg-primary/15 text-primary hover:bg-primary hover:text-white cursor-pointer hover:shadow-sm";
+                              else cls += "text-muted-foreground/40 cursor-not-allowed";
+
+                              return (
+                                <button key={day} type="button" disabled={!isAvail || isPast}
+                                  onClick={() => { setSelectedDate(day); setSelectedSlot(""); }}
+                                  className={cls} title={isSun && isAvail ? "Morning only" : undefined}
+                                >
+                                  {day.split("-")[2]}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
+                      ) : (
+                        !loadingMonths && openMonths.length > 0 && (
+                          <div className="flex-1 flex items-center justify-center text-muted-foreground/40 border-2 border-dashed border-border rounded-2xl min-h-[200px]">
+                            <div className="text-center">
+                              <Calendar size={36} className="mx-auto mb-2 opacity-40" />
+                              <p className="text-sm">{lang === "en" ? "Select a month to see the calendar" : "క్యాలెండర్ చూడటానికి నెల ఎంచుకోండి"}</p>
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Step 2: Patient Details */}
-              <div className={`bg-white rounded-3xl shadow-sm border transition-all duration-300 ${selectedSlot ? "border-border/60 opacity-100" : "border-border/30 opacity-50 pointer-events-none"}`}>
-                <div className="bg-primary/5 border-b border-primary/10 px-6 py-4 flex items-center gap-3">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm font-bold">2</span>
-                  <h3 className="font-serif font-bold text-lg">{lang === "en" ? "Your Details" : "మీ వివరాలు"}</h3>
-                  {selectedSlot && (
-                    <span className="ml-auto text-sm text-primary font-semibold">
-                      {format(parseISO(selectedDate), "MMM d")} · {selectedSlot}
-                    </span>
-                  )}
-                </div>
-                <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">{t("form.name")} *</label>
-                    <input required type="text" value={formData.patientName}
-                      onChange={e => setFormData({ ...formData, patientName: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">{t("form.phone")} *</label>
-                    <input required type="tel" value={formData.patientPhone}
-                      onChange={e => setFormData({ ...formData, patientPhone: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:outline-none" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-semibold mb-2">{t("form.email")}</label>
-                    <input type="email" value={formData.patientEmail}
-                      onChange={e => setFormData({ ...formData, patientEmail: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:outline-none" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-semibold mb-2">{t("form.reason")}</label>
-                    <textarea rows={3} value={formData.reason}
-                      onChange={e => setFormData({ ...formData, reason: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:outline-none resize-none" />
-                  </div>
-                  <div className="sm:col-span-2 pt-2">
-                    <Button type="submit" size="lg" className="w-full text-base"
-                      disabled={!selectedSlot || !formData.patientName || !formData.patientPhone || createMutation.isPending}>
-                      {createMutation.isPending ? t("loading") : (lang === "en" ? "Confirm Appointment Request" : "అపాయింట్‌మెంట్ అభ్యర్థన నిర్ధారించండి")}
-                    </Button>
-                    {createMutation.isError && (
-                      <p className="text-destructive text-sm text-center mt-2 font-medium">
-                        {lang === "en" ? "Failed to submit. Please try again or call us." : "సమర్పించడం విఫలమైంది. దయచేసి మళ్ళీ ప్రయత్నించండి."}
-                      </p>
-                    )}
+                    {/* Time Slots */}
+                    <AnimatePresence>
+                      {selectedDate && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.35 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-6 pt-6 border-t border-border/60">
+                            <p className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                              <Clock size={15} className="text-primary" />
+                              {tr("appt.slots_for", lang)} &nbsp;<span className="text-primary">{format(parseISO(selectedDate), lang === "en" ? "EEEE, MMMM d" : "EEEE, d MMMM")}</span>
+                              {new Date(selectedDate).getDay() === 0 && (
+                                <span className="ml-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">{tr("appt.sunday_note", lang)}</span>
+                              )}
+                            </p>
+
+                            {loadingSlots ? (
+                              <div className="flex gap-2 flex-wrap">{[...Array(7)].map((_, i) => <div key={i} className="h-10 w-24 bg-muted animate-pulse rounded-lg" />)}</div>
+                            ) : (
+                              <div className="space-y-5">
+                                <SlotGroup label={`🌅 ${tr("appt.morning", lang)}`} slots={morningSlots} selected={selectedSlot} onSelect={setSelectedSlot} />
+                                {eveningSlots.length > 0 && <SlotGroup label={`🌙 ${tr("appt.evening", lang)}`} slots={eveningSlots} selected={selectedSlot} onSelect={setSelectedSlot} />}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
-              </div>
+              </Reveal>
+
+              {/* ── Step 2: Patient details ── */}
+              <AnimatePresence>
+                {selectedSlot && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }}
+                    transition={{ duration: 0.4 }}
+                    className="bg-white rounded-3xl shadow-sm border border-border/60 overflow-hidden"
+                  >
+                    <div className="bg-primary/5 border-b border-primary/10 px-6 py-4 flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-full bg-primary text-white text-sm font-bold flex items-center justify-center">2</span>
+                      <h3 className="font-serif font-bold text-lg">{tr("appt.step2", lang)}</h3>
+                      <span className="ml-auto text-sm text-primary font-semibold">
+                        {format(parseISO(selectedDate), "MMM d")} · {selectedSlot}
+                      </span>
+                    </div>
+
+                    <div className="p-5 md:p-7 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">{tr("form.name", lang)} <span className="text-destructive">*</span></label>
+                        <input required type="text" value={formData.patientName}
+                          onChange={e => setFormData({ ...formData, patientName: e.target.value })}
+                          placeholder={lang === "en" ? "Full name" : "పూర్తి పేరు"}
+                          className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">{tr("form.phone", lang)} <span className="text-destructive">*</span></label>
+                        <input required type="tel" value={formData.patientPhone}
+                          onChange={e => setFormData({ ...formData, patientPhone: e.target.value })}
+                          placeholder={lang === "en" ? "Mobile number" : "మొబైల్ నంబర్"}
+                          className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-semibold mb-2">{tr("form.email", lang)}</label>
+                        <input type="email" value={formData.patientEmail}
+                          onChange={e => setFormData({ ...formData, patientEmail: e.target.value })}
+                          placeholder={lang === "en" ? "example@email.com" : "example@email.com"}
+                          className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-semibold mb-2">{tr("form.reason", lang)}</label>
+                        <textarea rows={3} value={formData.reason}
+                          onChange={e => setFormData({ ...formData, reason: e.target.value })}
+                          placeholder={lang === "en" ? "Brief description of your health concern" : "మీ ఆరోగ్య సమస్య సంక్షిప్త వివరణ"}
+                          className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none resize-none" />
+                      </div>
+                      <div className="sm:col-span-2 pt-1">
+                        <Button type="submit" size="lg" className="w-full text-base"
+                          disabled={createMutation.isPending}>
+                          {createMutation.isPending ? tr("loading", lang) : tr("btn.confirm", lang)}
+                        </Button>
+                        {createMutation.isError && (
+                          <p className="text-destructive text-sm text-center mt-3 font-medium">{tr("appt.error", lang)}</p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
             </form>
           )}
         </div>
@@ -675,52 +748,52 @@ function AppointmentsSection({ lang, t }: { lang: string; t: (k: any) => string 
   );
 }
 
-function SlotButton({ slot, selected, onClick }: { slot: { time: string; available: boolean }; selected: boolean; onClick: () => void }) {
+function SlotGroup({ label, slots, selected, onSelect }: { label: string; slots: { time: string; available: boolean }[]; selected: string; onSelect: (t: string) => void }) {
   return (
-    <button
-      type="button"
-      disabled={!slot.available}
-      onClick={onClick}
-      className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
-        selected
-          ? "bg-primary text-white border-primary shadow-md"
-          : slot.available
-          ? "bg-white border-border hover:border-primary hover:text-primary hover:shadow-sm"
-          : "bg-muted/50 text-muted-foreground/40 border-border/30 cursor-not-allowed"
-      }`}
-    >
-      {slot.time}
-    </button>
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2.5">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {slots.map(slot => (
+          <button key={slot.time} type="button" disabled={!slot.available} onClick={() => onSelect(slot.time)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all border ${
+              selected === slot.time
+                ? "bg-primary text-white border-primary shadow-sm"
+                : slot.available
+                ? "bg-white border-border hover:border-primary hover:text-primary"
+                : "bg-muted/40 text-muted-foreground/40 border-border/30 cursor-not-allowed line-through"
+            }`}
+          >
+            {slot.time}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
-// ─────────────────────────── TESTIMONIALS ───────────────────────────
-function TestimonialsSection({ lang }: { lang: string }) {
+// ─── TESTIMONIALS ─────────────────────────────────────────────
+function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: testimonials = [], isLoading } = useListTestimonials();
-
   if (settings && !settings.testimonialsEnabled) return null;
 
   return (
     <section id="testimonials" className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={lang === "en" ? "Patient Experiences" : "రోగుల అనుభవాలు"}
-          title={lang === "en" ? "What Our Patients Say" : "మా రోగులు ఏమంటున్నారు"}
-          subtitle={lang === "en" ? "Real experiences from patients who have found healing at Susruta Hospital." : "సుశ్రుత హాస్పిటల్‌లో వైద్యం పొందిన రోగుల నిజమైన అనుభవాలు."}
-        />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <SectionHeader label={tr("test.label", lang)} title={tr("test.title", lang)} subtitle={tr("test.subtitle", lang)} />
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
           {isLoading
-            ? [1, 2, 3].map((i) => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl"></div>)
-            : testimonials.map((tm) => (
-                <div key={tm.id} className="relative bg-[#f8fcf8] border border-border/60 p-8 rounded-3xl hover:border-primary/30 hover:shadow-md transition-all">
-                  <Quote size={36} className="absolute top-5 right-5 text-primary/10" />
+            ? [1,2,3].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl" />)
+            : testimonials.map((tm, i) => (
+              <Reveal key={tm.id} delay={i * 0.08}>
+                <div className="relative bg-[#f8fcf8] border border-border/60 p-8 rounded-3xl hover:border-primary/30 hover:shadow-md transition-all h-full flex flex-col">
+                  <Quote size={34} className="absolute top-5 right-5 text-primary/10" />
                   <div className="flex gap-1 mb-5 text-yellow-500">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={16} fill={i < tm.rating ? "currentColor" : "none"} strokeWidth={i < tm.rating ? 0 : 2} />
+                    {[...Array(5)].map((_, si) => (
+                      <Star key={si} size={15} fill={si < tm.rating ? "currentColor" : "none"} strokeWidth={si < tm.rating ? 0 : 2} />
                     ))}
                   </div>
-                  <p className="text-foreground/80 leading-relaxed italic mb-6">
+                  <p className="text-foreground/80 leading-relaxed italic mb-6 flex-1">
                     "{lang === "te" && tm.contentTe ? tm.contentTe : tm.content}"
                   </p>
                   <div className="border-t border-border/50 pt-4">
@@ -728,93 +801,59 @@ function TestimonialsSection({ lang }: { lang: string }) {
                     {tm.patientLocation && <p className="text-sm text-muted-foreground">{tm.patientLocation}</p>}
                   </div>
                 </div>
-              ))}
+              </Reveal>
+            ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ─────────────────────────── CONTACT ───────────────────────────
-function ContactSection({ lang, t }: { lang: string; t: (k: any) => string }) {
+// ─── CONTACT ──────────────────────────────────────────────────
+function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
-
   return (
     <section id="contact" className="py-24 bg-[#f4faf4]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={lang === "en" ? "Contact Us" : "సంప్రదించండి"}
-          title={lang === "en" ? "Get in Touch" : "మాతో సంప్రదించండి"}
-          subtitle={lang === "en"
-            ? "We are here to help you. Reach us during working hours."
-            : "మేము మీకు సహాయం చేయడానికి ఇక్కడ ఉన్నాము. పని గంటల్లో మమ్మల్ని సంప్రదించండి."}
-        />
-        <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <SectionHeader label={tr("contact.label", lang)} title={tr("contact.title", lang)} subtitle={tr("contact.subtitle", lang)} />
+        <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {[
-              {
-                icon: <MapPin size={20} />,
-                title: lang === "en" ? "Address" : "చిరునామా",
-                value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati - 517 507",
-              },
-              {
-                icon: <Phone size={20} />,
-                title: lang === "en" ? "Phone" : "ఫోన్",
-                value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join("\n") || "9492068180",
-              },
-              {
-                icon: <Clock size={20} />,
-                title: lang === "en" ? "Working Hours" : "పని గంటలు",
-                value: settings?.workingHours || "Mon-Sat: 10:00 AM – 1:00 PM, 6:00 PM – 10:00 PM\nSunday: 10:00 AM – 1:00 PM",
-              },
-              {
-                icon: <Mail size={20} />,
-                title: lang === "en" ? "Email" : "ఈమెయిల్",
-                value: settings?.clinicEmail || (lang === "en" ? "Not provided" : "అందించబడలేదు"),
-              },
-            ].map((item) => (
-              <div key={item.title} className="bg-white p-6 rounded-2xl border border-border/60 shadow-sm flex flex-col gap-3">
-                <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
-                  {item.icon}
+              { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati - 517 507" },
+              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180" },
+              { icon: <Clock size={20} />, titleKey: "contact.hours", value: settings?.workingHours || "Mon–Sat: 10:00 AM – 1:00 PM | 6:00 PM – 10:00 PM\nSunday: 10:00 AM – 1:00 PM" },
+              { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || (lang === "en" ? "—" : "—") },
+            ].map((item, i) => (
+              <Reveal key={item.titleKey} delay={i * 0.08}>
+                <div className="bg-white p-6 rounded-2xl border border-border/60 shadow-sm flex flex-col gap-3 h-full">
+                  <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center flex-shrink-0">{item.icon}</div>
+                  <div>
+                    <h4 className="font-bold text-sm text-foreground mb-1">{tr(item.titleKey as any, lang)}</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-line">{item.value}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-sm text-foreground mb-1">{item.title}</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-line">{item.value}</p>
-                </div>
-              </div>
+              </Reveal>
             ))}
           </div>
-          {/* Map placeholder */}
-          <div className="bg-white rounded-3xl overflow-hidden min-h-[320px] border border-border/60 shadow-sm relative">
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground bg-[#f8fcf8]">
-              <MapPin size={52} className="mb-4 text-primary/30" />
-              <p className="font-serif font-bold text-xl text-foreground/60">Susruta Hospital</p>
-              <p className="text-sm text-muted-foreground mt-1">119, Ramulavari North Mada Street</p>
-              <p className="text-sm text-muted-foreground">Tirupati, Andhra Pradesh - 517 507</p>
+          <Reveal direction="right">
+            <div className="bg-white rounded-3xl overflow-hidden min-h-[320px] border border-border/60 shadow-sm relative flex flex-col items-center justify-center p-8 text-center gap-4">
+              <MapPin size={52} className="text-primary/25" />
+              <div>
+                <p className="font-serif font-bold text-xl text-foreground/70">Susruta Hospital</p>
+                <p className="text-sm text-muted-foreground mt-1">119, Ramulavari North Mada Street</p>
+                <p className="text-sm text-muted-foreground">Tirupati, Andhra Pradesh - 517 507</p>
+              </div>
               <a
                 href="https://maps.google.com/?q=119+Ramulavari+North+Mada+Street+Tirupati"
                 target="_blank" rel="noopener noreferrer"
-                className="mt-5 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+                className="mt-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm"
               >
-                {lang === "en" ? "Open in Google Maps" : "గూగుల్ మ్యాప్స్‌లో తెరవండి"}
+                {tr("contact.map", lang)}
               </a>
             </div>
-          </div>
+          </Reveal>
         </div>
       </div>
     </section>
-  );
-}
-
-// ─────────────────────────── SHARED ───────────────────────────
-function SectionHeader({ label, title, subtitle }: { label: string; title: string; subtitle?: string }) {
-  return (
-    <div className="text-center max-w-2xl mx-auto">
-      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary font-semibold text-xs uppercase tracking-wider mb-4">
-        <Leaf size={13} /> {label}
-      </div>
-      <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">{title}</h2>
-      {subtitle && <p className="text-muted-foreground text-lg leading-relaxed">{subtitle}</p>}
-    </div>
   );
 }

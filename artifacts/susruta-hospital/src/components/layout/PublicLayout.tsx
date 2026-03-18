@@ -1,6 +1,6 @@
 import React from "react";
 import { useLanguage } from "@/store/use-language";
-import { translations } from "@/lib/i18n";
+import { t as tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Menu, X, Phone, Clock, MapPin } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
@@ -13,16 +13,14 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { data: settings } = useGetSettings();
   const [activeSection, setActiveSection] = React.useState("home");
 
-  const t = (key: keyof typeof translations) => translations[key]?.[lang] || key;
-
   const navLinks = [
-    { href: "#home", id: "home", label: t("nav.home") },
-    { href: "#about", id: "about", label: t("nav.about") },
-    { href: "#achievements", id: "achievements", label: t("nav.achievements") },
-    { href: "#services", id: "services", label: t("nav.services") },
-    { href: "#appointments", id: "appointments", label: t("nav.appointments") },
-    ...(settings?.testimonialsEnabled ? [{ href: "#testimonials", id: "testimonials", label: t("nav.testimonials") }] : []),
-    { href: "#contact", id: "contact", label: t("nav.contact") },
+    { href: "#home", id: "home", label: tr("nav.home", lang) },
+    { href: "#about", id: "about", label: tr("nav.about", lang) },
+    { href: "#achievements", id: "achievements", label: tr("nav.achievements", lang) },
+    { href: "#services", id: "services", label: tr("nav.services", lang) },
+    { href: "#appointments", id: "appointments", label: tr("nav.appointments", lang) },
+    ...(settings?.testimonialsEnabled ? [{ href: "#testimonials", id: "testimonials", label: tr("nav.testimonials", lang) }] : []),
+    { href: "#contact", id: "contact", label: tr("nav.contact", lang) },
   ];
 
   React.useEffect(() => {
@@ -45,8 +43,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     e.preventDefault();
     const el = document.getElementById(id);
     if (el) {
-      const offset = 88;
-      const top = el.getBoundingClientRect().top + window.scrollY - offset;
+      const top = el.getBoundingClientRect().top + window.scrollY - 80;
       window.scrollTo({ top, behavior: "smooth" });
     }
     setIsMobileMenuOpen(false);
@@ -59,8 +56,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
           <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
             <span className="flex items-center gap-1.5"><Phone size={13} /> +91 9492068180</span>
-            <span className="hidden sm:flex items-center gap-1.5"><span className="opacity-40">|</span></span>
-            <span className="flex items-center gap-1.5"><Clock size={13} /> {settings?.workingHours || "Mon-Sat: 10AM–1PM, 6PM–10PM"}</span>
+            <span className="hidden sm:flex items-center gap-1.5 opacity-40">|</span>
+            <span className="flex items-center gap-1.5"><Clock size={13} /> {settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM"}</span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -70,7 +67,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               {lang === "en" ? "తెలుగు" : "English"}
             </button>
             <Link href="/admin" className="text-primary-foreground/80 hover:text-white transition-colors">
-              {t("nav.admin")}
+              {tr("nav.admin", lang)}
             </Link>
           </div>
         </div>
@@ -80,13 +77,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-border/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-[72px]">
-            {/* Logo image only — the logo already contains the hospital name text */}
+            {/* Logo image only */}
             <a href="#home" onClick={(e) => scrollTo(e, "home")} className="flex-shrink-0">
-              <img
-                src={logoImg}
-                alt="Susruta Hospital"
-                className="h-12 w-auto object-contain"
-              />
+              <img src={logoImg} alt="Susruta Hospital" className="h-12 w-auto object-contain" />
             </a>
 
             {/* Desktop Nav */}
@@ -111,7 +104,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 onClick={(e) => scrollTo(e, "appointments")}
                 className="ml-3 px-5 py-2.5 rounded-xl bg-primary text-white font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all text-sm whitespace-nowrap"
               >
-                {t("btn.book")}
+                {tr("btn.book", lang)}
               </a>
             </nav>
 
@@ -126,7 +119,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile Nav Dropdown */}
+        {/* Mobile Nav */}
         {isMobileMenuOpen && (
           <div className="lg:hidden bg-white border-t border-border shadow-xl py-4 px-4 flex flex-col gap-1">
             {navLinks.map((link) => (
@@ -136,9 +129,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 onClick={(e) => scrollTo(e, link.id)}
                 className={cn(
                   "px-4 py-3 rounded-xl text-base font-medium transition-colors",
-                  activeSection === link.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground/80 hover:bg-muted"
+                  activeSection === link.id ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-muted"
                 )}
               >
                 {link.label}
@@ -149,7 +140,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               onClick={(e) => scrollTo(e, "appointments")}
               className="mt-2 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center"
             >
-              {t("btn.book")}
+              {tr("btn.book", lang)}
             </a>
           </div>
         )}
@@ -163,16 +154,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-10">
           <div>
             <img src={logoImg} alt="Logo" className="h-10 w-auto brightness-0 invert mb-4" />
-            <p className="text-sm leading-relaxed text-white/60">
-              {lang === "en"
-                ? "Dedicated to providing authentic Ayurvedic treatments with modern medical standards under the expert guidance of Dr. P. Murali Krishna."
-                : "డాక్టర్ పి. మురళీకృష్ణ గారి నిపుణుల మార్గదర్శకత్వంలో ప్రామాణికమైన ఆయుర్వేద చికిత్సలను అందించడానికి అంకితం చేయబడింది."}
-            </p>
+            <p className="text-sm leading-relaxed text-white/60">{tr("footer.desc", lang)}</p>
           </div>
           <div>
-            <h3 className="font-serif font-semibold text-lg text-white mb-4">
-              {lang === "en" ? "Quick Links" : "శీఘ్ర లింకులు"}
-            </h3>
+            <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
             <ul className="space-y-2 text-sm">
               {navLinks.map((link) => (
                 <li key={link.id}>
@@ -184,9 +169,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </ul>
           </div>
           <div>
-            <h3 className="font-serif font-semibold text-lg text-white mb-4">
-              {lang === "en" ? "Contact Info" : "సంప్రదింపు సమాచారం"}
-            </h3>
+            <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.contact", lang)}</h3>
             <ul className="space-y-4 text-sm text-white/70">
               <li className="flex gap-3 items-start">
                 <MapPin className="shrink-0 mt-0.5 text-green-400" size={16} />
@@ -199,9 +182,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                   {settings?.clinicPhone2 ? `, ${settings.clinicPhone2}` : ""}
                 </span>
               </li>
-              <li className="flex gap-3 items-center">
-                <Clock className="shrink-0 text-green-400" size={16} />
-                <span>{settings?.workingHours || "Mon-Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
+              <li className="flex gap-3 items-start">
+                <Clock className="shrink-0 mt-0.5 text-green-400" size={16} />
+                <span>{settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
               </li>
             </ul>
           </div>
