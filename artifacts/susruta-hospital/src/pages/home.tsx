@@ -282,26 +282,6 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               </div>
             </motion.div>
 
-            {/* Ayurvedic herbs image — prominent, below the credential card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7, duration: 0.8 }}
-              className="relative rounded-2xl overflow-hidden shadow-lg border border-primary/10"
-              style={{ background: "linear-gradient(135deg, #f0faf0 0%, #e8f5e8 100%)" }}
-            >
-              <img
-                src="/ayurveda-herbs.png"
-                alt="Ayurvedic herbs and ingredients"
-                className="w-full h-auto object-contain"
-                style={{ maxHeight: "180px", objectPosition: "center bottom" }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#e8f5e8]/80 via-transparent to-transparent" />
-              <div className="absolute bottom-3 left-4">
-                <p className="text-xs font-semibold text-primary/80 uppercase tracking-widest">
-                  {lang === "en" ? "Pure Ayurvedic Herbs" : "స్వచ్ఛమైన ఆయుర్వేద మూలికలు"}
-                </p>
-              </div>
-            </motion.div>
           </div>
         </div>
       </SC>
