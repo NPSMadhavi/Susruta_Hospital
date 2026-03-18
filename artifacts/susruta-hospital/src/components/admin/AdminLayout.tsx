@@ -35,9 +35,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-muted/30">
       {/* Sidebar */}
       <aside className="w-64 bg-foreground text-white flex flex-col hidden md:flex shrink-0">
-        <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <img src={logoImg} alt="Logo" className="h-8 w-auto brightness-0 invert" />
-          <span className="font-serif font-bold text-lg leading-tight">Admin Panel</span>
+        <div className="px-6 py-5 border-b border-white/10 flex flex-col items-start gap-1">
+          <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert" />
+          <span className="text-white/50 text-xs font-semibold uppercase tracking-widest pl-0.5">Admin Panel</span>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
@@ -74,7 +74,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <Button variant="ghost" size="sm" onClick={handleLogout}><LogOut size={16}/></Button>
         </header>
         
-        <div className="flex-1 overflow-auto p-4 md:p-8">
+        <div className="flex-1 overflow-auto p-6 md:p-10">
           {children}
         </div>
       </main>
