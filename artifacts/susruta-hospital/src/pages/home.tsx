@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useLanguage } from "@/store/use-language";
@@ -20,32 +20,100 @@ import {
 import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
 
-// ─── Scroll animation wrapper ───────────────────────────────
-function Reveal({
-  children,
-  delay = 0,
-  direction = "up",
+// ─── Leaf SVG data URI (used for mouse-spotlight texture) ────
+const LEAF_SVG = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'>
+    <path d='M25 155 C25 75 95 25 155 25 C95 95 25 155 25 155Z' fill='none' stroke='%232d6a4f' stroke-width='1.4' opacity='0.55'/>
+    <path d='M25 155 L155 25' stroke='%232d6a4f' stroke-width='0.7' opacity='0.5'/>
+    <path d='M60 120 L95 90' stroke='%232d6a4f' stroke-width='0.5' opacity='0.45'/>
+    <path d='M80 100 L115 72' stroke='%232d6a4f' stroke-width='0.5' opacity='0.45'/>
+    <path d='M42 138 L77 108' stroke='%232d6a4f' stroke-width='0.5' opacity='0.4'/>
+    <path d='M100 60 L130 40' stroke='%232d6a4f' stroke-width='0.5' opacity='0.4'/>
+    <path d='M145 40 C155 25 168 32 164 48 C152 42 145 40 145 40Z' fill='%232d6a4f' opacity='0.18'/>
+    <path d='M12 170 C8 158 20 152 22 162 C16 166 12 170 12 170Z' fill='%232d6a4f' opacity='0.14'/>
+    <circle cx='165' cy='70' r='2.5' fill='%232d6a4f' opacity='0.12'/>
+    <circle cx='45' cy='40' r='2' fill='%232d6a4f' opacity='0.1'/>
+  </svg>`
+)}")`;
+
+// ─── Textured section wrapper with mouse-spotlight leaf reveal ─
+function TexturedSection({
+  id,
   className = "",
+  children,
 }: {
-  children: React.ReactNode;
-  delay?: number;
-  direction?: "up" | "left" | "right" | "none";
+  id?: string;
   className?: string;
+  children: React.ReactNode;
+}) {
+  const sRef = useRef<HTMLElement>(null);
+  const rafRef = useRef<number>();
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      if (!sRef.current) return;
+      const rect = sRef.current.getBoundingClientRect();
+      sRef.current.style.setProperty("--sx", `${e.clientX - rect.left}px`);
+      sRef.current.style.setProperty("--sy", `${e.clientY - rect.top}px`);
+    });
+  }, []);
+
+  const baseLeafStyle: React.CSSProperties = {
+    backgroundImage: LEAF_SVG,
+    backgroundSize: "180px 180px",
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+  };
+
+  return (
+    <section
+      ref={sRef} id={id}
+      className={`relative overflow-hidden ${className}`}
+      onMouseMove={handleMouseMove}
+    >
+      {/* Always-visible faint leaf layer */}
+      <div style={{ ...baseLeafStyle, opacity: 0.04 }} />
+      {/* Spotlight-reveal leaf layer — only visible near cursor */}
+      <div
+        style={{
+          ...baseLeafStyle,
+          opacity: 0.22,
+          maskImage: "radial-gradient(circle 380px at var(--sx, -600px) var(--sy, -600px), black 0%, transparent 68%)",
+          WebkitMaskImage: "radial-gradient(circle 380px at var(--sx, -600px) var(--sy, -600px), black 0%, transparent 68%)",
+        }}
+      />
+      <div className="relative z-10">{children}</div>
+    </section>
+  );
+}
+
+// ─── Fluid content container ─────────────────────────────────
+function SC({ children, narrow }: { children: React.ReactNode; narrow?: boolean }) {
+  return (
+    <div className={`w-full mx-auto px-6 sm:px-10 lg:px-16 xl:px-20 ${narrow ? "max-w-[900px]" : "max-w-[1440px]"}`}>
+      {children}
+    </div>
+  );
+}
+
+// ─── Scroll animation wrapper ─────────────────────────────────
+function Reveal({
+  children, delay = 0, direction = "up", className = "",
+}: {
+  children: React.ReactNode; delay?: number;
+  direction?: "up" | "left" | "right" | "none"; className?: string;
 }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
-  const variants = {
-    hidden: {
-      opacity: 0,
-      y: direction === "up" ? 40 : 0,
-      x: direction === "left" ? -40 : direction === "right" ? 40 : 0,
-    },
-    visible: { opacity: 1, y: 0, x: 0 },
-  };
   return (
     <motion.div
       ref={ref}
-      variants={variants}
+      variants={{
+        hidden: { opacity: 0, y: direction === "up" ? 40 : 0, x: direction === "left" ? -40 : direction === "right" ? 40 : 0 },
+        visible: { opacity: 1, y: 0, x: 0 },
+      }}
       initial="hidden"
       animate={inView ? "visible" : "hidden"}
       transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
@@ -56,7 +124,7 @@ function Reveal({
   );
 }
 
-// ─── Section Header ──────────────────────────────────────────
+// ─── Section Header ───────────────────────────────────────────
 function SectionHeader({ label, title, subtitle }: { label: string; title: string; subtitle?: string }) {
   return (
     <div className="text-center max-w-2xl mx-auto">
@@ -64,14 +132,14 @@ function SectionHeader({ label, title, subtitle }: { label: string; title: strin
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary font-semibold text-xs uppercase tracking-wider mb-4">
           <Leaf size={13} /> {label}
         </div>
-        <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">{title}</h2>
+        <h2 className="text-3xl md:text-4xl xl:text-5xl font-serif font-bold text-foreground mb-4">{title}</h2>
         {subtitle && <p className="text-muted-foreground text-lg leading-relaxed">{subtitle}</p>}
       </Reveal>
     </div>
   );
 }
 
-// ─── Main page ───────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────
 export default function Home() {
   const { lang } = useLanguage();
   return (
@@ -87,7 +155,7 @@ export default function Home() {
   );
 }
 
-// ─── HERO ────────────────────────────────────────────────────
+// ─── HERO ─────────────────────────────────────────────────────
 const HERO_TEXTS: Array<{ en: string; te: string }> = [
   { en: "Experience Nature's Touch for Your Health", te: "మీ ఆరోగ్యం కోసం ప్రకృతి స్పర్శను అనుభవించండి" },
   { en: "Heal with Ancient Wisdom & Modern Care", te: "పురాతన జ్ఞానంతో ఆధునిక సంరక్షణతో స్వస్థత పొందండి" },
@@ -105,21 +173,16 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
-    if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 88;
-      window.scrollTo({ top, behavior: "smooth" });
-    }
+    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 88, behavior: "smooth" });
   };
 
   return (
-    <section id="home" className="relative pt-16 pb-24 overflow-hidden bg-gradient-to-br from-[#f0f7f0] via-white to-[#eaf6ea]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+    <TexturedSection id="home" className="pt-16 pb-24 bg-gradient-to-br from-[#eef7ee] via-white to-[#f2f9f2]">
+      <SC>
+        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 xl:gap-24">
 
-          {/* ── Left: Text (stable except headline) ── */}
+          {/* Left: Text */}
           <div className="flex-1 space-y-6 text-center lg:text-left z-10">
-
-            {/* Badge */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -128,8 +191,8 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               <Leaf size={15} /> {tr("hero.badge", lang)}
             </motion.div>
 
-            {/* Rotating headline – only this part changes */}
-            <div className="h-[9rem] md:h-[8rem] lg:h-[7rem] flex items-start">
+            {/* Rotating headline */}
+            <div className="h-[10rem] md:h-[9rem] lg:h-[8rem] xl:h-[8rem] flex items-start">
               <AnimatePresence mode="wait">
                 <motion.h1
                   key={textIdx}
@@ -137,14 +200,13 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -28 }}
                   transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-                  className="text-4xl md:text-5xl lg:text-5xl font-serif font-bold text-foreground leading-[1.15] w-full"
+                  className="text-4xl md:text-5xl xl:text-6xl font-serif font-bold text-foreground leading-[1.12] w-full"
                 >
                   {HERO_TEXTS[textIdx][lang]}
                 </motion.h1>
               </AnimatePresence>
             </div>
 
-            {/* Sub text – stable */}
             <motion.p
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }}
               className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed"
@@ -152,7 +214,6 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               {tr("hero.subtitle", lang)}
             </motion.p>
 
-            {/* CTA Buttons – stable */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.6 }}
               className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
@@ -171,10 +232,9 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               </button>
             </motion.div>
 
-            {/* Stats – stable */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
-              className="flex flex-wrap gap-6 justify-center lg:justify-start pt-2"
+              className="flex flex-wrap gap-8 justify-center lg:justify-start pt-2"
             >
               {[
                 { num: "30+", key: "stat.experience" },
@@ -190,21 +250,30 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
             </motion.div>
           </div>
 
-          {/* ── Right: Doctor photo – fully stable ── */}
+          {/* Right: Doctor photo */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-[340px] lg:max-w-[380px] xl:max-w-[420px] flex-shrink-0"
+            className="w-full max-w-[340px] lg:max-w-[380px] xl:max-w-[430px] flex-shrink-0 relative"
           >
             {/* Glow blob */}
             <div className="absolute -inset-6 bg-gradient-to-tr from-primary/15 to-green-200/30 rounded-[3rem] blur-3xl -z-10 pointer-events-none" />
 
-            {/* Photo card */}
+            {/* Photo */}
             <div className="relative rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl shadow-primary/10">
               <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto object-cover" />
+
+              {/* Ayurvedic herbs overlay — bottom-right corner of the photo area */}
+              <div className="absolute bottom-0 right-0 w-40 pointer-events-none select-none">
+                <img
+                  src="/ayurveda-herbs.png" alt="" aria-hidden="true"
+                  className="w-full h-auto"
+                  style={{ opacity: 0.55, mixBlendMode: "multiply" }}
+                />
+              </div>
             </div>
 
-            {/* Name + credentials BELOW the photo (not overlapping) */}
+            {/* Name + credential card */}
             <div className="mt-4 mx-2 bg-white border border-border rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-3">
               <div>
                 <p className="font-serif font-bold text-base text-primary leading-tight">
@@ -218,17 +287,16 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               </div>
             </div>
           </motion.div>
-
         </div>
-      </div>
+      </SC>
 
-      {/* Floating feature cards */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Feature cards */}
+      <SC>
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
-            { icon: <ShieldCheck size={26} />, delay: 0, key: "expert" },
+            { icon: <ShieldCheck size={26} />, delay: 0, key: "expert", featured: false },
             { icon: <Leaf size={26} />, delay: 0.1, key: "authentic", featured: true },
-            { icon: <Clock size={26} />, delay: 0.2, key: "booking" },
+            { icon: <Clock size={26} />, delay: 0.2, key: "booking", featured: false },
           ].map((f, i) => {
             const content = [
               { title: { en: "Expert Doctor", te: "నిపుణుడైన డాక్టర్" }, desc: { en: "Retired Principal with 3+ decades of experience in Ayurveda.", te: "3 దశాబ్దాలకు పైగా అనుభవం గల విశ్రాంత ప్రిన్సిపాల్." } },
@@ -237,10 +305,10 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
             ][i];
             return (
               <Reveal key={i} delay={f.delay}>
-                <div className={`p-7 rounded-3xl flex flex-col items-center text-center gap-4 border transition-shadow hover:shadow-md ${
+                <div className={`p-7 rounded-3xl flex flex-col items-center text-center gap-4 border transition-shadow hover:shadow-md h-full ${
                   f.featured ? "bg-primary text-white border-primary shadow-lg shadow-primary/25" : "bg-white border-border/60 shadow-sm"
                 }`}>
-                  <div className={`h-13 w-13 rounded-2xl flex items-center justify-center p-3 ${f.featured ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
+                  <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${f.featured ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
                     {f.icon}
                   </div>
                   <h3 className={`text-base font-serif font-bold ${f.featured ? "text-white" : ""}`}>{content.title[lang]}</h3>
@@ -250,23 +318,19 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
             );
           })}
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
-// ─── ABOUT ───────────────────────────────────────────────────
+// ─── ABOUT ────────────────────────────────────────────────────
 function AboutSection({ lang }: { lang: "en" | "te" }) {
   return (
-    <section id="about" className="py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={tr("about.label", lang)}
-          title={tr("about.title", lang)}
-          subtitle={tr("about.subtitle", lang)}
-        />
-
+    <TexturedSection id="about" className="py-24 bg-white">
+      <SC>
+        <SectionHeader label={tr("about.label", lang)} title={tr("about.title", lang)} subtitle={tr("about.subtitle", lang)} />
         <div className="flex flex-col lg:flex-row gap-12 mt-14">
+
           {/* Photo + credential card */}
           <Reveal direction="left" className="w-full lg:w-72 xl:w-80 flex-shrink-0">
             <div className="sticky top-28">
@@ -298,7 +362,6 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
             <Reveal>
               <p className="text-lg leading-relaxed text-foreground/80">{tr("about.intro", lang)}</p>
             </Reveal>
-
             <Reveal delay={0.1}>
               <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.academic", lang)}</h3>
               <p className="mt-3 text-foreground/70 leading-relaxed">
@@ -307,7 +370,6 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
                   : "అతని విద్యా ప్రయాణం మొదటి నుండే శ్రేష్ఠతతో గుర్తించబడింది. 1988 నాగార్జున విశ్వవిద్యాలయం కన్వొకేషన్‌లో ఆంధ్రప్రదేశ్ గవర్నర్ నుండి రెండు బంగారు పతకాలు స్వీకరించాడు. తరువాత M.D.(Ay), Ph.D.(Ay), F.R.A.V., మరియు యోగ డిప్లొమా పూర్తిచేశారు."}
               </p>
             </Reveal>
-
             <Reveal delay={0.15}>
               <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.experience", lang)}</h3>
               <ul className="mt-3 space-y-2.5 text-foreground/70">
@@ -325,8 +387,6 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
                 ))}
               </ul>
             </Reveal>
-
-            {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { num: "30+", en: "Publications", te: "ప్రచురణలు" },
@@ -344,14 +404,14 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
 // ─── ACHIEVEMENTS ─────────────────────────────────────────────
 function AchievementsSection({ lang }: { lang: "en" | "te" }) {
-  const awards: Array<{ year: string; en: { title: string; desc: string }; te: { title: string; desc: string } }> = [
+  const awards = [
     { year: "1985", en: { title: "AP State Medal", desc: "Best scientific paper on 'Ayurvedic Approach to Skin Diseases', Vijayawada" }, te: { title: "ఏపీ రాష్ట్ర పతకం", desc: "విజయవాడలో 'చర్మ వ్యాధులకు ఆయుర్వేద విధానం'పై ఉత్తమ శాస్త్రీయ పత్రం" } },
     { year: "1986", en: { title: "Chavali Ramaiah Memorial Gold Medal", desc: "Nagarjuna University — outstanding performance in final B.A.M.S." }, te: { title: "చావలి రమయ్య స్మారక బంగారు పతకం", desc: "నాగార్జున విశ్వవిద్యాలయం — చివరి B.A.M.S.లో అత్యుత్తమ ప్రదర్శన" } },
     { year: "1986", en: { title: "Achanta Lakshmipathi Memorial Gold Medal", desc: "Nagarjuna University — outstanding performance across all five B.A.M.S. years" }, te: { title: "అచంట లక్ష్మీపతి స్మారక బంగారు పతకం", desc: "నాగార్జున విశ్వవిద్యాలయం — అన్ని ఐదు B.A.M.S. సంవత్సరాలలో శ్రేష్ఠ ప్రదర్శన" } },
@@ -365,25 +425,17 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
   ];
 
   return (
-    <section id="achievements" className="py-24 bg-[#f4faf4]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          label={tr("ach.label", lang)}
-          title={tr("ach.title", lang)}
-          subtitle={tr("ach.subtitle", lang)}
-        />
-
+    <TexturedSection id="achievements" className="py-24 bg-[#f4faf4]">
+      <SC narrow>
+        <SectionHeader label={tr("ach.label", lang)} title={tr("ach.title", lang)} subtitle={tr("ach.subtitle", lang)} />
         <div className="mt-14 relative">
-          {/* Vertical line */}
           <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/60 via-primary/20 to-transparent -translate-x-1/2" />
-
           <div className="space-y-10">
             {awards.map((award, i) => {
               const isLeft = i % 2 === 0;
               return (
                 <Reveal key={i} delay={Math.min(i * 0.06, 0.4)} direction={isLeft ? "left" : "right"}>
                   <div className={`flex flex-col md:flex-row items-center gap-4 ${!isLeft ? "md:flex-row-reverse" : ""}`}>
-                    {/* Card */}
                     <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <h4 className="font-serif font-bold text-base text-foreground leading-snug">{award[lang].title}</h4>
@@ -391,7 +443,6 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
                       </div>
                       <p className="text-muted-foreground text-sm leading-relaxed">{award[lang].desc}</p>
                     </div>
-                    {/* Center icon */}
                     <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
                       <Trophy size={16} />
                     </div>
@@ -402,8 +453,6 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
             })}
           </div>
         </div>
-
-        {/* Extra stats */}
         <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { num: "5", en: "CME Programs Organized", te: "CME కార్యక్రమాలు నిర్వహించారు" },
@@ -419,14 +468,14 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
             </Reveal>
           ))}
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
-// ─── SERVICES ────────────────────────────────────────────────
+// ─── SERVICES ─────────────────────────────────────────────────
 function ServicesSection({ lang }: { lang: "en" | "te" }) {
-  const services: Array<{ icon: React.ReactNode; en: { title: string; desc: string }; te: { title: string; desc: string } }> = [
+  const services = [
     { icon: <Activity size={28} />, en: { title: "Ayurvedic Consultations", desc: "Detailed personal consultation using Nadi Pariksha (Pulse diagnosis) and Prakriti analysis to determine the root cause of ailments." }, te: { title: "ఆయుర్వేద సంప్రదింపులు", desc: "వ్యాధి మూల కారణాన్ని నిర్ణయించడానికి నాడీ పరీక్ష మరియు ప్రకృతి విశ్లేషణను ఉపయోగించి వివరణాత్మక సంప్రదింపు." } },
     { icon: <Droplets size={28} />, en: { title: "Panchakarma Therapy", desc: "Authentic detoxification and rejuvenation therapies including Vamana, Virechana, Basti, Nasya, and Raktamokshana." }, te: { title: "పంచకర్మ చికిత్స", desc: "వమన, విరేచన, బస్తి, నస్య మరియు రక్తమోక్షణతో సహా ప్రామాణికమైన డిటాక్సిఫికేషన్ మరియు పునరుజ్జీవన చికిత్సలు." } },
     { icon: <Heart size={28} />, en: { title: "Chronic Disease Management", desc: "Specialized Ayurvedic protocols for Arthritis, Diabetes, Skin disorders, Respiratory conditions, and Gastrointestinal problems." }, te: { title: "దీర్ఘకాలిక వ్యాధి నిర్వహణ", desc: "ఆర్థ్రైటిస్, మధుమేహం, చర్మ వ్యాధులు, శ్వాసకోశ మరియు జీర్ణ సమస్యల నిర్వహణ కోసం ప్రత్యేక ఆయుర్వేద ప్రోటోకాల్‌లు." } },
@@ -434,8 +483,8 @@ function ServicesSection({ lang }: { lang: "en" | "te" }) {
   ];
 
   return (
-    <section id="services" className="py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <TexturedSection id="services" className="py-24 bg-white">
+      <SC>
         <SectionHeader label={tr("svc.label", lang)} title={tr("svc.title", lang)} subtitle={tr("svc.subtitle", lang)} />
         <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-7">
           {services.map((s, i) => (
@@ -452,8 +501,8 @@ function ServicesSection({ lang }: { lang: "en" | "te" }) {
             </Reveal>
           ))}
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
@@ -461,7 +510,6 @@ function ServicesSection({ lang }: { lang: "en" | "te" }) {
 function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: openMonths = [], isLoading: loadingMonths } = useListOpenMonths();
-
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -505,7 +553,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
 
   if (settings && !settings.appointmentBookingEnabled) {
     return (
-      <section id="appointments" className="py-24 bg-[#f4faf4]">
+      <TexturedSection id="appointments" className="py-24 bg-[#f4faf4]">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <Reveal>
             <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
@@ -513,16 +561,15 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
             <p className="text-muted-foreground">{tr("appt.unavailable", lang)}</p>
           </Reveal>
         </div>
-      </section>
+      </TexturedSection>
     );
   }
 
   return (
-    <section id="appointments" className="py-24 bg-[#f4faf4]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <TexturedSection id="appointments" className="py-24 bg-[#f4faf4]">
+      <SC>
         <SectionHeader label={tr("appt.label", lang)} title={tr("appt.title", lang)} subtitle={tr("appt.subtitle", lang)} />
-
-        <div className="mt-14">
+        <div className="mt-14 max-w-4xl mx-auto">
           {isSuccess ? (
             <Reveal>
               <div className="max-w-lg mx-auto bg-white p-10 rounded-3xl shadow-md border border-primary/20 text-center">
@@ -535,25 +582,24 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                 </motion.div>
                 <h3 className="text-2xl font-serif font-bold mb-3">{tr("appt.success", lang)}</h3>
                 <p className="text-muted-foreground mb-8">{tr("appt.success_msg", lang)}</p>
-                <Button onClick={() => { setIsSuccess(false); setSelectedDate(""); setSelectedSlot(""); setSelectedMonth(""); setFormData({ patientName: "", patientPhone: "", patientEmail: "", reason: "" }); }}>
+                <Button onClick={() => {
+                  setIsSuccess(false); setSelectedDate(""); setSelectedSlot("");
+                  setSelectedMonth(""); setFormData({ patientName: "", patientPhone: "", patientEmail: "", reason: "" });
+                }}>
                   {tr("btn.book_another", lang)}
                 </Button>
               </div>
             </Reveal>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* ── Step 1: Date & Time ── */}
               <Reveal>
                 <div className="bg-white rounded-3xl shadow-sm border border-border/60 overflow-hidden">
                   <div className="bg-primary/5 border-b border-primary/10 px-6 py-4 flex items-center gap-3">
                     <span className="w-8 h-8 rounded-full bg-primary text-white text-sm font-bold flex items-center justify-center">1</span>
                     <h3 className="font-serif font-bold text-lg">{tr("appt.step1", lang)}</h3>
                   </div>
-
                   <div className="p-5 md:p-7">
                     <div className="flex flex-col lg:flex-row gap-6">
-
                       {/* Month list */}
                       <div className="lg:w-52 flex-shrink-0">
                         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">{tr("form.month", lang)}</p>
@@ -566,8 +612,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                         ) : (
                           <div className="space-y-2">
                             {openMonths.filter(m => m.isOpen).map((m) => (
-                              <button
-                                key={m.id} type="button"
+                              <button key={m.id} type="button"
                                 onClick={() => { setSelectedMonth(m.month); setSelectedDate(""); setSelectedSlot(""); }}
                                 className={`w-full px-4 py-3 rounded-xl text-sm font-semibold text-left transition-all border flex items-center gap-2 ${
                                   selectedMonth === m.month
@@ -581,8 +626,6 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                             ))}
                           </div>
                         )}
-
-                        {/* Legend */}
                         {selectedMonth && (
                           <div className="mt-5 space-y-2 text-xs text-muted-foreground">
                             <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-primary/20 ring-1 ring-primary/40 flex-shrink-0" />{tr("appt.legend_avail", lang)}</div>
@@ -602,33 +645,28 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                               <Info size={11} />{tr("appt.sunday_note", lang)}
                             </span>
                           </div>
-
                           <div className="grid grid-cols-7 gap-1 mb-1">
                             {(lang === "en" ? ["Su","Mo","Tu","We","Th","Fr","Sa"] : ["ఆది","సోమ","మంగ","బుధ","గురు","శుక్ర","శని"]).map(d => (
                               <div key={d} className="text-center text-[11px] font-bold text-muted-foreground py-1">{d}</div>
                             ))}
                           </div>
-
                           <div className="grid grid-cols-7 gap-1.5">
                             {calendarDays.map((day, idx) => {
                               if (!day) return <div key={idx} />;
                               const isAvail = availableDatesSet.has(day);
                               const isBlocked = blockedDatesSet.has(day);
                               const isPast = day < today;
-                              const isSun = new Date(day).getDay() === 0;
                               const isSel = selectedDate === day;
-
                               let cls = "aspect-square flex items-center justify-center rounded-xl text-sm font-semibold transition-all ";
                               if (isSel) cls += "bg-primary text-white shadow-md ring-2 ring-primary ring-offset-1";
                               else if (isBlocked) cls += "bg-red-50 text-red-300 cursor-not-allowed text-xs";
                               else if (isPast) cls += "text-muted-foreground/30 cursor-not-allowed";
                               else if (isAvail) cls += "bg-primary/15 text-primary hover:bg-primary hover:text-white cursor-pointer hover:shadow-sm";
                               else cls += "text-muted-foreground/40 cursor-not-allowed";
-
                               return (
                                 <button key={day} type="button" disabled={!isAvail || isPast}
                                   onClick={() => { setSelectedDate(day); setSelectedSlot(""); }}
-                                  className={cls} title={isSun && isAvail ? "Morning only" : undefined}
+                                  className={cls}
                                 >
                                   {day.split("-")[2]}
                                 </button>
@@ -664,7 +702,6 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                                 <span className="ml-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">{tr("appt.sunday_note", lang)}</span>
                               )}
                             </p>
-
                             {loadingSlots ? (
                               <div className="flex gap-2 flex-wrap">{[...Array(7)].map((_, i) => <div key={i} className="h-10 w-24 bg-muted animate-pulse rounded-lg" />)}</div>
                             ) : (
@@ -681,7 +718,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                 </div>
               </Reveal>
 
-              {/* ── Step 2: Patient details ── */}
+              {/* Step 2 */}
               <AnimatePresence>
                 {selectedSlot && (
                   <motion.div
@@ -696,7 +733,6 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                         {format(parseISO(selectedDate), "MMM d")} · {selectedSlot}
                       </span>
                     </div>
-
                     <div className="p-5 md:p-7 grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <div>
                         <label className="block text-sm font-semibold mb-2">{tr("form.name", lang)} <span className="text-destructive">*</span></label>
@@ -716,7 +752,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                         <label className="block text-sm font-semibold mb-2">{tr("form.email", lang)}</label>
                         <input type="email" value={formData.patientEmail}
                           onChange={e => setFormData({ ...formData, patientEmail: e.target.value })}
-                          placeholder={lang === "en" ? "example@email.com" : "example@email.com"}
+                          placeholder="example@email.com"
                           className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none" />
                       </div>
                       <div className="sm:col-span-2">
@@ -727,8 +763,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                           className="w-full p-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none resize-none" />
                       </div>
                       <div className="sm:col-span-2 pt-1">
-                        <Button type="submit" size="lg" className="w-full text-base"
-                          disabled={createMutation.isPending}>
+                        <Button type="submit" size="lg" className="w-full text-base" disabled={createMutation.isPending}>
                           {createMutation.isPending ? tr("loading", lang) : tr("btn.confirm", lang)}
                         </Button>
                         {createMutation.isError && (
@@ -739,16 +774,17 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                   </motion.div>
                 )}
               </AnimatePresence>
-
             </form>
           )}
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
-function SlotGroup({ label, slots, selected, onSelect }: { label: string; slots: { time: string; available: boolean }[]; selected: string; onSelect: (t: string) => void }) {
+function SlotGroup({ label, slots, selected, onSelect }: {
+  label: string; slots: { time: string; available: boolean }[]; selected: string; onSelect: (t: string) => void
+}) {
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2.5">{label}</p>
@@ -778,8 +814,8 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
   if (settings && !settings.testimonialsEnabled) return null;
 
   return (
-    <section id="testimonials" className="py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <TexturedSection id="testimonials" className="py-24 bg-white">
+      <SC>
         <SectionHeader label={tr("test.label", lang)} title={tr("test.title", lang)} subtitle={tr("test.subtitle", lang)} />
         <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
           {isLoading
@@ -804,8 +840,8 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
               </Reveal>
             ))}
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
 
@@ -813,8 +849,8 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
 function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   return (
-    <section id="contact" className="py-24 bg-[#f4faf4]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <TexturedSection id="contact" className="py-24 bg-[#f4faf4]">
+      <SC>
         <SectionHeader label={tr("contact.label", lang)} title={tr("contact.title", lang)} subtitle={tr("contact.subtitle", lang)} />
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -822,38 +858,35 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
               { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati - 517 507" },
               { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180" },
               { icon: <Clock size={20} />, titleKey: "contact.hours", value: settings?.workingHours || "Mon–Sat: 10:00 AM – 1:00 PM | 6:00 PM – 10:00 PM\nSunday: 10:00 AM – 1:00 PM" },
-              { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || (lang === "en" ? "—" : "—") },
+              { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || "—" },
             ].map((item, i) => (
               <Reveal key={item.titleKey} delay={i * 0.08}>
                 <div className="bg-white p-6 rounded-2xl border border-border/60 shadow-sm flex flex-col gap-3 h-full">
                   <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center flex-shrink-0">{item.icon}</div>
                   <div>
-                    <h4 className="font-bold text-sm text-foreground mb-1">{tr(item.titleKey as any, lang)}</h4>
-                    <p className="text-sm text-muted-foreground whitespace-pre-line">{item.value}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1">{tr(item.titleKey as any, lang)}</p>
+                    <p className="text-sm font-medium text-foreground leading-relaxed whitespace-pre-line">{item.value}</p>
                   </div>
                 </div>
               </Reveal>
             ))}
           </div>
+
+          {/* Map embed */}
           <Reveal direction="right">
-            <div className="bg-white rounded-3xl overflow-hidden min-h-[320px] border border-border/60 shadow-sm relative flex flex-col items-center justify-center p-8 text-center gap-4">
-              <MapPin size={52} className="text-primary/25" />
-              <div>
-                <p className="font-serif font-bold text-xl text-foreground/70">Susruta Hospital</p>
-                <p className="text-sm text-muted-foreground mt-1">119, Ramulavari North Mada Street</p>
-                <p className="text-sm text-muted-foreground">Tirupati, Andhra Pradesh - 517 507</p>
-              </div>
-              <a
-                href="https://maps.google.com/?q=119+Ramulavari+North+Mada+Street+Tirupati"
-                target="_blank" rel="noopener noreferrer"
-                className="mt-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm"
-              >
-                {tr("contact.map", lang)}
-              </a>
+            <div className="rounded-3xl overflow-hidden border border-border/60 shadow-sm h-full min-h-[340px] bg-[#e8f5e9] flex items-center justify-center">
+              <iframe
+                title="Susruta Hospital Location"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3877.7!2d79.4192!3d13.6288!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a4d4b8b3b3b3b3b%3A0x0!2sSusruta+Hospital+Tirupati!5e0!3m2!1sen!2sin!4v1234567890"
+                width="100%" height="100%"
+                style={{ border: 0, minHeight: "340px" }}
+                allowFullScreen loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </Reveal>
         </div>
-      </div>
-    </section>
+      </SC>
+    </TexturedSection>
   );
 }
