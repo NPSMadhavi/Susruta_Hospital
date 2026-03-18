@@ -173,7 +173,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
     <TexturedSection id="home" className="relative pt-14 pb-20 bg-white">
 
       <SC>
-        <div className="flex flex-col lg:flex-row items-start gap-10 lg:gap-16 xl:gap-20">
+        <div className="flex flex-col lg:flex-row items-stretch gap-10 lg:gap-16 xl:gap-20">
 
           {/* Left: Text */}
           <div className="flex-1 flex flex-col text-center lg:text-left z-10 min-w-0">
@@ -185,8 +185,8 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               <Leaf size={15} /> {tr("hero.badge", lang)}
             </motion.div>
 
-            {/* Rotating headline — fixed height so nothing below shifts */}
-            <div className="overflow-hidden mb-6" style={{ height: "clamp(8rem, 14vw, 13rem)" }}>
+            {/* Rotating headline — min-height reserves space, column stretches to photo height */}
+            <div className="overflow-hidden mb-6" style={{ minHeight: "clamp(7rem, 12vw, 11rem)" }}>
               <AnimatePresence mode="wait">
                 <motion.h1
                   key={textIdx}
