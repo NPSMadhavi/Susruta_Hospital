@@ -1,0 +1,20 @@
+packages:
+  "framer-motion": "Smooth page transitions and component animations"
+  "date-fns": "Easy date manipulation and formatting for appointments"
+  "zustand": "Global state management for language selection"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to merge tailwind classes safely"
+  "lucide-react": "Beautiful consistent icons"
+
+images:
+  - path: "artifacts/susruta-hospital/public/images/hero-bg.png"
+    description: "Soft, abstract, elegant nature-inspired background with subtle green and gold gradients, very blurred, perfect for a medical or ayurvedic website hero section"
+    aspect_ratio: "16:9"
+  - path: "artifacts/susruta-hospital/public/images/ayurveda-pattern.png"
+    description: "Subtle, minimal, seamless geometric pattern inspired by ancient Indian ayurveda, mostly transparent, light sage green lines"
+    aspect_ratio: "1:1"
+
+notes:
+  - Using generated Orval hooks from @workspace/api-client-react
+  - Assuming standard cookie-based auth handled by customFetch
+  - Using wouter for routing

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Susruta Hospital"
+version = "1.0.0"
+id = "artifacts/susruta-hospital"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 18820
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/susruta-hospital run dev"
+
+[services.env]
+PORT = "18820"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/susruta-hospital", "run", "build"]
+publicDir = "artifacts/susruta-hospital/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"

@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Susruta Hospital API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: appointments
+    description: Appointment booking and management
+  - name: testimonials
+    description: Patient testimonials
+  - name: availability
+    description: Appointment availability management
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,419 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /appointments:
+    post:
+      operationId: createAppointment
+      tags: [appointments]
+      summary: Book an appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAppointmentRequest"
+      responses:
+        "201":
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Slot not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listAppointments
+      tags: [appointments]
+      summary: List all appointments (admin)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, cancelled]
+        - in: query
+          name: date
+          schema:
+            type: string
+        - in: query
+          name: month
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Appointment"
+
+  /appointments/{id}:
+    get:
+      operationId: getAppointment
+      tags: [appointments]
+      summary: Get appointment by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Appointment found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateAppointment
+      tags: [appointments]
+      summary: Update appointment status (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppointmentRequest"
+      responses:
+        "200":
+          description: Appointment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+    delete:
+      operationId: deleteAppointment
+      tags: [appointments]
+      summary: Delete an appointment (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /availability:
+    get:
+      operationId: getAvailability
+      tags: [availability]
+      summary: Get available dates for a month
+      parameters:
+        - in: query
+          name: month
+          required: true
+          schema:
+            type: string
+          description: "Month in YYYY-MM format"
+      responses:
+        "200":
+          description: Availability info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthAvailability"
+
+  /availability/slots:
+    get:
+      operationId: getSlots
+      tags: [availability]
+      summary: Get available time slots for a specific date
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+          description: "Date in YYYY-MM-DD format"
+      responses:
+        "200":
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeSlot"
+
+  /availability/blocked-dates:
+    get:
+      operationId: listBlockedDates
+      tags: [availability]
+      summary: List all blocked dates (admin)
+      responses:
+        "200":
+          description: Blocked dates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BlockedDate"
+    post:
+      operationId: blockDate
+      tags: [availability]
+      summary: Block a date or date range (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockDateRequest"
+      responses:
+        "201":
+          description: Date blocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockedDate"
+
+  /availability/blocked-dates/{id}:
+    delete:
+      operationId: unblockDate
+      tags: [availability]
+      summary: Unblock a date (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Unblocked
+
+  /availability/months:
+    get:
+      operationId: listOpenMonths
+      tags: [availability]
+      summary: List all open months for booking
+      responses:
+        "200":
+          description: Open months
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenMonth"
+    post:
+      operationId: openMonth
+      tags: [availability]
+      summary: Open a month for booking (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenMonthRequest"
+      responses:
+        "201":
+          description: Month opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenMonth"
+
+  /availability/months/{id}:
+    delete:
+      operationId: closeMonth
+      tags: [availability]
+      summary: Close a month for booking (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Closed
+
+  /testimonials:
+    get:
+      operationId: listTestimonials
+      tags: [testimonials]
+      summary: List published testimonials
+      responses:
+        "200":
+          description: Testimonials list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Testimonial"
+    post:
+      operationId: createTestimonial
+      tags: [testimonials]
+      summary: Add a testimonial (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTestimonialRequest"
+      responses:
+        "201":
+          description: Testimonial created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Testimonial"
+
+  /testimonials/{id}:
+    patch:
+      operationId: updateTestimonial
+      tags: [testimonials]
+      summary: Update testimonial (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTestimonialRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Testimonial"
+    delete:
+      operationId: deleteTestimonial
+      tags: [testimonials]
+      summary: Delete testimonial (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /admin/settings:
+    get:
+      operationId: getSettings
+      tags: [admin]
+      summary: Get site settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+    patch:
+      operationId: updateSettings
+      tags: [admin]
+      summary: Update site settings (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsRequest"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags: [admin]
+      summary: Admin logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/me:
+    get:
+      operationId: getAdminMe
+      tags: [admin]
+      summary: Check admin session
+      responses:
+        "200":
+          description: Admin info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMe"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +453,333 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientName:
+          type: string
+        patientPhone:
+          type: string
+        patientEmail:
+          type: string
+          nullable: true
+        date:
+          type: string
+          description: "YYYY-MM-DD"
+        timeSlot:
+          type: string
+          description: "e.g. 09:00 AM"
+        reason:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - patientName
+        - patientPhone
+        - date
+        - timeSlot
+        - status
+        - createdAt
+
+    CreateAppointmentRequest:
+      type: object
+      properties:
+        patientName:
+          type: string
+        patientPhone:
+          type: string
+        patientEmail:
+          type: string
+          nullable: true
+        date:
+          type: string
+        timeSlot:
+          type: string
+        reason:
+          type: string
+          nullable: true
+      required:
+        - patientName
+        - patientPhone
+        - date
+        - timeSlot
+
+    UpdateAppointmentRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+        notes:
+          type: string
+          nullable: true
+
+    TimeSlot:
+      type: object
+      properties:
+        time:
+          type: string
+        available:
+          type: boolean
+      required:
+        - time
+        - available
+
+    MonthAvailability:
+      type: object
+      properties:
+        month:
+          type: string
+        isOpen:
+          type: boolean
+        availableDates:
+          type: array
+          items:
+            type: string
+        blockedDates:
+          type: array
+          items:
+            type: string
+      required:
+        - month
+        - isOpen
+        - availableDates
+        - blockedDates
+
+    BlockedDate:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - date
+        - createdAt
+
+    BlockDateRequest:
+      type: object
+      properties:
+        date:
+          type: string
+        reason:
+          type: string
+          nullable: true
+      required:
+        - date
+
+    OpenMonth:
+      type: object
+      properties:
+        id:
+          type: integer
+        month:
+          type: string
+          description: "YYYY-MM format"
+        isOpen:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - month
+        - isOpen
+        - createdAt
+
+    OpenMonthRequest:
+      type: object
+      properties:
+        month:
+          type: string
+          description: "YYYY-MM format"
+        isOpen:
+          type: boolean
+      required:
+        - month
+        - isOpen
+
+    Testimonial:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientName:
+          type: string
+        patientLocation:
+          type: string
+          nullable: true
+        content:
+          type: string
+        contentTe:
+          type: string
+          nullable: true
+        rating:
+          type: integer
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - patientName
+        - content
+        - rating
+        - isPublished
+        - createdAt
+
+    CreateTestimonialRequest:
+      type: object
+      properties:
+        patientName:
+          type: string
+        patientLocation:
+          type: string
+          nullable: true
+        content:
+          type: string
+        contentTe:
+          type: string
+          nullable: true
+        rating:
+          type: integer
+        isPublished:
+          type: boolean
+      required:
+        - patientName
+        - content
+        - rating
+        - isPublished
+
+    UpdateTestimonialRequest:
+      type: object
+      properties:
+        patientName:
+          type: string
+        patientLocation:
+          type: string
+          nullable: true
+        content:
+          type: string
+        contentTe:
+          type: string
+          nullable: true
+        rating:
+          type: integer
+        isPublished:
+          type: boolean
+
+    SiteSettings:
+      type: object
+      properties:
+        testimonialsEnabled:
+          type: boolean
+        appointmentBookingEnabled:
+          type: boolean
+        clinicPhone1:
+          type: string
+        clinicPhone2:
+          type: string
+          nullable: true
+        clinicEmail:
+          type: string
+          nullable: true
+        clinicAddress:
+          type: string
+        workingHours:
+          type: string
+          nullable: true
+      required:
+        - testimonialsEnabled
+        - appointmentBookingEnabled
+        - clinicPhone1
+        - clinicAddress
+
+    UpdateSettingsRequest:
+      type: object
+      properties:
+        testimonialsEnabled:
+          type: boolean
+        appointmentBookingEnabled:
+          type: boolean
+        clinicPhone1:
+          type: string
+        clinicPhone2:
+          type: string
+          nullable: true
+        clinicEmail:
+          type: string
+          nullable: true
+        clinicAddress:
+          type: string
+        workingHours:
+          type: string
+          nullable: true
+
+    AdminLoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    AdminMe:
+      type: object
+      properties:
+        username:
+          type: string
+        isAdmin:
+          type: boolean
+      required:
+        - username
+        - isAdmin

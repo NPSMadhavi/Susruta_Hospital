@@ -1,8 +1,8 @@
-# Workspace
+# Susruta Hospital Website
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+A complete bilingual (English/Telugu) Ayurvedic hospital website for Susruta Hospital, Tirupati, India. The website showcases Dr. P. Murali Krishna's expertise, handles appointment bookings, and includes an admin panel for hospital management.
 
 ## Stack
 
@@ -15,82 +15,108 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+- **Frontend**: React + Vite, Tailwind CSS, Wouter routing, Zustand, Framer Motion, date-fns, Lucide icons
+- **Design**: White & green nature/Ayurveda inspired theme
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── artifacts/
+│   ├── api-server/           # Express API server (port 8080)
+│   │   └── src/
+│   │       ├── lib/auth.ts   # Admin session management
+│   │       └── routes/
+│   │           ├── admin.ts           # Admin auth & settings
+│   │           ├── appointments.ts    # Appointment CRUD
+│   │           ├── availability.ts    # Date/slot management
+│   │           └── testimonials.ts    # Testimonials CRUD
+│   └── susruta-hospital/     # React Vite frontend (root /)
+│       └── src/
+│           ├── pages/
+│           │   ├── home.tsx, about.tsx, achievements.tsx
+│           │   ├── services.tsx, appointments.tsx
+│           │   ├── testimonials.tsx, contact.tsx
+│           │   └── admin/
+│           │       ├── login.tsx, dashboard.tsx
+│           │       ├── appointments.tsx, availability.tsx
+│           │       ├── testimonials.tsx, settings.tsx
+│           ├── components/layout/PublicLayout.tsx
+│           ├── components/admin/AdminLayout.tsx
+│           ├── store/use-language.ts   # Zustand lang store
+│           └── lib/i18n.ts             # EN/TE translations
+├── lib/
+│   ├── api-spec/openapi.yaml  # Full API contract
+│   ├── api-client-react/      # Generated React Query hooks
+│   ├── api-zod/               # Generated Zod schemas
+│   └── db/src/schema/         # Database tables
+│       ├── appointments.ts
+│       ├── blocked_dates.ts
+│       ├── open_months.ts
+│       ├── testimonials.ts
+│       ├── site_settings.ts
+│       └── admin_sessions.ts
 ```
 
-## TypeScript & Composite Projects
+## Features
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+### Public Website
+- **Home** - Hero with Dr. Murali Krishna's photo, credentials, CTA
+- **About Doctor** - Full bio, qualifications, career
+- **Achievements** - 10+ awards, positions, publications (30+), lectures (147+)
+- **Services** - Ayurvedic treatments & Panchakarma
+- **Appointments** - Step-by-step booking (only shows open months/dates)
+- **Testimonials** - Patient reviews (conditionally shown)
+- **Contact** - Address, phone, working hours
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+### Language Support
+- English (default) + Telugu toggle in top navbar
+- All key UI text has EN/TE translations in `lib/i18n.ts`
 
-## Root Scripts
+### Admin Panel (`/admin`)
+- **Login** - Secure session-based auth
+- **Dashboard** - Appointment summary
+- **Appointments** - View, filter, confirm/cancel appointments
+- **Availability** - Open/close months, block specific dates
+- **Testimonials** - Add, edit, publish/unpublish, delete
+- **Settings** - Toggle testimonials, enable/disable booking, contact info
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## Admin Credentials
+- **Username**: `admin`
+- **Password**: `susruta2024`
 
-## Packages
+To change: Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables.
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## API Endpoints
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/admin/login | Admin login |
+| POST | /api/admin/logout | Admin logout |
+| GET | /api/admin/me | Session check |
+| GET/PATCH | /api/admin/settings | Site settings |
+| POST | /api/appointments | Book appointment |
+| GET | /api/appointments | List appointments (admin) |
+| PATCH | /api/appointments/:id | Update status (admin) |
+| DELETE | /api/appointments/:id | Delete (admin) |
+| GET | /api/availability?month= | Month availability |
+| GET | /api/availability/slots?date= | Time slots for date |
+| GET/POST | /api/availability/blocked-dates | Blocked dates |
+| DELETE | /api/availability/blocked-dates/:id | Unblock date |
+| GET/POST | /api/availability/months | Open months |
+| DELETE | /api/availability/months/:id | Close month |
+| GET | /api/testimonials | Published testimonials |
+| POST | /api/testimonials | Create (admin) |
+| PATCH | /api/testimonials/:id | Update (admin) |
+| DELETE | /api/testimonials/:id | Delete (admin) |
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+## Color Theme (White & Green Ayurvedic)
+- Primary: Deep forest green
+- Background: White / light mint
+- Accents: Golden/warm earth tones
+- Typography: Serif for headings, Sans-serif for body
 
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+## Key Assets
+- `attached_assets/logo_1773840200056.png` - Hospital logo
+- `attached_assets/Dr_Murali_Krishna_1773837837953.jpeg` - Doctor photo
+- Imported via `@assets/` alias in frontend
