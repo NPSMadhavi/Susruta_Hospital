@@ -924,7 +924,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {[
               { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati – 517 507" },
-              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180 · 0877-2220663" },
+              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180 · 0877-2220663", note: lang === "en" ? "Please call during office hours only." : "దయచేసి కార్యాలయ వేళల్లో మాత్రమే కాల్ చేయండి." },
               { icon: <Clock size={20} />, titleKey: "contact.hours", value: null },
               { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || "—" },
             ].map((item, i) => (
@@ -946,7 +946,12 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm font-medium text-foreground leading-relaxed">{item.value}</p>
+                      <>
+                        <p className="text-sm font-medium text-foreground leading-relaxed">{item.value}</p>
+                        {(item as any).note && (
+                          <p className="text-xs text-muted-foreground italic mt-1">{(item as any).note}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
