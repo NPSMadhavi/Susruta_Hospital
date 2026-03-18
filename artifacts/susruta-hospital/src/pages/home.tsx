@@ -400,90 +400,58 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
 // ─── ACHIEVEMENTS ─────────────────────────────────────────────
 function AchievementsSection({ lang }: { lang: "en" | "te" }) {
   const awards = [
-    { year: "1985", en: { title: "AP State Medal", inst: "Vijayawada" }, te: { title: "ఏపీ రాష్ట్ర పతకం", inst: "విజయవాడ" } },
-    { year: "1986", en: { title: "Chavali Ramaiah Memorial Gold Medal", inst: "Nagarjuna University" }, te: { title: "చావలి రమయ్య స్మారక బంగారు పతకం", inst: "నాగార్జున విశ్వవిద్యాలయం" } },
-    { year: "1986", en: { title: "Achanta Lakshmipathi Memorial Gold Medal", inst: "Nagarjuna University" }, te: { title: "అచంట లక్ష్మీపతి స్మారక బంగారు పతకం", inst: "నాగార్జున విశ్వవిద్యాలయం" } },
-    { year: "1992", en: { title: "Baidyanath Foundation National Award", inst: "Nagpur" }, te: { title: "బైద్యనాథ్ ఫౌండేషన్ జాతీయ అవార్డు", inst: "నాగ్‌పూర్" } },
-    { year: "1997", en: { title: "Doctor of Science Honour", inst: "Open International University, Colombo" }, te: { title: "డాక్టర్ ఆఫ్ సైన్స్ గౌరవం", inst: "ఓపెన్ ఇంటర్నేషనల్ యూనివర్సిటీ, కొలంబో" } },
-    { year: "2006", en: { title: "Outstanding Young Person — JCI", inst: "JCI South East Zone" }, te: { title: "అత్యుత్తమ యువ వ్యక్తి — జెసిఐ", inst: "జెసిఐ సౌత్ ఈస్ట్ జోన్" } },
-    { year: "2006", en: { title: "Outstanding Young Indian — JCI National", inst: "Junior Chamber International India, Bangalore" }, te: { title: "అత్యుత్తమ యువ భారతీయుడు — జెసిఐ జాతీయ", inst: "జూనియర్ ఛాంబర్ ఇంటర్నేషనల్ ఇండియా, బెంగళూరు" } },
-    { year: "2016", en: { title: "Dhanvantari Award", inst: "Vijayawada" }, te: { title: "ధన్వంతరి అవార్డు", inst: "విజయవాడ" } },
-    { year: "2017", en: { title: "International Charaka Award", inst: "AAPNA, USA · Belagavi" }, te: { title: "అంతర్జాతీయ చరక అవార్డు", inst: "ఎఎపిఎన్ఎ, యుఎస్ఎ · బెళగావి" } },
+    { year: "1985", en: { title: "AP State Medal", inst: "Best scientific paper on 'Ayurvedic Approach to Skin Diseases', Vijayawada" }, te: { title: "ఏపీ రాష్ట్ర పతకం", inst: "విజయవాడలో 'చర్మ వ్యాధులకు ఆయుర్వేద విధానం'పై ఉత్తమ శాస్త్రీయ పత్రం" } },
+    { year: "1986", en: { title: "Chavali Ramaiah Memorial Gold Medal", inst: "Nagarjuna University — outstanding performance in final B.A.M.S." }, te: { title: "చావలి రమయ్య స్మారక బంగారు పతకం", inst: "నాగార్జున విశ్వవిద్యాలయం — చివరి B.A.M.S.లో అత్యుత్తమ ప్రదర్శన" } },
+    { year: "1986", en: { title: "Achanta Lakshmipathi Memorial Gold Medal", inst: "Nagarjuna University — outstanding performance across all five B.A.M.S. years" }, te: { title: "అచంట లక్ష్మీపతి స్మారక బంగారు పతకం", inst: "నాగార్జున విశ్వవిద్యాలయం — అన్ని ఐదు B.A.M.S. సంవత్సరాలలో శ్రేష్ఠ ప్రదర్శన" } },
+    { year: "1992", en: { title: "Baidyanath Foundation National Award", inst: "Best scientific paper on 'Scientific basis of Ayurvedic Diagnostics', Nagpur" }, te: { title: "బైద్యనాథ్ ఫౌండేషన్ జాతీయ అవార్డు", inst: "నాగ్‌పూర్‌లో 'ఆయుర్వేద నిర్ధారణ యొక్క శాస్త్రీయ ఆధారం'పై ఉత్తమ పత్రం" } },
+    { year: "1997", en: { title: "Doctor of Science Honour", inst: "Open International University for Complementary Medicine, Colombo" }, te: { title: "డాక్టర్ ఆఫ్ సైన్స్ గౌరవం", inst: "ఓపెన్ ఇంటర్నేషనల్ యూనివర్సిటీ ఫర్ కాంప్లిమెంటరీ మెడిసిన్, కొలంబో" } },
+    { year: "2006", en: { title: "Outstanding Young Person — JCI", inst: "JCI South East Zone — Coastal AP and Orissa" }, te: { title: "అత్యుత్తమ యువ వ్యక్తి — జెసిఐ", inst: "జెసిఐ సౌత్ ఈస్ట్ జోన్ — కోస్టల్ ఏపీ మరియు ఒరిస్సా" } },
+    { year: "2006", en: { title: "Outstanding Young Indian — JCI National", inst: "Junior Chamber International India — National Award, Bangalore" }, te: { title: "అత్యుత్తమ యువ భారతీయుడు — జెసిఐ జాతీయ", inst: "జూనియర్ ఛాంబర్ ఇంటర్నేషనల్ ఇండియా — జాతీయ అవార్డు, బెంగళూరు" } },
+    { year: "2016", en: { title: "Dhanvantari Award", inst: "Outstanding services in Ayurveda, Vijayawada" }, te: { title: "ధన్వంతరి అవార్డు", inst: "విజయవాడలో ఆయుర్వేదంలో అత్యుత్తమ సేవలు" } },
+    { year: "2017", en: { title: "International Charaka Award", inst: "AAPNA, USA — excellence in Ayurvedic teaching, Belagavi" }, te: { title: "అంతర్జాతీయ చరక అవార్డు", inst: "ఎఎపిఎన్ఎ, యుఎస్ఎ — ఆయుర్వేద బోధనలో శ్రేష్ఠత" } },
     { year: "2023", en: { title: "Ayurveda Sarvabhouma Award", inst: "National Sanskrit University, Tirupati" }, te: { title: "ఆయుర్వేద సార్వభౌమ అవార్డు", inst: "జాతీయ సంస్కృత విశ్వవిద్యాలయం, తిరుపతి" } },
   ];
 
-  const featured = awards[awards.length - 1];
-  const rest = awards.slice(0, awards.length - 1);
-
   return (
-    <TexturedSection id="achievements" className="py-24 bg-[#162814]">
-      <SC>
-        {/* Header — white on dark */}
-        <div className="text-center max-w-2xl mx-auto mb-14">
-          <Reveal>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-amber-300 font-semibold text-xs uppercase tracking-wider mb-4">
-              <Trophy size={13} /> {tr("ach.label", lang)}
-            </div>
-            <h2 className="text-3xl md:text-4xl xl:text-5xl font-serif font-bold text-white mb-4">{tr("ach.title", lang)}</h2>
-            <p className="text-white/60 text-lg leading-relaxed">{tr("ach.subtitle", lang)}</p>
-          </Reveal>
-        </div>
-
-        {/* Featured award — centrepiece */}
-        <Reveal>
-          <div className="relative rounded-3xl overflow-hidden mb-8 border border-amber-400/20 bg-white/5 backdrop-blur-sm p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center gap-8">
-            {/* Huge year watermark */}
-            <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[8rem] md:text-[11rem] font-bold font-serif text-white/5 select-none leading-none pointer-events-none">
-              {featured.year}
-            </span>
-            {/* Gold medal icon */}
-            <div className="flex-shrink-0 w-20 h-20 rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center">
-              <Trophy size={36} className="text-amber-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-amber-400 font-semibold text-sm uppercase tracking-widest mb-2">{featured.year} · Most Recent Honour</p>
-              <h3 className="text-2xl md:text-3xl font-serif font-bold text-white leading-tight mb-2">{featured[lang].title}</h3>
-              <p className="text-white/55 text-base">{featured[lang].inst}</p>
-            </div>
+    <TexturedSection id="achievements" className="py-24 bg-[#f7f7f7]">
+      <SC narrow>
+        <SectionHeader label={tr("ach.label", lang)} title={tr("ach.title", lang)} subtitle={tr("ach.subtitle", lang)} />
+        <div className="mt-14 relative">
+          <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/60 via-primary/20 to-transparent -translate-x-1/2" />
+          <div className="space-y-10">
+            {awards.map((award, i) => {
+              const isLeft = i % 2 === 0;
+              return (
+                <Reveal key={i} delay={Math.min(i * 0.06, 0.4)} direction={isLeft ? "left" : "right"}>
+                  <div className={`flex flex-col md:flex-row items-center gap-4 ${!isLeft ? "md:flex-row-reverse" : ""}`}>
+                    <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <h4 className="font-serif font-bold text-base text-foreground leading-snug">{award[lang].title}</h4>
+                        <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full">{award.year}</span>
+                      </div>
+                      <p className="text-muted-foreground text-sm leading-relaxed">{award[lang].inst}</p>
+                    </div>
+                    <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
+                      <Trophy size={16} />
+                    </div>
+                    <div className="hidden md:block w-[calc(50%-2rem)]" />
+                  </div>
+                </Reveal>
+              );
+            })}
           </div>
-        </Reveal>
-
-        {/* Award grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
-          {rest.map((award, i) => (
-            <Reveal key={i} delay={Math.min(i * 0.05, 0.35)}>
-              <div className="relative group rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-amber-400/30 transition-all duration-300 p-6 overflow-hidden">
-                {/* Subtle year watermark per card */}
-                <span className="absolute -right-2 -bottom-4 text-[4.5rem] font-bold font-serif text-white/5 select-none leading-none pointer-events-none">
-                  {award.year}
-                </span>
-                {/* Serial number */}
-                <span className="text-xs font-bold text-amber-400/60 uppercase tracking-widest mb-3 block">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h4 className="font-serif font-bold text-lg text-white leading-snug mb-2 pr-6">{award[lang].title}</h4>
-                <p className="text-white/45 text-sm">{award[lang].inst}</p>
-                {/* Year pill */}
-                <span className="mt-4 inline-block px-2.5 py-1 rounded-full border border-amber-400/25 text-amber-400 text-xs font-semibold">
-                  {award.year}
-                </span>
-              </div>
-            </Reveal>
-          ))}
         </div>
-
-        {/* Stats bar */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { num: "5",    en: "CME Programs Organized",      te: "CME కార్యక్రమాలు" },
+            { num: "5",    en: "CME Programs Organized",      te: "CME కార్యక్రమాలు నిర్వహించారు" },
             { num: "25+",  en: "Scientific Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
             { num: "6",    en: "Countries Visited",           te: "సందర్శించిన దేశాలు" },
-            { num: "200+", en: "Health Lectures (SVETA)",     te: "ఆరోగ్య ఉపన్యాసాలు" },
+            { num: "200+", en: "Health Lectures (SVETA)",     te: "ఆరోగ్య ఉపన్యాసాలు (SVETA)" },
           ].map((s, i) => (
             <Reveal key={i} delay={i * 0.08}>
-              <div className="border border-white/10 bg-white/5 p-5 rounded-2xl text-center">
-                <div className="text-3xl font-bold font-serif text-amber-400 mb-1">{s.num}</div>
-                <div className="text-sm font-medium text-white/50">{s[lang]}</div>
+              <div className="bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm">
+                <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
+                <div className="text-sm font-semibold text-muted-foreground">{s[lang]}</div>
               </div>
             </Reveal>
           ))}
