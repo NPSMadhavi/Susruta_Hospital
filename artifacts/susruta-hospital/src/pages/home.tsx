@@ -20,45 +20,17 @@ import {
 import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
 
-// ─── Ayurvedic botanical SVG tile (mouse-spotlight texture) ──
-const LEAF_SVG = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'>
-    <path d='M120 22 C95 22 68 42 56 72 C40 112 52 162 82 185 C97 195 120 198 138 188 C168 172 185 122 172 78 C161 45 145 22 120 22Z' fill='%232d6a4f' fill-opacity='0.10' stroke='%232d6a4f' stroke-width='1.3' opacity='0.55'/>
-    <path d='M118 24 Q112 105 104 188' stroke='%232d6a4f' stroke-width='1.6' opacity='0.6' fill='none'/>
-    <path d='M113 58  Q97 64  80 76'  stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M111 80  Q93 88  73 103' stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M109 104 Q92 114  72 132' stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M107 128 Q92 140  78 156' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45' fill='none'/>
-    <path d='M105 150 Q93 162  84 174' stroke='%232d6a4f' stroke-width='0.7' opacity='0.4' fill='none'/>
-    <path d='M116 58  Q132 66 150 80'  stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M114 80  Q130 90 152 108' stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M112 104 Q128 116 150 136' stroke='%232d6a4f' stroke-width='0.9' opacity='0.5' fill='none'/>
-    <path d='M110 128 Q124 142 142 158' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45' fill='none'/>
-    <path d='M108 150 Q120 163 132 173' stroke='%232d6a4f' stroke-width='0.7' opacity='0.4' fill='none'/>
-    <circle cx='205' cy='32' r='7'   fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='1.1' opacity='0.5'/>
-    <circle cx='220' cy='48' r='5.5' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='1'   opacity='0.5'/>
-    <circle cx='194' cy='50' r='5'   fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='1'   opacity='0.5'/>
-    <path d='M205 39 L205 56 M205 46 L218 40 M205 46 L195 44' stroke='%232d6a4f' stroke-width='0.9' opacity='0.45' fill='none'/>
-    <path d='M225 18 C232 10 240 14 236 24 C229 20 225 18 225 18Z' fill='%232d6a4f' fill-opacity='0.18' stroke='%232d6a4f' stroke-width='0.8' opacity='0.5'/>
-    <path d='M225 18 L234 22' stroke='%232d6a4f' stroke-width='0.6' opacity='0.4'/>
-    <circle cx='28' cy='212' r='5' fill='%232d6a4f' fill-opacity='0.18' stroke='%232d6a4f' stroke-width='0.9' opacity='0.5'/>
-    <path d='M28 207 C26 200 21 197 17 200 C20 204 25 208 28 207Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M28 207 C30 200 35 197 39 200 C36 204 31 208 28 207Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M21 212 C14 210 11 205 14 201 C17 204 20 210 21 212Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M35 212 C42 210 45 205 42 201 C39 204 36 210 35 212Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M28 217 C26 224 21 227 17 224 C20 220 25 216 28 217Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M28 217 C30 224 35 227 39 224 C36 220 31 216 28 217Z' fill='%232d6a4f' fill-opacity='0.14' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <circle cx='58'  cy='28'  r='2.2' fill='%232d6a4f' fill-opacity='0.2'/>
-    <circle cx='68'  cy='20'  r='1.5' fill='%232d6a4f' fill-opacity='0.16'/>
-    <circle cx='50'  cy='18'  r='1.8' fill='%232d6a4f' fill-opacity='0.16'/>
-    <circle cx='185' cy='200' r='2'   fill='%232d6a4f' fill-opacity='0.18'/>
-    <circle cx='196' cy='208' r='1.5' fill='%232d6a4f' fill-opacity='0.14'/>
-    <circle cx='176' cy='210' r='1.8' fill='%232d6a4f' fill-opacity='0.14'/>
-    <path d='M210 195 Q210 175 210 165' stroke='%232d6a4f' stroke-width='1' opacity='0.45' fill='none'/>
-    <path d='M210 178 C220 170 230 172 228 180 C220 178 212 180 210 178Z' fill='%232d6a4f' fill-opacity='0.13' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-    <path d='M210 168 C200 160 190 162 192 170 C200 168 208 170 210 168Z' fill='%232d6a4f' fill-opacity='0.13' stroke='%232d6a4f' stroke-width='0.8' opacity='0.45'/>
-  </svg>`
-)}")`;
+// ─── Checker grid background image (CSS gradients) ───────────
+const CHECKER_BG: React.CSSProperties = {
+  backgroundImage: `
+    linear-gradient(45deg, #2d6a4f 25%, transparent 25%),
+    linear-gradient(-45deg, #2d6a4f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2d6a4f 75%),
+    linear-gradient(-45deg, transparent 75%, #2d6a4f 75%)
+  `,
+  backgroundSize: "10px 10px",
+  backgroundPosition: "0 0, 0 5px, 5px -5px, -5px 0px",
+};
 
 // ─── Textured section — mouse-only spotlight, clean background ─
 function TexturedSection({
@@ -89,17 +61,16 @@ function TexturedSection({
       className={`relative overflow-hidden ${className}`}
       onMouseMove={handleMouseMove}
     >
-      {/* Spotlight leaf layer — invisible until cursor enters, clean otherwise */}
+      {/* Checker grid — invisible until cursor enters, revealed in spotlight */}
       <div
         style={{
-          backgroundImage: LEAF_SVG,
-          backgroundSize: "180px 180px",
+          ...CHECKER_BG,
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.28,
-          maskImage: "radial-gradient(circle 340px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
-          WebkitMaskImage: "radial-gradient(circle 340px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
+          opacity: 0.18,
+          maskImage: "radial-gradient(circle 400px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
+          WebkitMaskImage: "radial-gradient(circle 400px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
         }}
       />
       <div className="relative z-10">{children}</div>
