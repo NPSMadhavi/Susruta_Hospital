@@ -26,11 +26,7 @@ export default function AdminLogin() {
   return (
     <div className="min-h-screen bg-muted/50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-border p-8 text-center">
-        <div className="flex flex-col items-center mb-8">
-          <img src="/favicon.png" alt="Susruta Hospital" className="h-16 w-16 object-contain mb-3" />
-          <h2 className="font-serif font-bold text-xl text-foreground">Susruta Hospital</h2>
-          <p className="text-sm text-muted-foreground">Tirupati</p>
-        </div>
+        <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto max-w-[220px] object-contain mx-auto mb-6" />
         <h1 className="text-2xl font-serif font-bold text-foreground mb-8">Admin Access</h1>
         
         <form onSubmit={handleSubmit} className="space-y-6 text-left">
