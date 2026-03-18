@@ -69,8 +69,8 @@ function TexturedSection({
           inset: 0,
           pointerEvents: "none",
           opacity: 0.18,
-          maskImage: "radial-gradient(circle 400px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
-          WebkitMaskImage: "radial-gradient(circle 400px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
+          maskImage: "radial-gradient(circle 200px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
+          WebkitMaskImage: "radial-gradient(circle 200px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
         }}
       />
       <div className="relative z-10">{children}</div>
