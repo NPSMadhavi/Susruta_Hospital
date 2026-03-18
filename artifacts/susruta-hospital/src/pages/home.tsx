@@ -52,11 +52,18 @@ function TexturedSection({
     });
   }, []);
 
+  const handleMouseLeave = useCallback(() => {
+    if (!sRef.current) return;
+    sRef.current.style.setProperty("--sx", "-999px");
+    sRef.current.style.setProperty("--sy", "-999px");
+  }, []);
+
   return (
     <section
       ref={sRef} id={id}
       className={`relative overflow-hidden ${className}`}
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Checker grid — invisible until cursor enters, revealed in spotlight */}
       <div
