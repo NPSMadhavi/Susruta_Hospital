@@ -68,13 +68,13 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col font-sans">
 
       {/* ── Top info bar ── */}
-      <div className="bg-primary text-primary-foreground py-1.5 text-xs">
+      <div className="bg-primary text-primary-foreground py-1.5 text-sm">
         <div className="w-full px-4 sm:px-8 lg:px-14 flex flex-col sm:flex-row justify-between items-center gap-1">
           <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
-            <span className="flex items-center gap-1.5"><Phone size={11} /> +91 9492068180</span>
+            <span className="flex items-center gap-1.5"><Phone size={13} /> +91 9492068180</span>
             <span className="hidden sm:inline opacity-25">|</span>
             <span className="flex items-center gap-1.5 hidden sm:flex">
-              <Clock size={11} /> {settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM · Sun: 10AM–1PM"}
+              <Clock size={13} /> {settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM · Sun: 10AM–1PM"}
             </span>
           </div>
         </div>
