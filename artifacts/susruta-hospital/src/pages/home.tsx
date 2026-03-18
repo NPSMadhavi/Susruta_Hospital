@@ -36,7 +36,7 @@ const LEAF_SVG = `url("data:image/svg+xml,${encodeURIComponent(
   </svg>`
 )}")`;
 
-// ─── Textured section wrapper with mouse-spotlight leaf reveal ─
+// ─── Textured section — mouse-only spotlight, clean background ─
 function TexturedSection({
   id,
   className = "",
@@ -59,29 +59,23 @@ function TexturedSection({
     });
   }, []);
 
-  const baseLeafStyle: React.CSSProperties = {
-    backgroundImage: LEAF_SVG,
-    backgroundSize: "180px 180px",
-    position: "absolute",
-    inset: 0,
-    pointerEvents: "none",
-  };
-
   return (
     <section
       ref={sRef} id={id}
       className={`relative overflow-hidden ${className}`}
       onMouseMove={handleMouseMove}
     >
-      {/* Always-visible faint leaf layer */}
-      <div style={{ ...baseLeafStyle, opacity: 0.04 }} />
-      {/* Spotlight-reveal leaf layer — only visible near cursor */}
+      {/* Spotlight leaf layer — invisible until cursor enters, clean otherwise */}
       <div
         style={{
-          ...baseLeafStyle,
-          opacity: 0.22,
-          maskImage: "radial-gradient(circle 380px at var(--sx, -600px) var(--sy, -600px), black 0%, transparent 68%)",
-          WebkitMaskImage: "radial-gradient(circle 380px at var(--sx, -600px) var(--sy, -600px), black 0%, transparent 68%)",
+          backgroundImage: LEAF_SVG,
+          backgroundSize: "180px 180px",
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.28,
+          maskImage: "radial-gradient(circle 340px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
+          WebkitMaskImage: "radial-gradient(circle 340px at var(--sx, -999px) var(--sy, -999px), black 0%, transparent 70%)",
         }}
       />
       <div className="relative z-10">{children}</div>
@@ -177,12 +171,20 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
   };
 
   return (
-    <TexturedSection id="home" className="pt-16 pb-24 bg-gradient-to-br from-[#eef7ee] via-white to-[#f2f9f2]">
+    <TexturedSection id="home" className="relative pt-14 pb-20 bg-white">
+      {/* Clean top gradient wash */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,113,54,0.08) 0%, transparent 70%)",
+        }}
+      />
+
       <SC>
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 xl:gap-24">
+        <div className="flex flex-col lg:flex-row items-start gap-10 lg:gap-16 xl:gap-20">
 
           {/* Left: Text */}
-          <div className="flex-1 space-y-6 text-center lg:text-left z-10">
+          <div className="flex-1 space-y-7 text-center lg:text-left z-10 min-w-0">
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -191,16 +193,16 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               <Leaf size={15} /> {tr("hero.badge", lang)}
             </motion.div>
 
-            {/* Rotating headline */}
-            <div className="h-[10rem] md:h-[9rem] lg:h-[8rem] xl:h-[8rem] flex items-start">
+            {/* Rotating headline — truly fluid, auto-height */}
+            <div className="overflow-hidden" style={{ minHeight: "clamp(5rem, 12vw, 11rem)" }}>
               <AnimatePresence mode="wait">
                 <motion.h1
                   key={textIdx}
-                  initial={{ opacity: 0, y: 28 }}
+                  initial={{ opacity: 0, y: 32 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -28 }}
+                  exit={{ opacity: 0, y: -32 }}
                   transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-                  className="text-4xl md:text-5xl xl:text-6xl font-serif font-bold text-foreground leading-[1.12] w-full"
+                  className="hero-headline text-foreground w-full"
                 >
                   {HERO_TEXTS[textIdx][lang]}
                 </motion.h1>
@@ -220,7 +222,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
             >
               <button
                 onClick={() => scrollTo("appointments")}
-                className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
+                className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
               >
                 {tr("btn.book", lang)}
               </button>
@@ -234,7 +236,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
 
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
-              className="flex flex-wrap gap-8 justify-center lg:justify-start pt-2"
+              className="flex flex-wrap gap-8 justify-center lg:justify-start pt-1"
             >
               {[
                 { num: "30+", key: "stat.experience" },
@@ -250,43 +252,57 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
             </motion.div>
           </div>
 
-          {/* Right: Doctor photo */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-[340px] lg:max-w-[380px] xl:max-w-[430px] flex-shrink-0 relative"
-          >
-            {/* Glow blob */}
-            <div className="absolute -inset-6 bg-gradient-to-tr from-primary/15 to-green-200/30 rounded-[3rem] blur-3xl -z-10 pointer-events-none" />
+          {/* Right: Doctor photo + herbs image */}
+          <div className="flex-shrink-0 w-full max-w-sm lg:max-w-[380px] xl:max-w-[420px] flex flex-col gap-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+              className="relative"
+            >
+              {/* Glow blob */}
+              <div className="absolute -inset-6 bg-gradient-to-tr from-primary/10 to-green-200/20 rounded-[3rem] blur-3xl -z-10 pointer-events-none" />
 
-            {/* Photo */}
-            <div className="relative rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl shadow-primary/10">
-              <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto object-cover" />
-
-              {/* Ayurvedic herbs overlay — bottom-right corner of the photo area */}
-              <div className="absolute bottom-0 right-0 w-40 pointer-events-none select-none">
-                <img
-                  src="/ayurveda-herbs.png" alt="" aria-hidden="true"
-                  className="w-full h-auto"
-                  style={{ opacity: 0.55, mixBlendMode: "multiply" }}
-                />
+              {/* Photo */}
+              <div className="rounded-[2rem] overflow-hidden border-8 border-white shadow-2xl shadow-primary/10">
+                <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto object-cover" />
               </div>
-            </div>
 
-            {/* Name + credential card */}
-            <div className="mt-4 mx-2 bg-white border border-border rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-3">
-              <div>
-                <p className="font-serif font-bold text-base text-primary leading-tight">
-                  {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
+              {/* Name + credential card */}
+              <div className="mt-4 bg-white border border-border rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-serif font-bold text-base text-primary leading-tight">
+                    {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">B.A.M.S. (Gold Medalist) · M.D.(Ay) · Ph.D.(Ay)</p>
+                </div>
+                <div className="flex-shrink-0 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                  <Award size={14} className="text-yellow-600" />
+                  <span className="text-xs font-bold text-yellow-700">{lang === "en" ? "Gold Medalist" : "గోల్డ్ మెడలిస్ట్"}</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Ayurvedic herbs image — prominent, below the credential card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7, duration: 0.8 }}
+              className="relative rounded-2xl overflow-hidden shadow-lg border border-primary/10"
+              style={{ background: "linear-gradient(135deg, #f0faf0 0%, #e8f5e8 100%)" }}
+            >
+              <img
+                src="/ayurveda-herbs.png"
+                alt="Ayurvedic herbs and ingredients"
+                className="w-full h-auto object-contain"
+                style={{ maxHeight: "180px", objectPosition: "center bottom" }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#e8f5e8]/80 via-transparent to-transparent" />
+              <div className="absolute bottom-3 left-4">
+                <p className="text-xs font-semibold text-primary/80 uppercase tracking-widest">
+                  {lang === "en" ? "Pure Ayurvedic Herbs" : "స్వచ్ఛమైన ఆయుర్వేద మూలికలు"}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">B.A.M.S. (Gold Medalist) · M.D.(Ay) · Ph.D.(Ay)</p>
               </div>
-              <div className="flex-shrink-0 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                <Award size={14} className="text-yellow-600" />
-                <span className="text-xs font-bold text-yellow-700">{lang === "en" ? "Gold Medalist" : "గోల్డ్ మెడలిస్ట్"}</span>
-              </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </SC>
 

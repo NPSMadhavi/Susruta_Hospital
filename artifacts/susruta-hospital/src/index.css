@@ -24,7 +24,6 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -33,7 +32,7 @@
 }
 
 :root {
-  --background: 144 20% 99%;
+  --background: 0 0% 100%;
   --foreground: 153 30% 15%;
   --card: 0 0% 100%;
   --card-foreground: 153 30% 15%;
@@ -43,23 +42,16 @@
   --primary-foreground: 0 0% 100%;
   --secondary: 144 40% 92%;
   --secondary-foreground: 153 45% 30%;
-  --muted: 144 20% 94%;
+  --muted: 144 15% 95%;
   --muted-foreground: 153 15% 45%;
   --accent: 38 40% 60%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 70% 50%;
   --destructive-foreground: 0 0% 100%;
-  --border: 153 20% 85%;
-  --input: 153 20% 85%;
+  --border: 153 15% 88%;
+  --input: 153 15% 88%;
   --ring: 153 45% 30%;
   --radius: 0.75rem;
-
-  /* Mouse spotlight position */
-  --mouse-x: 50%;
-  --mouse-y: 50%;
-
-  /* Ayurvedic leaf SVG pattern (URL encoded) */
-  --leaf-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cpath d='M25 155 C25 75 95 25 155 25 C95 95 25 155 25 155Z' fill='none' stroke='%232d6a4f' stroke-width='1.4' opacity='0.55'/%3E%3Cpath d='M25 155 L155 25' stroke='%232d6a4f' stroke-width='0.7' opacity='0.5'/%3E%3Cpath d='M60 120 L95 90' stroke='%232d6a4f' stroke-width='0.5' opacity='0.45'/%3E%3Cpath d='M80 100 L115 72' stroke='%232d6a4f' stroke-width='0.5' opacity='0.45'/%3E%3Cpath d='M42 138 L77 108' stroke='%232d6a4f' stroke-width='0.5' opacity='0.4'/%3E%3Cpath d='M100 60 L130 40' stroke='%232d6a4f' stroke-width='0.5' opacity='0.4'/%3E%3Cpath d='M145 40 C155 25 168 32 164 48 C152 42 145 40 145 40Z' fill='%232d6a4f' opacity='0.18'/%3E%3Cpath d='M12 170 C8 158 20 152 22 162 C16 166 12 170 12 170Z' fill='%232d6a4f' opacity='0.14'/%3E%3Ccircle cx='165' cy='70' r='2.5' fill='%232d6a4f' opacity='0.12'/%3E%3Ccircle cx='45' cy='40' r='2' fill='%232d6a4f' opacity='0.1'/%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -69,28 +61,16 @@
 
   html {
     scroll-behavior: smooth;
-    font-size: 16px;
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    /* Global leaf texture — the spotlight effect reveals it more around the cursor */
-    background-image: var(--leaf-pattern);
-    background-size: 180px 180px;
+    @apply text-foreground font-sans antialiased;
+    /* Clean white background — no noisy pattern */
+    background-color: #ffffff;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-serif tracking-tight;
-  }
-
-  /* Fluid section container */
-  .section-container {
-    width: 100%;
-    max-width: min(1440px, 100%);
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: clamp(1rem, 4vw, 5rem);
-    padding-right: clamp(1rem, 4vw, 5rem);
   }
 }
 
@@ -105,39 +85,11 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
   }
 
-  /* Mouse-reveal leaf texture overlay for sections */
-  .leaf-reveal-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: var(--leaf-pattern);
-    background-size: 180px 180px;
-    /* Base opacity 3% — becomes ~14% in the spotlight circle */
-    opacity: 0.03;
-    mask-image: radial-gradient(
-      circle 380px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(0,0,0,1) 0%,
-      rgba(0,0,0,0.6) 35%,
-      rgba(0,0,0,0.15) 65%,
-      rgba(0,0,0,0) 100%
-    );
-    -webkit-mask-image: radial-gradient(
-      circle 380px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(0,0,0,1) 0%,
-      rgba(0,0,0,0.6) 35%,
-      rgba(0,0,0,0.15) 65%,
-      rgba(0,0,0,0) 100%
-    );
-    opacity: 0.35;
-  }
-
-  /* A static very-faint leaf layer always visible */
-  .leaf-static-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: var(--leaf-pattern);
-    background-size: 180px 180px;
-    opacity: 0.025;
+  /* Fluid hero headline that scales with viewport */
+  .hero-headline {
+    font-size: clamp(2rem, 4.5vw, 4.5rem);
+    line-height: 1.13;
+    font-family: var(--font-serif);
+    font-weight: 700;
   }
 }
