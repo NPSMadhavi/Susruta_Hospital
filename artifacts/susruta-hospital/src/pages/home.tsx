@@ -15,7 +15,7 @@ import {
 import {
   Award, Leaf, ShieldCheck, Clock, Trophy, Activity,
   Droplets, Heart, MapPin, Phone, Mail, Star, Quote,
-  CheckCircle2, Calendar, Info,
+  CheckCircle2, Calendar, Info, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
@@ -800,35 +800,117 @@ function SlotGroup({ label, slots, selected, onSelect }: {
 function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: testimonials = [], isLoading } = useListTestimonials();
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [dir, setDir] = useState<1 | -1>(1);
+
+  const total = testimonials.length;
+
+  const go = useCallback((next: number, direction: 1 | -1 = 1) => {
+    setDir(direction);
+    setCurrent((next + total) % total);
+  }, [total]);
+
+  useEffect(() => {
+    if (paused || total === 0) return;
+    const t = setInterval(() => go(current + 1, 1), 5000);
+    return () => clearInterval(t);
+  }, [current, paused, total, go]);
+
   if (settings && !settings.testimonialsEnabled) return null;
 
   return (
     <TexturedSection id="testimonials" className="py-24 bg-white">
-      <SC>
+      <SC narrow>
         <SectionHeader label={tr("test.label", lang)} title={tr("test.title", lang)} subtitle={tr("test.subtitle", lang)} />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
-          {isLoading
-            ? [1,2,3].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl" />)
-            : testimonials.map((tm, i) => (
-              <Reveal key={tm.id} delay={i * 0.08}>
-                <div className="relative bg-[#f7f7f7] border border-border/60 p-8 rounded-3xl hover:border-primary/30 hover:shadow-md transition-all h-full flex flex-col">
-                  <Quote size={34} className="absolute top-5 right-5 text-primary/10" />
-                  <div className="flex gap-1 mb-5 text-yellow-500">
+
+        {isLoading ? (
+          <div className="mt-14 h-72 bg-muted animate-pulse rounded-3xl" />
+        ) : total === 0 ? null : (
+          <div
+            className="mt-14 relative"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
+            {/* Slide viewport */}
+            <div className="overflow-hidden rounded-3xl">
+              <AnimatePresence mode="wait" custom={dir}>
+                <motion.div
+                  key={current}
+                  custom={dir}
+                  variants={{
+                    enter: (d: number) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
+                    center: { x: 0, opacity: 1 },
+                    exit: (d: number) => ({ x: d > 0 ? -80 : 80, opacity: 0 }),
+                  }}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative bg-[#f7f7f7] border border-border/60 p-10 md:p-14 rounded-3xl flex flex-col"
+                >
+                  {/* Large decorative quote */}
+                  <Quote size={56} className="absolute top-8 right-10 text-primary/8 pointer-events-none" />
+
+                  {/* Stars */}
+                  <div className="flex gap-1 mb-6 text-yellow-500">
                     {[...Array(5)].map((_, si) => (
-                      <Star key={si} size={15} fill={si < tm.rating ? "currentColor" : "none"} strokeWidth={si < tm.rating ? 0 : 2} />
+                      <Star key={si} size={18} fill={si < testimonials[current].rating ? "currentColor" : "none"} strokeWidth={si < testimonials[current].rating ? 0 : 1.5} />
                     ))}
                   </div>
-                  <p className="text-foreground/80 leading-relaxed italic mb-6 flex-1">
-                    "{lang === "te" && tm.contentTe ? tm.contentTe : tm.content}"
+
+                  {/* Quote text */}
+                  <p className="text-lg md:text-xl text-foreground/85 leading-relaxed italic mb-8 font-serif">
+                    "{lang === "te" && testimonials[current].contentTe ? testimonials[current].contentTe : testimonials[current].content}"
                   </p>
-                  <div className="border-t border-border/50 pt-4">
-                    <p className="font-bold font-serif text-foreground">{tm.patientName}</p>
-                    {tm.patientLocation && <p className="text-sm text-muted-foreground">{tm.patientLocation}</p>}
+
+                  {/* Author */}
+                  <div className="flex items-center gap-4 mt-auto">
+                    <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                      <span className="text-primary font-bold text-sm font-serif">
+                        {testimonials[current].patientName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-bold font-serif text-foreground leading-tight">{testimonials[current].patientName}</p>
+                      {testimonials[current].patientLocation && (
+                        <p className="text-sm text-muted-foreground">{testimonials[current].patientLocation}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Reveal>
-            ))}
-        </div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Prev / Next buttons */}
+            <button
+              onClick={() => go(current - 1, -1)}
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-5 h-10 w-10 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-primary hover:bg-primary hover:text-white hover:border-primary transition-all z-10"
+              aria-label="Previous"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={() => go(current + 1, 1)}
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-5 h-10 w-10 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-primary hover:bg-primary hover:text-white hover:border-primary transition-all z-10"
+              aria-label="Next"
+            >
+              <ChevronRight size={18} />
+            </button>
+
+            {/* Dot indicators */}
+            <div className="flex justify-center gap-2 mt-8">
+              {testimonials.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => go(i, i > current ? 1 : -1)}
+                  className={`transition-all duration-300 rounded-full ${i === current ? "bg-primary w-6 h-2.5" : "bg-border w-2.5 h-2.5 hover:bg-primary/40"}`}
+                  aria-label={`Go to testimonial ${i + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </SC>
     </TexturedSection>
   );
