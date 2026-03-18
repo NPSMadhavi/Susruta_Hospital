@@ -176,17 +176,17 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
         <div className="flex flex-col lg:flex-row items-start gap-10 lg:gap-16 xl:gap-20">
 
           {/* Left: Text */}
-          <div className="flex-1 space-y-7 text-center lg:text-left z-10 min-w-0">
+          <div className="flex-1 flex flex-col text-center lg:text-left z-10 min-w-0">
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm self-center lg:self-start mb-6"
             >
               <Leaf size={15} /> {tr("hero.badge", lang)}
             </motion.div>
 
-            {/* Rotating headline — truly fluid, auto-height */}
-            <div className="overflow-hidden" style={{ minHeight: "clamp(5rem, 12vw, 11rem)" }}>
+            {/* Rotating headline — fixed height so nothing below shifts */}
+            <div className="overflow-hidden mb-6" style={{ height: "clamp(8rem, 14vw, 13rem)" }}>
               <AnimatePresence mode="wait">
                 <motion.h1
                   key={textIdx}
@@ -203,45 +203,48 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
 
             <motion.p
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }}
-              className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed"
+              className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed mb-7"
             >
               {tr("hero.subtitle", lang)}
             </motion.p>
 
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
-            >
-              <button
-                onClick={() => scrollTo("appointments")}
-                className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
+            {/* Buttons + stats pinned — mt-auto keeps them at bottom regardless of headline height */}
+            <div className="mt-auto space-y-6">
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.6 }}
+                className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
               >
-                {tr("btn.book", lang)}
-              </button>
-              <button
-                onClick={() => scrollTo("about")}
-                className="px-8 py-3.5 border-2 border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
-              >
-                {tr("btn.meet", lang)}
-              </button>
-            </motion.div>
+                <button
+                  onClick={() => scrollTo("appointments")}
+                  className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
+                >
+                  {tr("btn.book", lang)}
+                </button>
+                <button
+                  onClick={() => scrollTo("about")}
+                  className="px-8 py-3.5 border-2 border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
+                >
+                  {tr("btn.meet", lang)}
+                </button>
+              </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
-              className="flex flex-wrap gap-8 justify-center lg:justify-start pt-1"
-            >
-              {[
-                { num: "30+", key: "stat.experience" },
-                { num: "10+", key: "stat.awards" },
-                { num: "147+", key: "stat.lectures" },
-                { num: "30+", key: "stat.publications" },
-              ].map((s) => (
-                <div key={s.key} className="text-center">
-                  <div className="text-2xl font-bold font-serif text-primary">{s.num}</div>
-                  <div className="text-sm text-muted-foreground font-medium">{tr(s.key as any, lang)}</div>
-                </div>
-              ))}
-            </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
+                className="flex flex-wrap gap-8 justify-center lg:justify-start pt-1"
+              >
+                {[
+                  { num: "30+", key: "stat.experience" },
+                  { num: "10+", key: "stat.awards" },
+                  { num: "147+", key: "stat.lectures" },
+                  { num: "30+", key: "stat.publications" },
+                ].map((s) => (
+                  <div key={s.key} className="text-center">
+                    <div className="text-2xl font-bold font-serif text-primary">{s.num}</div>
+                    <div className="text-sm text-muted-foreground font-medium">{tr(s.key as any, lang)}</div>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
           </div>
 
           {/* Right: Doctor photo + herbs image */}
