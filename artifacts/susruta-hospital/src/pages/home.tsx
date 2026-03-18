@@ -923,9 +923,9 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {[
-              { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati - 517 507" },
-              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180" },
-              { icon: <Clock size={20} />, titleKey: "contact.hours", value: settings?.workingHours || "Mon–Sat: 10:00 AM – 1:00 PM | 6:00 PM – 10:00 PM\nSunday: 10:00 AM – 1:00 PM" },
+              { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati – 517 507" },
+              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180 · 0877-2220663" },
+              { icon: <Clock size={20} />, titleKey: "contact.hours", value: null },
               { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || "—" },
             ].map((item, i) => (
               <Reveal key={item.titleKey} delay={i * 0.08}>
@@ -933,7 +933,21 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
                   <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center flex-shrink-0">{item.icon}</div>
                   <div>
                     <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground mb-1">{tr(item.titleKey as any, lang)}</p>
-                    <p className="text-sm font-medium text-foreground leading-relaxed whitespace-pre-line">{item.value}</p>
+                    {item.titleKey === "contact.hours" ? (
+                      <div className="space-y-2 mt-1">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{lang === "en" ? "Mon – Sat" : "సోమ – శని"}</p>
+                          <p className="text-sm text-muted-foreground">{lang === "en" ? "10:00 AM – 1:00 PM" : "10:00 AM – 1:00 PM"}</p>
+                          <p className="text-sm text-muted-foreground">{lang === "en" ? "6:00 PM – 10:00 PM" : "6:00 PM – 10:00 PM"}</p>
+                        </div>
+                        <div className="pt-1 border-t border-border/40">
+                          <p className="text-sm font-semibold text-foreground">{lang === "en" ? "Sunday" : "ఆదివారం"}</p>
+                          <p className="text-sm text-muted-foreground">{lang === "en" ? "10:00 AM – 1:00 PM" : "10:00 AM – 1:00 PM"}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium text-foreground leading-relaxed">{item.value}</p>
+                    )}
                   </div>
                 </div>
               </Reveal>
