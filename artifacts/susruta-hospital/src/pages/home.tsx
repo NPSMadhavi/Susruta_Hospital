@@ -23,13 +23,10 @@ import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
 // ─── Checker grid background image (CSS gradients) ───────────
 const CHECKER_BG: React.CSSProperties = {
   backgroundImage: `
-    linear-gradient(45deg, #2d6a4f 25%, transparent 25%),
-    linear-gradient(-45deg, #2d6a4f 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #2d6a4f 75%),
-    linear-gradient(-45deg, transparent 75%, #2d6a4f 75%)
+    linear-gradient(#2d6a4f 1px, transparent 1px),
+    linear-gradient(90deg, #2d6a4f 1px, transparent 1px)
   `,
-  backgroundSize: "10px 10px",
-  backgroundPosition: "0 0, 0 5px, 5px -5px, -5px 0px",
+  backgroundSize: "20px 20px",
 };
 
 // ─── Textured section — mouse-only spotlight, clean background ─
