@@ -77,9 +77,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               <Clock size={11} /> {settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM · Sun: 10AM–1PM"}
             </span>
           </div>
-          <Link href="/admin" className="text-primary-foreground/65 hover:text-white transition-colors hidden sm:block">
-            {tr("nav.admin", lang)}
-          </Link>
         </div>
       </div>
 
