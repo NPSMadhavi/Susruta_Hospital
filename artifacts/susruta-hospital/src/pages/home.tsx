@@ -172,13 +172,6 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
 
   return (
     <TexturedSection id="home" className="relative pt-14 pb-20 bg-white">
-      {/* Clean top gradient wash */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,113,54,0.08) 0%, transparent 70%)",
-        }}
-      />
 
       <SC>
         <div className="flex flex-col lg:flex-row items-start gap-10 lg:gap-16 xl:gap-20">
@@ -333,7 +326,7 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
               <div className="rounded-2xl overflow-hidden shadow-xl border-4 border-white ring-1 ring-border">
                 <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto" />
               </div>
-              <div className="mt-5 bg-[#f4faf4] border border-primary/20 p-6 rounded-2xl">
+              <div className="mt-5 bg-[#f7f7f7] border border-primary/20 p-6 rounded-2xl">
                 <h3 className="font-serif font-bold text-lg mb-3 text-primary">
                   {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
                 </h3>
@@ -391,7 +384,7 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
                 { num: "10+", en: "Major Awards", te: "ప్రధాన అవార్డులు" },
               ].map((s, i) => (
                 <Reveal key={i} delay={i * 0.08}>
-                  <div className="bg-[#f4faf4] border border-primary/20 p-5 rounded-2xl text-center">
+                  <div className="bg-[#f7f7f7] border border-primary/20 p-5 rounded-2xl text-center">
                     <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
                     <div className="text-xs font-semibold text-muted-foreground">{s[lang]}</div>
                   </div>
@@ -421,7 +414,7 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
   ];
 
   return (
-    <TexturedSection id="achievements" className="py-24 bg-[#f4faf4]">
+    <TexturedSection id="achievements" className="py-24 bg-[#f7f7f7]">
       <SC narrow>
         <SectionHeader label={tr("ach.label", lang)} title={tr("ach.title", lang)} subtitle={tr("ach.subtitle", lang)} />
         <div className="mt-14 relative">
@@ -485,7 +478,7 @@ function ServicesSection({ lang }: { lang: "en" | "te" }) {
         <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-7">
           {services.map((s, i) => (
             <Reveal key={i} delay={i * 0.1} direction={i % 2 === 0 ? "left" : "right"}>
-              <div className="group flex gap-6 p-8 bg-[#f8fcf8] border border-border/60 rounded-3xl hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+              <div className="group flex gap-6 p-8 bg-[#f7f7f7] border border-border/60 rounded-3xl hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                 <div className="h-14 w-14 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
                   {s.icon}
                 </div>
@@ -549,7 +542,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
 
   if (settings && !settings.appointmentBookingEnabled) {
     return (
-      <TexturedSection id="appointments" className="py-24 bg-[#f4faf4]">
+      <TexturedSection id="appointments" className="py-24 bg-[#f7f7f7]">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <Reveal>
             <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
@@ -562,7 +555,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
   }
 
   return (
-    <TexturedSection id="appointments" className="py-24 bg-[#f4faf4]">
+    <TexturedSection id="appointments" className="py-24 bg-[#f7f7f7]">
       <SC>
         <SectionHeader label={tr("appt.label", lang)} title={tr("appt.title", lang)} subtitle={tr("appt.subtitle", lang)} />
         <div className="mt-14 max-w-4xl mx-auto">
@@ -818,7 +811,7 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
             ? [1,2,3].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl" />)
             : testimonials.map((tm, i) => (
               <Reveal key={tm.id} delay={i * 0.08}>
-                <div className="relative bg-[#f8fcf8] border border-border/60 p-8 rounded-3xl hover:border-primary/30 hover:shadow-md transition-all h-full flex flex-col">
+                <div className="relative bg-[#f7f7f7] border border-border/60 p-8 rounded-3xl hover:border-primary/30 hover:shadow-md transition-all h-full flex flex-col">
                   <Quote size={34} className="absolute top-5 right-5 text-primary/10" />
                   <div className="flex gap-1 mb-5 text-yellow-500">
                     {[...Array(5)].map((_, si) => (
@@ -845,7 +838,7 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
 function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   return (
-    <TexturedSection id="contact" className="py-24 bg-[#f4faf4]">
+    <TexturedSection id="contact" className="py-24 bg-[#f7f7f7]">
       <SC>
         <SectionHeader label={tr("contact.label", lang)} title={tr("contact.title", lang)} subtitle={tr("contact.subtitle", lang)} />
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -870,7 +863,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
 
           {/* Map embed */}
           <Reveal direction="right">
-            <div className="rounded-3xl overflow-hidden border border-border/60 shadow-sm h-full min-h-[340px] bg-[#e8f5e9] flex items-center justify-center">
+            <div className="rounded-3xl overflow-hidden border border-border/60 shadow-sm h-full min-h-[340px] bg-[#f3f3f3] flex items-center justify-center">
               <iframe
                 title="Susruta Hospital Location"
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3877.7!2d79.4192!3d13.6288!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a4d4b8b3b3b3b3b%3A0x0!2sSusruta+Hospital+Tirupati!5e0!3m2!1sen!2sin!4v1234567890"
