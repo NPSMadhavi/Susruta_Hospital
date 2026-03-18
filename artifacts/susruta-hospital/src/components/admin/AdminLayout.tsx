@@ -35,9 +35,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-muted/30">
       {/* Sidebar */}
       <aside className="w-64 bg-foreground text-white flex flex-col hidden md:flex shrink-0">
-        <div className="px-6 py-5 border-b border-white/10 flex flex-col items-start gap-1">
-          <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert" />
-          <span className="text-white/50 text-xs font-semibold uppercase tracking-widest pl-0.5">Admin Panel</span>
+        <div className="px-5 py-4 border-b border-white/10 flex items-center gap-3">
+          <img src="/favicon.png" alt="Susruta Hospital" className="h-9 w-9 object-contain flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="font-serif font-bold text-base text-white leading-tight">Susruta Hospital</p>
+            <p className="text-white/45 text-xs font-semibold uppercase tracking-widest">Admin Panel</p>
+          </div>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
