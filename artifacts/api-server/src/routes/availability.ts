@@ -5,21 +5,21 @@ import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 
-const TIME_SLOTS = [
-  "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-  "12:00 PM", "12:30 PM", "04:00 PM", "04:30 PM", "05:00 PM", "05:30 PM",
-  "06:00 PM", "06:30 PM"
+const MORNING_SLOTS = [
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+  "12:00 PM", "12:30 PM", "01:00 PM"
+];
+
+const EVENING_SLOTS = [
+  "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM",
+  "08:00 PM", "08:30 PM", "09:00 PM", "09:30 PM", "10:00 PM"
 ];
 
 function getDaysInMonth(year: number, month: number): string[] {
   const daysInMonth = new Date(year, month, 0).getDate();
   const days: string[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    const dayStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const dayOfWeek = new Date(dayStr).getDay();
-    if (dayOfWeek !== 0) {
-      days.push(dayStr);
-    }
+    days.push(`${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
   }
   return days;
 }
@@ -66,16 +66,15 @@ router.get("/slots", async (req, res) => {
 
   const blocked = await db.select().from(blockedDatesTable).where(eq(blockedDatesTable.date, date));
   if (blocked.length > 0) {
-    res.json(TIME_SLOTS.map((t) => ({ time: t, available: false })));
+    const allSlots = [...MORNING_SLOTS, ...EVENING_SLOTS];
+    res.json(allSlots.map((t) => ({ time: t, available: false })));
     return;
   }
 
-  const [year, , ] = date.split("-").map(Number);
-  const dayOfWeek = new Date(date).getDay();
-  if (dayOfWeek === 0) {
-    res.json(TIME_SLOTS.map((t) => ({ time: t, available: false })));
-    return;
-  }
+  const dayOfWeek = new Date(date).getDay(); // 0 = Sunday
+  const isSunday = dayOfWeek === 0;
+
+  const allSlots = isSunday ? MORNING_SLOTS : [...MORNING_SLOTS, ...EVENING_SLOTS];
 
   const bookedAppts = await db
     .select()
@@ -84,7 +83,7 @@ router.get("/slots", async (req, res) => {
 
   const bookedSlots = new Set(bookedAppts.map((a) => a.timeSlot));
 
-  res.json(TIME_SLOTS.map((t) => ({ time: t, available: !bookedSlots.has(t) })));
+  res.json(allSlots.map((t) => ({ time: t, available: !bookedSlots.has(t) })));
 });
 
 router.get("/blocked-dates", requireAdmin, async (req, res) => {

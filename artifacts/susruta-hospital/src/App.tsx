@@ -4,14 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
-// Public Pages
+// Single public page
 import Home from "./pages/home";
-import About from "./pages/about";
-import Achievements from "./pages/achievements";
-import Services from "./pages/services";
-import Appointments from "./pages/appointments";
-import Testimonials from "./pages/testimonials";
-import Contact from "./pages/contact";
 
 // Admin Pages
 import AdminLogin from "./pages/admin/login";
@@ -33,14 +27,8 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      {/* Public Routes */}
+      {/* Single-page public website */}
       <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/achievements" component={Achievements} />
-      <Route path="/services" component={Services} />
-      <Route path="/appointments" component={Appointments} />
-      <Route path="/testimonials" component={Testimonials} />
-      <Route path="/contact" component={Contact} />
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
