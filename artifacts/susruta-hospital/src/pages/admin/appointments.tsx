@@ -49,25 +49,47 @@ function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Use a ref so notify() always reads the latest permission without stale closures
+  const permRef = useRef(permission);
+  useEffect(() => { permRef.current = permission; }, [permission]);
 
-  useEffect(() => {
-    audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFhYqNjpGRj46LioiGhYSEhIWHiIqNkJKUlZWVlZSTkZCOjIqJiIeHh4iJi42PkZOUlZaWlpWUk5KQjo2LioiIh4eHiImLjY+RkpSVlpaWlpSTkpCPjYuKiYiIh4iJiouNj5GSlJWVlpWVk5KRj42LioiIh4eHiImLjI6QkpOVlZWVlJOSj42LioiIh4eHiIqLjY+Rk5SWlpaWlZSTkZCOjIqJiIeHiImLjY+RkpSVlpWVlJOSj42LioiHh4eIiYuNj5GTlJaWlpWUk5KQjo2LioiIh4eIiYqMjpCSlJWVlpaWlJOSj42LioiIiIeIiYqMjo+Rk5SVlpaWlpWTkpCPjYuKiIiHh4iJioyOkJGTlZWWlpWVk5KQjo2LioiIh4eHiImLjI6QkpOVlZaWlpSTkpCPjYuKiYiHh4iJi42PkZOUlpWWlpWTkpCPjY");
-  }, []);
-
-  function playSound() { audioRef.current?.play().catch(() => {}); }
+  // Generate a pleasant two-tone beep via Web Audio API (no file needed, works everywhere)
+  function playSound() {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      [[880, 0, 0.15], [1100, 0.18, 0.15]].forEach(([freq, start, dur]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime + start);
+        gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur + 0.05);
+      });
+    } catch {}
+  }
 
   async function requestPermission() {
     if (typeof Notification === "undefined") return;
     const perm = await Notification.requestPermission();
     setPermission(perm);
+    permRef.current = perm;
     return perm;
   }
 
+  // Always uses permRef so it works correctly inside SSE callbacks
   function notify(title: string, body: string) {
     playSound();
-    if (permission === "granted") {
-      new Notification(title, { body, icon: "/favicon.png" });
+    if (permRef.current === "granted") {
+      try {
+        new Notification(title, { body, icon: "/favicon.png" });
+      } catch {}
     }
   }
 
@@ -199,6 +221,8 @@ export default function AdminAppointments() {
   const [rescheduleModal, setRescheduleModal] = useState<Appt | null>(null);
   const [followUpModal, setFollowUpModal] = useState<Appt | null>(null);
   const { permission, requestPermission, notify } = useNotifications();
+  const notifyRef = useRef(notify);
+  useEffect(() => { notifyRef.current = notify; }, [notify]);
   const queryClient = useQueryClient();
 
   async function fetchAppts() {
@@ -211,7 +235,7 @@ export default function AdminAppointments() {
 
   useEffect(() => { fetchAppts(); }, [filter]);
 
-  // SSE subscription
+  // SSE subscription — connect once, use notifyRef so we always call the latest notify
   useEffect(() => {
     const es = new EventSource(`${API}/appointments/notifications`, { withCredentials: true });
     es.onmessage = (e) => {
@@ -220,12 +244,12 @@ export default function AdminAppointments() {
         if (msg.type === "new_appointment") {
           const a: Appt = msg.appointment;
           setAppts((prev) => [a, ...prev.filter((x) => x.id !== a.id)]);
-          notify("New Appointment Request", `${a.patientName} — ${fmt(a.date)} ${a.timeSlot}`);
+          notifyRef.current("New Appointment Request", `${a.patientName} — ${fmt(a.date)} ${a.timeSlot}`);
         }
       } catch {}
     };
     return () => es.close();
-  }, [permission]);
+  }, []);
 
   function mutate(updated: Appt) {
     setAppts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
