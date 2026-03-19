@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Menu, X, Phone, Clock, MapPin, Globe, ChevronDown } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { BookingLoginModal } from "@/components/BookingLoginModal";
 import { patientApi } from "@/lib/patient-api";
 
@@ -25,6 +25,12 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
+    const handler = () => handleBookClick({ preventDefault: () => {} } as any);
+    window.addEventListener("open-booking-modal", handler);
+    return () => window.removeEventListener("open-booking-modal", handler);
+  }, [isPatientLoggedIn]);
+
+  React.useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (langDropRef.current && !langDropRef.current.contains(e.target as Node)) {
         setLangDropOpen(false);
@@ -36,7 +42,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const handleScroll = () => {
-      const ids = ["home", "about", "achievements", "services", "appointments", "testimonials", "contact"];
+      const ids = ["home", "about", "achievements", "services", "testimonials", "contact"];
       let current = "home";
       for (const id of ids) {
         const el = document.getElementById(id);
@@ -76,7 +82,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     { href: "#about", id: "about", label: tr("nav.about", lang) },
     { href: "#achievements", id: "achievements", label: tr("nav.achievements", lang) },
     { href: "#services", id: "services", label: tr("nav.services", lang) },
-    { href: "#appointments", id: "appointments", label: tr("nav.appointments", lang) },
     ...(settings?.testimonialsEnabled
       ? [{ href: "#testimonials", id: "testimonials", label: tr("nav.testimonials", lang) }]
       : []),
@@ -99,16 +104,16 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* ── Sticky Navbar — full viewport width, logo extreme left ── */}
+      {/* ── Sticky Navbar ── */}
       <header className="sticky top-0 z-50 bg-white/96 backdrop-blur-md border-b border-border/50 shadow-sm">
         <div className="w-full px-4 sm:px-8 lg:px-14 flex items-center h-14 sm:h-16 lg:h-[72px] gap-3">
 
-          {/* Logo — pinned to extreme left edge */}
+          {/* Logo */}
           <a href="#home" onClick={(e) => scrollTo(e, "home")} className="shrink-0">
             <img src={logoImg} alt="Susruta Hospital" className="h-8 sm:h-9 lg:h-12 w-auto object-contain" />
           </a>
 
-          {/* Desktop nav — centred in the remaining space */}
+          {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-0.5 flex-1 justify-center">
             {navLinks.map((link) => (
               <a
@@ -126,7 +131,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          {/* Right side: language dropdown + CTA */}
+          {/* Right side: language dropdown + Book CTA */}
           <div className="hidden lg:flex items-center gap-3 ml-auto flex-shrink-0">
 
             {/* Language dropdown */}
@@ -137,29 +142,20 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               >
                 <Globe size={14} />
                 <span>{lang === "en" ? "English" : "తెలుగు"}</span>
-                <ChevronDown
-                  size={12}
-                  className={cn("transition-transform duration-200", langDropOpen && "rotate-180")}
-                />
+                <ChevronDown size={12} className={cn("transition-transform duration-200", langDropOpen && "rotate-180")} />
               </button>
 
               {langDropOpen && (
                 <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-border py-1 w-36 z-50">
-                  <button
-                    onClick={() => setLang("en")}
-                    className={cn(
-                      "w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
-                      lang === "en" ? "text-primary font-semibold" : "text-foreground/70"
-                    )}
+                  <button onClick={() => setLang("en")}
+                    className={cn("w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
+                      lang === "en" ? "text-primary font-semibold" : "text-foreground/70")}
                   >
                     🇬🇧 English
                   </button>
-                  <button
-                    onClick={() => setLang("te")}
-                    className={cn(
-                      "w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
-                      lang === "te" ? "text-primary font-semibold" : "text-foreground/70"
-                    )}
+                  <button onClick={() => setLang("te")}
+                    className={cn("w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
+                      lang === "te" ? "text-primary font-semibold" : "text-foreground/70")}
                   >
                     🇮🇳 తెలుగు
                   </button>
@@ -167,15 +163,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Login */}
-            <a
-              href="/portal"
-              className="px-4 py-2.5 rounded-xl border border-primary/30 text-primary font-semibold text-sm hover:bg-primary/5 transition-all whitespace-nowrap"
-            >
-              Login
-            </a>
-
-            {/* Book button */}
+            {/* Book Appointment button */}
             <button
               onClick={handleBookClick}
               className="px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm shadow-md shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all whitespace-nowrap"
@@ -184,7 +172,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Mobile toggle */}
+          {/* Mobile hamburger */}
           <button
             className="lg:hidden p-2 text-foreground ml-auto"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -209,9 +197,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 {link.label}
               </a>
             ))}
-            <a href="/portal" className="mt-2 px-4 py-3 rounded-xl text-base font-semibold text-primary bg-primary/8 border border-primary/20 text-center">
-              Login / Register
-            </a>
             <div className="flex gap-2 mt-2">
               <button
                 onClick={() => { if (lang !== "en") toggleLanguage(); setIsMobileMenuOpen(false); }}
@@ -247,11 +232,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       {/* ── Footer ── */}
       <footer className="relative bg-[#162814] text-white/80 py-14 overflow-hidden">
 
-        {/* Ayurvedic herbs image — bottom right decorative */}
         <img
-          src="/ayurveda-herbs.png"
-          alt=""
-          aria-hidden="true"
+          src="/ayurveda-herbs.png" alt="" aria-hidden="true"
           className="absolute bottom-0 right-0 w-72 xl:w-[380px] pointer-events-none select-none"
           style={{ opacity: 0.22, mixBlendMode: "screen" }}
         />

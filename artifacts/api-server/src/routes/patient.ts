@@ -1,149 +1,14 @@
 import { Router } from "express";
-import { db, patientsTable, appointmentsTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, loginTokensTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import {
-  hashPassword, verifyPassword, createPatientSession,
-  deletePatientSession, requirePatient,
+  createPatientSession, deletePatientSession, requirePatient,
 } from "../lib/patient-auth";
+import { sendMagicLink } from "../lib/email";
+import { randomBytes } from "crypto";
 import { z } from "zod/v4";
 
 const router = Router();
-
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
-
-function getGoogleCallbackUrl(req: any) {
-  const domain = process.env.REPLIT_DEV_DOMAIN;
-  if (domain) return `https://${domain}/api/patient/auth/google/callback`;
-  const proto = req.protocol;
-  const host = req.get("host");
-  return `${proto}://${host}/api/patient/auth/google/callback`;
-}
-
-function getFrontendUrl(req: any) {
-  const domain = process.env.REPLIT_DEV_DOMAIN;
-  if (domain) return `https://${domain}`;
-  return `${req.protocol}://${req.get("host")}`;
-}
-
-// ── Google OAuth — status ──────────────────────────────────────
-router.get("/auth/google/status", (_req, res) => {
-  res.json({ enabled: GOOGLE_ENABLED });
-});
-
-// ── Google OAuth — redirect to Google ─────────────────────────
-router.get("/auth/google", (req, res) => {
-  if (!GOOGLE_ENABLED) {
-    res.status(503).send("Google login is not configured");
-    return;
-  }
-  const callbackUrl = getGoogleCallbackUrl(req);
-  const next = (req.query.next as string) || "/portal/dashboard";
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID!,
-    redirect_uri: callbackUrl,
-    response_type: "code",
-    scope: "openid email profile",
-    access_type: "offline",
-    prompt: "select_account",
-    state: Buffer.from(JSON.stringify({ next })).toString("base64"),
-  });
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-});
-
-// ── Google OAuth — callback ────────────────────────────────────
-router.get("/auth/google/callback", async (req, res) => {
-  const frontendUrl = getFrontendUrl(req);
-
-  // Decode state for next URL
-  let nextPath = "/portal/dashboard";
-  try {
-    const raw = req.query.state as string;
-    if (raw) {
-      const decoded = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
-      if (decoded.next && typeof decoded.next === "string" && decoded.next.startsWith("/")) {
-        nextPath = decoded.next;
-      }
-    }
-  } catch { /* ignore */ }
-
-  if (!GOOGLE_ENABLED) {
-    res.redirect(`${frontendUrl}/portal?error=google_not_configured`);
-    return;
-  }
-  const code = req.query.code as string | undefined;
-  if (!code) {
-    res.redirect(`${frontendUrl}/portal?error=google_denied`);
-    return;
-  }
-  try {
-    const callbackUrl = getGoogleCallbackUrl(req);
-    // Exchange code for tokens
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: GOOGLE_CLIENT_ID!,
-        client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: callbackUrl,
-        grant_type: "authorization_code",
-      }),
-    });
-    const tokens = await tokenRes.json() as any;
-    if (!tokens.access_token) throw new Error("No access token");
-
-    // Get user info
-    const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-    const profile = await userRes.json() as any;
-    if (!profile.email) throw new Error("No email from Google");
-
-    // Find or create patient
-    let [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, profile.email));
-    if (!patient) {
-      [patient] = await db.insert(patientsTable).values({
-        name: profile.name || profile.email.split("@")[0],
-        email: profile.email,
-        googleId: profile.id,
-        avatarUrl: profile.picture ?? null,
-        phone: null,
-        passwordHash: null,
-      }).returning();
-    } else if (!patient.googleId) {
-      [patient] = await db.update(patientsTable)
-        .set({ googleId: profile.id, avatarUrl: profile.picture ?? patient.avatarUrl })
-        .where(eq(patientsTable.id, patient.id))
-        .returning();
-    }
-
-    const token = await createPatientSession(patient.id);
-    res.cookie("patient_session", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-    res.redirect(`${frontendUrl}${nextPath}`);
-  } catch (err) {
-    console.error("Google OAuth error:", err);
-    res.redirect(`${frontendUrl}/portal?error=google_failed`);
-  }
-});
-
-const RegisterBody = z.object({
-  name: z.string().min(2).max(100),
-  email: z.string().email(),
-  phone: z.string().optional(),
-  password: z.string().min(8),
-});
-
-const LoginBody = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
 
 function cookieOpts() {
   return {
@@ -155,50 +20,94 @@ function cookieOpts() {
 }
 
 function serializePatient(p: any) {
-  return { id: p.id, name: p.name, email: p.email, phone: p.phone, avatarUrl: p.avatarUrl, createdAt: p.createdAt };
+  return { id: p.id, name: p.name, email: p.email, phone: p.phone, avatarUrl: p.avatarUrl, emailVerified: p.emailVerified, createdAt: p.createdAt };
 }
 
-// ── Register ───────────────────────────────────────────────────
-router.post("/register", async (req, res) => {
-  const parsed = RegisterBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "validation_error", message: "Invalid input" });
-    return;
-  }
-  const { name, email, phone, password } = parsed.data;
-  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
-  if (existing) {
-    res.status(409).json({ error: "email_exists", message: "An account with this email already exists" });
-    return;
-  }
-  const passwordHash = await hashPassword(password);
-  const [patient] = await db.insert(patientsTable).values({ name, email, phone: phone ?? null, passwordHash }).returning();
-  const token = await createPatientSession(patient.id);
-  res.cookie("patient_session", token, cookieOpts());
-  res.status(201).json(serializePatient(patient));
+function getFrontendUrl(req: any) {
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  if (domain) return `https://${domain}`;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+// ── Google OAuth status (disabled) ─────────────────────────────
+router.get("/auth/google/status", (_req, res) => {
+  res.json({ enabled: false });
 });
 
-// ── Login ──────────────────────────────────────────────────────
-router.post("/login", async (req, res) => {
-  const parsed = LoginBody.safeParse(req.body);
+// ── Request Magic Link ─────────────────────────────────────────
+const RequestBody = z.object({
+  email: z.string().email(),
+  name: z.string().min(2).max(100).optional(),
+  phone: z.string().optional(),
+  next: z.string().optional(),
+});
+
+router.post("/auth/request", async (req, res) => {
+  const parsed = RequestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "validation_error", message: "Invalid input" });
     return;
   }
-  const { email, password } = parsed.data;
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
-  if (!patient || !patient.passwordHash) {
-    res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password" });
+
+  const { email, name, phone, next } = parsed.data;
+  const nextUrl = next && next.startsWith("/") ? next : "/portal/dashboard";
+
+  // Find or create patient
+  let [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
+  const isNewAccount = !patient;
+
+  if (!patient) {
+    if (!name) {
+      res.status(400).json({ error: "name_required", message: "Name is required to create an account" });
+      return;
+    }
+    [patient] = await db.insert(patientsTable).values({
+      email,
+      name,
+      phone: phone ?? null,
+      emailVerified: false,
+    }).returning();
+  }
+
+  // Create a magic link token (15 min expiry)
+  const token = randomBytes(48).toString("hex");
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  await db.insert(loginTokensTable).values({ token, patientId: patient.id, nextUrl, expiresAt, used: false });
+
+  const frontendUrl = getFrontendUrl(req);
+  const verifyUrl = `${frontendUrl}/api/patient/auth/verify?token=${token}`;
+
+  await sendMagicLink({ to: email, name: patient.name, verifyUrl, isNewAccount });
+
+  res.json({ success: true, isNewAccount });
+});
+
+// ── Verify Magic Link (GET — redirect) ─────────────────────────
+router.get("/auth/verify", async (req, res) => {
+  const frontendUrl = getFrontendUrl(req);
+  const token = req.query.token as string | undefined;
+
+  if (!token) {
+    res.redirect(`${frontendUrl}/portal?error=invalid_token`);
     return;
   }
-  const valid = await verifyPassword(password, patient.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password" });
+
+  const [row] = await db.select().from(loginTokensTable).where(eq(loginTokensTable.token, token));
+  if (!row || row.used || row.expiresAt < new Date()) {
+    res.redirect(`${frontendUrl}/portal?error=expired_token`);
     return;
   }
-  const token = await createPatientSession(patient.id);
-  res.cookie("patient_session", token, cookieOpts());
-  res.json(serializePatient(patient));
+
+  // Mark token as used
+  await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.id, row.id));
+
+  // Mark patient email as verified
+  await db.update(patientsTable).set({ emailVerified: true }).where(eq(patientsTable.id, row.patientId));
+
+  // Create session
+  const sessionToken = await createPatientSession(row.patientId);
+  res.cookie("patient_session", sessionToken, cookieOpts());
+  res.redirect(`${frontendUrl}${row.nextUrl ?? "/portal/dashboard"}`);
 });
 
 // ── Logout ─────────────────────────────────────────────────────

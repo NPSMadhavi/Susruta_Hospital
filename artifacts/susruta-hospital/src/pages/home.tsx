@@ -141,7 +141,6 @@ export default function Home() {
       <AboutSection lang={lang} />
       <AchievementsSection lang={lang} />
       <ServicesSection lang={lang} />
-      <AppointmentsSection lang={lang} />
       <TestimonialsSection lang={lang} />
       <ContactSection lang={lang} />
     </PublicLayout>
@@ -215,7 +214,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
                 className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
               >
                 <button
-                  onClick={() => scrollTo("appointments")}
+                  onClick={() => window.dispatchEvent(new CustomEvent("open-booking-modal"))}
                   className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
                 >
                   {tr("btn.book", lang)}

@@ -17,6 +17,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "nodemailer": "^8.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "zod": "catalog:"
@@ -26,6 +27,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
+    "@types/nodemailer": "^7.0.11",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "esbuild": "^0.27.3",

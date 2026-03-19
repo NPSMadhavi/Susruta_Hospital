@@ -13,14 +13,8 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
-  googleStatus: (): Promise<{ enabled: boolean }> =>
-    req("/auth/google/status"),
-
-  register: (body: { name: string; email: string; phone?: string; password: string }) =>
-    req("/register", { method: "POST", body: JSON.stringify(body) }),
-
-  login: (body: { email: string; password: string }) =>
-    req("/login", { method: "POST", body: JSON.stringify(body) }),
+  requestMagicLink: (body: { email: string; name?: string; phone?: string; next?: string }) =>
+    req("/auth/request", { method: "POST", body: JSON.stringify(body) }),
 
   logout: () => req("/logout", { method: "POST" }),
 
