@@ -109,17 +109,32 @@ export default function PatientDashboard() {
   const [choosingReschedule, setChoosingReschedule] = useState<number | null>(null);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function load(initial = false) {
       try {
-        const [me, myAppts] = await Promise.all([patientApi.me(), patientApi.getAppointments()]);
-        setPatient(me);
-        setAppts(myAppts);
+        if (initial) {
+          const [me, myAppts] = await Promise.all([patientApi.me(), patientApi.getAppointments()]);
+          if (cancelled) return;
+          setPatient(me);
+          setAppts(myAppts);
+        } else {
+          const myAppts = await patientApi.getAppointments();
+          if (cancelled) return;
+          setAppts(myAppts);
+        }
       } catch {
-        navigate("/portal");
+        if (initial) navigate("/portal");
       } finally {
-        setLoading(false);
+        if (initial) setLoading(false);
       }
-    })();
+    }
+
+    load(true);
+
+    // Poll every 15s so status changes from admin appear without a manual refresh
+    const interval = setInterval(() => load(false), 15000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   async function logout() {
@@ -157,6 +172,10 @@ export default function PatientDashboard() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain" />
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              Live
+            </div>
             <div className="text-right hidden sm:block">
               <p className="text-sm font-semibold text-foreground">{patient?.name}</p>
               <p className="text-xs text-muted-foreground">{patient?.email}</p>

@@ -19,14 +19,17 @@ export function notifyNewAppointment(appt: any) {
 
 router.get("/notifications", requireAdmin, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable Nginx/Replit proxy buffering
+  res.setHeader("Transfer-Encoding", "chunked");
   res.flushHeaders();
 
   res.write(": connected\n\n");
+  // Heartbeat every 10s to keep the connection alive through proxies
   const heartbeat = setInterval(() => {
     try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); }
-  }, 25000);
+  }, 10000);
 
   sseClients.add(res);
   req.on("close", () => { sseClients.delete(res); clearInterval(heartbeat); });
