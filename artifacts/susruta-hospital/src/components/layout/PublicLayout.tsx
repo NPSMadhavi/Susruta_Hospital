@@ -57,7 +57,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const scrollTo = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     const el = document.getElementById(id);
-    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 76, behavior: "smooth" });
+    if (el) {
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 76, behavior: "smooth" });
+    } else {
+      window.location.href = `/#${id}`;
+    }
     setIsMobileMenuOpen(false);
     setLangDropOpen(false);
   };
