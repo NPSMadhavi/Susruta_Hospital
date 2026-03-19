@@ -3,6 +3,7 @@ import { db, appointmentsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
+import { verifyPatientSession } from "../lib/patient-auth";
 
 const router = Router();
 
@@ -65,6 +66,14 @@ router.post("/", async (req, res) => {
     return;
   }
 
+  // Optionally link to a logged-in patient account
+  let patientId: number | null = null;
+  const patientToken = req.cookies?.patient_session;
+  if (patientToken) {
+    const linkedPatient = await verifyPatientSession(patientToken);
+    if (linkedPatient) patientId = linkedPatient.id;
+  }
+
   const [appointment] = await db
     .insert(appointmentsTable)
     .values({
@@ -75,6 +84,7 @@ router.post("/", async (req, res) => {
       timeSlot: data.timeSlot,
       reason: data.reason ?? null,
       status: "pending",
+      patientId,
     })
     .returning();
 

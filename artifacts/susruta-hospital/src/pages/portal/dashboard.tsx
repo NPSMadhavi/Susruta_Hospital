@@ -26,6 +26,70 @@ const STATUS_META: Record<string, { label: string; color: string; icon: React.Re
   missed: { label: "Missed", color: "bg-gray-100 text-gray-600 border-gray-200", icon: <AlertCircle size={13} /> },
 };
 
+// Progress tracker — 4 stages of an appointment lifecycle
+const TRACKER_STEPS = [
+  { key: "requested", label: "Requested", statuses: ["pending", "reschedule_proposed"] },
+  { key: "approved",  label: "Approved",  statuses: ["confirmed", "reschedule_accepted"] },
+  { key: "arrived",   label: "Arrived",   statuses: ["arrived"] },
+  { key: "completed", label: "Completed", statuses: ["completed"] },
+];
+
+function getStepIndex(status: string) {
+  if (["completed"].includes(status)) return 3;
+  if (["arrived"].includes(status)) return 2;
+  if (["confirmed", "reschedule_accepted"].includes(status)) return 1;
+  return 0; // pending, reschedule_proposed, cancelled, missed
+}
+
+function AppointmentTracker({ status }: { status: string }) {
+  const isCancelled = status === "cancelled" || status === "missed";
+  const activeIdx = getStepIndex(status);
+
+  if (isCancelled) return null;
+
+  return (
+    <div className="py-3">
+      <div className="flex items-center">
+        {TRACKER_STEPS.map((step, idx) => {
+          const done = idx < activeIdx;
+          const active = idx === activeIdx;
+          return (
+            <React.Fragment key={step.key}>
+              {/* Step circle */}
+              <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
+                  ${done    ? "bg-primary text-white shadow-sm shadow-primary/30"
+                  : active  ? "bg-primary text-white ring-4 ring-primary/20 shadow-md shadow-primary/30"
+                            : "bg-muted border-2 border-border text-muted-foreground/40"}`}>
+                  {done ? <CheckCircle2 size={14} /> : <span>{idx + 1}</span>}
+                </div>
+                <span className={`text-[10px] font-semibold whitespace-nowrap
+                  ${done || active ? "text-primary" : "text-muted-foreground/40"}`}>
+                  {step.label}
+                </span>
+              </div>
+              {/* Connector line */}
+              {idx < TRACKER_STEPS.length - 1 && (
+                <div className={`flex-1 h-0.5 mx-1 mb-4 rounded-full transition-all
+                  ${done ? "bg-primary" : "bg-border"}`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {/* Active step description */}
+      <p className="text-xs text-center text-muted-foreground mt-1">
+        {status === "pending" && "⏳ Waiting for clinic to review your request"}
+        {status === "reschedule_proposed" && "📅 Clinic has proposed new dates — please choose one below"}
+        {status === "reschedule_accepted" && "✅ Reschedule confirmed — your appointment is set"}
+        {status === "confirmed" && "✅ Your appointment is confirmed! See you at the clinic"}
+        {status === "arrived" && "🏥 You've checked in — currently at the clinic"}
+        {status === "completed" && "🌿 Visit completed. Thank you for choosing Susruta Hospital"}
+      </p>
+    </div>
+  );
+}
+
 function fmt(date: string) {
   return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -197,6 +261,11 @@ export default function PatientDashboard() {
                     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${meta.color}`}>
                       {meta.icon} {meta.label}
                     </span>
+                  </div>
+
+                  {/* Progress tracker */}
+                  <div className="border-t border-b border-border/50 -mx-5 px-5">
+                    <AppointmentTracker status={a.status} />
                   </div>
 
                   {a.reason && <p className="text-sm text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">{a.reason}</p>}
