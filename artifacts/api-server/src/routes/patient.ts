@@ -9,6 +9,110 @@ import { z } from "zod/v4";
 
 const router = Router();
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+
+function getGoogleCallbackUrl(req: any) {
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  if (domain) return `https://${domain}/api/patient/auth/google/callback`;
+  const proto = req.protocol;
+  const host = req.get("host");
+  return `${proto}://${host}/api/patient/auth/google/callback`;
+}
+
+function getFrontendUrl(req: any) {
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  if (domain) return `https://${domain}`;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+// ── Google OAuth — redirect to Google ─────────────────────────
+router.get("/auth/google", (req, res) => {
+  if (!GOOGLE_ENABLED) {
+    res.status(503).send("Google login is not configured");
+    return;
+  }
+  const callbackUrl = getGoogleCallbackUrl(req);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID!,
+    redirect_uri: callbackUrl,
+    response_type: "code",
+    scope: "openid email profile",
+    access_type: "offline",
+    prompt: "select_account",
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+// ── Google OAuth — callback ────────────────────────────────────
+router.get("/auth/google/callback", async (req, res) => {
+  const frontendUrl = getFrontendUrl(req);
+  if (!GOOGLE_ENABLED) {
+    res.redirect(`${frontendUrl}/portal?error=google_not_configured`);
+    return;
+  }
+  const code = req.query.code as string | undefined;
+  if (!code) {
+    res.redirect(`${frontendUrl}/portal?error=google_denied`);
+    return;
+  }
+  try {
+    const callbackUrl = getGoogleCallbackUrl(req);
+    // Exchange code for tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID!,
+        client_secret: GOOGLE_CLIENT_SECRET!,
+        redirect_uri: callbackUrl,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tokens = await tokenRes.json() as any;
+    if (!tokens.access_token) throw new Error("No access token");
+
+    // Get user info
+    const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    const profile = await userRes.json() as any;
+    if (!profile.email) throw new Error("No email from Google");
+
+    // Find or create patient
+    let [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, profile.email));
+    if (!patient) {
+      [patient] = await db.insert(patientsTable).values({
+        name: profile.name || profile.email.split("@")[0],
+        email: profile.email,
+        googleId: profile.id,
+        avatarUrl: profile.picture ?? null,
+        phone: null,
+        passwordHash: null,
+      }).returning();
+    } else if (!patient.googleId) {
+      [patient] = await db.update(patientsTable)
+        .set({ googleId: profile.id, avatarUrl: profile.picture ?? patient.avatarUrl })
+        .where(eq(patientsTable.id, patient.id))
+        .returning();
+    }
+
+    const token = await createPatientSession(patient.id);
+    res.cookie("patient_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+    res.redirect(`${frontendUrl}/portal/dashboard`);
+  } catch (err) {
+    console.error("Google OAuth error:", err);
+    res.redirect(`${frontendUrl}/portal?error=google_failed`);
+  }
+});
+
 const RegisterBody = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email(),
