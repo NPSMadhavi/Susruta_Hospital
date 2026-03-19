@@ -13,8 +13,11 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
-  requestMagicLink: (body: { email: string; name?: string; phone?: string; next?: string }) =>
-    req("/auth/request", { method: "POST", body: JSON.stringify(body) }),
+  register: (body: { name: string; email: string; phone?: string; password: string }) =>
+    req("/auth/register", { method: "POST", body: JSON.stringify(body) }),
+
+  login: (body: { email: string; password: string }) =>
+    req("/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
   logout: () => req("/logout", { method: "POST" }),
 
