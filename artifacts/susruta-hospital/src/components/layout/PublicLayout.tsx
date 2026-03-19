@@ -82,11 +82,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
       {/* ── Sticky Navbar — full viewport width, logo extreme left ── */}
       <header className="sticky top-0 z-50 bg-white/96 backdrop-blur-md border-b border-border/50 shadow-sm">
-        <div className="w-full px-4 sm:px-8 lg:px-14 flex items-center h-[72px] gap-4">
+        <div className="w-full px-4 sm:px-8 lg:px-14 flex items-center h-20 sm:h-[72px] gap-3">
 
           {/* Logo — pinned to extreme left edge */}
-          <a href="#home" onClick={(e) => scrollTo(e, "home")} className="flex-shrink-0 min-w-0">
-            <img src={logoImg} alt="Susruta Hospital" className="h-12 sm:h-14 lg:h-16 w-auto max-w-[240px] sm:max-w-[300px] lg:max-w-none object-contain object-left" />
+          <a href="#home" onClick={(e) => scrollTo(e, "home")} className="flex-1 lg:flex-none min-w-0">
+            <img src={logoImg} alt="Susruta Hospital" className="h-14 sm:h-14 lg:h-16 w-auto max-w-full lg:max-w-none object-contain object-left" />
           </a>
 
           {/* Desktop nav — centred in the remaining space */}
