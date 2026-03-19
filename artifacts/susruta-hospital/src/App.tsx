@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 
 // Single public page
 import Home from "./pages/home";
+import Appointments from "./pages/appointments";
 
 // Admin Pages
 import AdminLogin from "./pages/admin/login";
@@ -33,6 +34,7 @@ function Router() {
     <Switch>
       {/* Single-page public website */}
       <Route path="/" component={Home} />
+      <Route path="/appointments" component={Appointments} />
 
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />

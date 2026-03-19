@@ -5,7 +5,9 @@ import { cn } from "@/lib/utils";
 import { Menu, X, Phone, Clock, MapPin, Globe, ChevronDown } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { BookingLoginModal } from "@/components/BookingLoginModal";
+import { patientApi } from "@/lib/patient-api";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { lang, toggleLanguage } = useLanguage();
@@ -14,6 +16,13 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { data: settings } = useGetSettings();
   const [activeSection, setActiveSection] = React.useState("home");
   const langDropRef = React.useRef<HTMLDivElement>(null);
+  const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
+  const [isPatientLoggedIn, setIsPatientLoggedIn] = React.useState(false);
+  const [, navigate] = useLocation();
+
+  React.useEffect(() => {
+    patientApi.me().then(() => setIsPatientLoggedIn(true)).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -45,6 +54,16 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 76, behavior: "smooth" });
     setIsMobileMenuOpen(false);
     setLangDropOpen(false);
+  };
+
+  const handleBookClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsMobileMenuOpen(false);
+    if (isPatientLoggedIn) {
+      navigate("/appointments");
+    } else {
+      setBookingModalOpen(true);
+    }
   };
 
   const setLang = (newLang: "en" | "te") => {
@@ -157,13 +176,12 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </a>
 
             {/* Book button */}
-            <a
-              href="#appointments"
-              onClick={(e) => scrollTo(e, "appointments")}
+            <button
+              onClick={handleBookClick}
               className="px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm shadow-md shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all whitespace-nowrap"
             >
               {tr("btn.book", lang)}
-            </a>
+            </button>
           </div>
 
           {/* Mobile toggle */}
@@ -206,15 +224,22 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                   lang === "te" ? "bg-primary text-white border-primary" : "border-border text-foreground/65")}
               >🇮🇳 తెలుగు</button>
             </div>
-            <a
-              href="#appointments" onClick={(e) => scrollTo(e, "appointments")}
-              className="mt-2 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center"
+            <button
+              onClick={handleBookClick}
+              className="mt-2 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center w-full"
             >
               {tr("btn.book", lang)}
-            </a>
+            </button>
           </div>
         )}
       </header>
+
+      {/* ── Booking Login Modal ── */}
+      <BookingLoginModal
+        open={bookingModalOpen}
+        onClose={() => setBookingModalOpen(false)}
+        onContinueAsGuest={() => { setBookingModalOpen(false); navigate("/appointments"); }}
+      />
 
       {/* ── Page content ── */}
       <main className="flex-1 flex flex-col">{children}</main>

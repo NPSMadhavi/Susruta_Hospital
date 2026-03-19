@@ -34,6 +34,7 @@ router.get("/auth/google", (req, res) => {
     return;
   }
   const callbackUrl = getGoogleCallbackUrl(req);
+  const next = (req.query.next as string) || "/portal/dashboard";
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID!,
     redirect_uri: callbackUrl,
@@ -41,6 +42,7 @@ router.get("/auth/google", (req, res) => {
     scope: "openid email profile",
     access_type: "offline",
     prompt: "select_account",
+    state: Buffer.from(JSON.stringify({ next })).toString("base64"),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
@@ -48,6 +50,19 @@ router.get("/auth/google", (req, res) => {
 // ── Google OAuth — callback ────────────────────────────────────
 router.get("/auth/google/callback", async (req, res) => {
   const frontendUrl = getFrontendUrl(req);
+
+  // Decode state for next URL
+  let nextPath = "/portal/dashboard";
+  try {
+    const raw = req.query.state as string;
+    if (raw) {
+      const decoded = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+      if (decoded.next && typeof decoded.next === "string" && decoded.next.startsWith("/")) {
+        nextPath = decoded.next;
+      }
+    }
+  } catch { /* ignore */ }
+
   if (!GOOGLE_ENABLED) {
     res.redirect(`${frontendUrl}/portal?error=google_not_configured`);
     return;
@@ -106,7 +121,7 @@ router.get("/auth/google/callback", async (req, res) => {
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
-    res.redirect(`${frontendUrl}/portal/dashboard`);
+    res.redirect(`${frontendUrl}${nextPath}`);
   } catch (err) {
     console.error("Google OAuth error:", err);
     res.redirect(`${frontendUrl}/portal?error=google_failed`);

@@ -7,7 +7,7 @@ import logoImg from "@assets/logo_1773840200056.png";
 
 type Mode = "login" | "register";
 
-const GOOGLE_AUTH_URL = `${import.meta.env.BASE_URL ?? "/"}api/patient/auth/google`.replace(/\/\//g, "/");
+const GOOGLE_AUTH_BASE = `${import.meta.env.BASE_URL ?? "/"}api/patient/auth/google`.replace(/\/\//g, "/");
 
 function GoogleIcon() {
   return (
@@ -23,6 +23,9 @@ function GoogleIcon() {
 export default function PortalLogin() {
   const [, navigate] = useLocation();
   const search = useSearch();
+  const params = new URLSearchParams(search);
+  const nextUrl = params.get("next") || "/portal/dashboard";
+
   const [mode, setMode] = useState<Mode>("login");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,11 +34,10 @@ export default function PortalLogin() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
 
   useEffect(() => {
-    patientApi.me().then(() => navigate("/portal/dashboard")).catch(() => {});
+    patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(search);
     const err = params.get("error");
     if (err === "google_denied") setError("Google sign-in was cancelled.");
     else if (err === "google_failed") setError("Google sign-in failed. Please try again or use email.");
@@ -55,7 +57,7 @@ export default function PortalLogin() {
       } else {
         await patientApi.register({ name: form.name, email: form.email, phone: form.phone || undefined, password: form.password });
       }
-      navigate("/portal/dashboard");
+      navigate(nextUrl);
     } catch (err: any) {
       setError(err?.message || (mode === "login" ? "Incorrect email or password" : "Registration failed. Please try again."));
     } finally {
@@ -65,7 +67,10 @@ export default function PortalLogin() {
 
   function handleGoogleLogin() {
     setGoogleLoading(true);
-    window.location.href = GOOGLE_AUTH_URL;
+    const url = nextUrl !== "/portal/dashboard"
+      ? `${GOOGLE_AUTH_BASE}?next=${encodeURIComponent(nextUrl)}`
+      : GOOGLE_AUTH_BASE;
+    window.location.href = url;
   }
 
   const fields = mode === "login"
