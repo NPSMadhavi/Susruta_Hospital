@@ -1,11 +1,46 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import { db, appointmentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 
+// ── SSE Notification Clients ──────────────────────────────────
+const sseClients = new Set<Response>();
+
+export function notifyNewAppointment(appt: any) {
+  const payload = JSON.stringify({ type: "new_appointment", appointment: appt });
+  for (const client of sseClients) {
+    try { client.write(`data: ${payload}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
+router.get("/notifications", requireAdmin, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  res.write(": connected\n\n");
+  const heartbeat = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); }
+  }, 25000);
+
+  sseClients.add(res);
+  req.on("close", () => { sseClients.delete(res); clearInterval(heartbeat); });
+});
+
+// ── Helper ────────────────────────────────────────────────────
+function serializeAppt(a: any) {
+  return {
+    ...a,
+    createdAt: a.createdAt?.toISOString() ?? null,
+    arrivedAt: a.arrivedAt?.toISOString() ?? null,
+  };
+}
+
+// ── Public: Book (walk-in) ────────────────────────────────────
 router.post("/", async (req, res) => {
   const parsed = CreateAppointmentBody.safeParse(req.body);
   if (!parsed.success) {
@@ -43,12 +78,13 @@ router.post("/", async (req, res) => {
     })
     .returning();
 
-  res.status(201).json({
-    ...appointment,
-    createdAt: appointment.createdAt.toISOString(),
-  });
+  const serialized = serializeAppt(appointment);
+  notifyNewAppointment(serialized);
+
+  res.status(201).json(serialized);
 });
 
+// ── Admin: List ───────────────────────────────────────────────
 router.get("/", requireAdmin, async (req, res) => {
   const { status, date, month } = req.query as Record<string, string>;
   let query = db.select().from(appointmentsTable);
@@ -57,26 +93,25 @@ router.get("/", requireAdmin, async (req, res) => {
   if (status) conditions.push(eq(appointmentsTable.status, status));
   if (date) conditions.push(eq(appointmentsTable.date, date));
 
-  const appts = await query.$dynamic().where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(appointmentsTable.date, appointmentsTable.timeSlot);
+  const appts = await query.$dynamic()
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(appointmentsTable.createdAt));
 
   let filtered = appts;
-  if (month) {
-    filtered = appts.filter((a) => a.date.startsWith(month));
-  }
+  if (month) filtered = appts.filter((a) => a.date.startsWith(month));
 
-  res.json(filtered.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })));
+  res.json(filtered.map(serializeAppt));
 });
 
+// ── Admin: Get one ────────────────────────────────────────────
 router.get("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   const [appt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
-  if (!appt) {
-    res.status(404).json({ error: "not_found", message: "Appointment not found" });
-    return;
-  }
-  res.json({ ...appt, createdAt: appt.createdAt.toISOString() });
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(appt));
 });
 
+// ── Admin: Update (approve / cancel / notes) ──────────────────
 router.patch("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   const parsed = UpdateAppointmentBody.safeParse(req.body);
@@ -88,19 +123,67 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
 
-  const [updated] = await db
-    .update(appointmentsTable)
-    .set(updates)
-    .where(eq(appointmentsTable.id, id))
-    .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "not_found", message: "Appointment not found" });
-    return;
-  }
-  res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+  const [updated] = await db.update(appointmentsTable).set(updates).where(eq(appointmentsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(updated));
 });
 
+// ── Admin: Mark Arrived ───────────────────────────────────────
+router.patch("/:id/arrive", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [updated] = await db.update(appointmentsTable)
+    .set({ arrivedAt: new Date(), status: "arrived" })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(updated));
+});
+
+// ── Admin: Mark Paid ──────────────────────────────────────────
+router.patch("/:id/pay", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { mode } = req.body;
+  if (!["cash", "upi"].includes(mode)) {
+    res.status(400).json({ error: "invalid_mode", message: "mode must be cash or upi" });
+    return;
+  }
+  const [updated] = await db.update(appointmentsTable)
+    .set({ paymentStatus: "paid", paymentMode: mode, status: "completed" })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(updated));
+});
+
+// ── Admin: Propose Reschedule ─────────────────────────────────
+router.patch("/:id/reschedule", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { dates } = req.body;
+  if (!Array.isArray(dates) || dates.length === 0) {
+    res.status(400).json({ error: "invalid_dates" }); return;
+  }
+  const [updated] = await db.update(appointmentsTable)
+    .set({ rescheduleDates: JSON.stringify(dates), status: "reschedule_proposed" })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(updated));
+});
+
+// ── Admin: Set Follow-up Date ─────────────────────────────────
+router.patch("/:id/followup", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { followUpDate } = req.body;
+  if (!followUpDate) { res.status(400).json({ error: "missing_date" }); return; }
+  const [updated] = await db.update(appointmentsTable)
+    .set({ followUpDate, followUpConfirmed: false })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json(serializeAppt(updated));
+});
+
+// ── Admin: Delete ─────────────────────────────────────────────
 router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   await db.delete(appointmentsTable).where(eq(appointmentsTable.id, id));

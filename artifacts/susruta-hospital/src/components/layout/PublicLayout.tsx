@@ -148,6 +148,14 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
+            {/* Patient Portal */}
+            <a
+              href="/portal"
+              className="px-4 py-2.5 rounded-xl border border-primary/30 text-primary font-semibold text-sm hover:bg-primary/5 transition-all whitespace-nowrap"
+            >
+              Patient Portal
+            </a>
+
             {/* Book button */}
             <a
               href="#appointments"
@@ -183,7 +191,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 {link.label}
               </a>
             ))}
-            <div className="flex gap-2 mt-3">
+            <a href="/portal" className="mt-2 px-4 py-3 rounded-xl text-base font-semibold text-primary bg-primary/8 border border-primary/20 text-center">
+              🏥 Patient Portal
+            </a>
+            <div className="flex gap-2 mt-2">
               <button
                 onClick={() => { if (lang !== "en") toggleLanguage(); setIsMobileMenuOpen(false); }}
                 className={cn("flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors",

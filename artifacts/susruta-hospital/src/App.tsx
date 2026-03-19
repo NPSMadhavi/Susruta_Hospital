@@ -15,6 +15,10 @@ import AdminAvailability from "./pages/admin/availability";
 import AdminTestimonials from "./pages/admin/testimonials";
 import AdminSettings from "./pages/admin/settings";
 
+// Patient Portal Pages
+import PortalLogin from "./pages/portal/login";
+import PatientDashboard from "./pages/portal/dashboard";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -29,6 +33,10 @@ function Router() {
     <Switch>
       {/* Single-page public website */}
       <Route path="/" component={Home} />
+
+      {/* Patient Portal Routes */}
+      <Route path="/portal" component={PortalLogin} />
+      <Route path="/portal/dashboard" component={PatientDashboard} />
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
