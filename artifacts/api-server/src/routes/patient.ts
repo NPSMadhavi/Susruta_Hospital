@@ -27,6 +27,11 @@ function getFrontendUrl(req: any) {
   return `${req.protocol}://${req.get("host")}`;
 }
 
+// ── Google OAuth — status ──────────────────────────────────────
+router.get("/auth/google/status", (_req, res) => {
+  res.json({ enabled: GOOGLE_ENABLED });
+});
+
 // ── Google OAuth — redirect to Google ─────────────────────────
 router.get("/auth/google", (req, res) => {
   if (!GOOGLE_ENABLED) {

@@ -30,11 +30,13 @@ export default function PortalLogin() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
 
   useEffect(() => {
     patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
+    patientApi.googleStatus().then((s) => setGoogleEnabled(s.enabled)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -135,27 +137,30 @@ export default function PortalLogin() {
               <p className="text-muted-foreground text-sm">Patient Portal</p>
             </motion.div>
 
-            {/* Google Sign-in */}
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={googleLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl bg-white hover:bg-gray-50 transition-all text-sm font-medium text-foreground/80 shadow-sm hover:shadow mb-5 disabled:opacity-60"
-            >
-              {googleLoading ? (
-                <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-              ) : (
-                <GoogleIcon />
-              )}
-              Continue with Google
-            </button>
+            {/* Google Sign-in — only when configured */}
+            {googleEnabled && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={googleLoading}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl bg-white hover:bg-gray-50 transition-all text-sm font-medium text-foreground/80 shadow-sm hover:shadow mb-5 disabled:opacity-60"
+                >
+                  {googleLoading ? (
+                    <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                  ) : (
+                    <GoogleIcon />
+                  )}
+                  Continue with Google
+                </button>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 mb-5">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground font-medium">or use email</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground font-medium">or use email</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              </>
+            )}
 
             {/* Tab switcher */}
             <div className="bg-muted/60 rounded-2xl p-1 flex mb-6">

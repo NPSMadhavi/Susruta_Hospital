@@ -13,6 +13,9 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
+  googleStatus: (): Promise<{ enabled: boolean }> =>
+    req("/auth/google/status"),
+
   register: (body: { name: string; email: string; phone?: string; password: string }) =>
     req("/register", { method: "POST", body: JSON.stringify(body) }),
 

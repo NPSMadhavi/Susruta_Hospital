@@ -1,7 +1,8 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Leaf, ArrowRight, UserCheck } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
+import { patientApi } from "@/lib/patient-api";
 
 const GOOGLE_AUTH_URL = `${import.meta.env.BASE_URL ?? "/"}api/patient/auth/google`.replace(/\/\//g, "/");
 
@@ -23,6 +24,12 @@ interface Props {
 }
 
 export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  useEffect(() => {
+    patientApi.googleStatus().then((s) => setGoogleEnabled(s.enabled)).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
@@ -100,14 +107,16 @@ export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
                 ))}
               </div>
 
-              {/* Google */}
-              <button
-                onClick={handleGoogle}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl bg-white hover:bg-gray-50 transition-all text-sm font-medium text-foreground/80 shadow-sm hover:shadow"
-              >
-                <GoogleIcon />
-                Continue with Google
-              </button>
+              {/* Google — only when configured */}
+              {googleEnabled && (
+                <button
+                  onClick={handleGoogle}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl bg-white hover:bg-gray-50 transition-all text-sm font-medium text-foreground/80 shadow-sm hover:shadow"
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </button>
+              )}
 
               {/* Email login */}
               <button
@@ -118,12 +127,14 @@ export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
                 Sign In with Email
               </button>
 
-              {/* Divider */}
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
+              {/* Divider — only shown when Google is also visible */}
+              {googleEnabled && (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              )}
 
               {/* Skip */}
               <button
