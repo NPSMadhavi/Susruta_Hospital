@@ -43,7 +43,6 @@ export default function PatientDashboard() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"upcoming" | "past" | "missed">("upcoming");
   const [choosingReschedule, setChoosingReschedule] = useState<number | null>(null);
-  const [bookOpen, setBookOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -116,7 +115,7 @@ export default function PatientDashboard() {
             <h1 className="text-xl font-serif font-bold">Welcome back, {patient?.name?.split(" ")[0]}!</h1>
             <p className="text-white/60 text-sm mt-1">Manage your Ayurvedic care journey</p>
           </div>
-          <button onClick={() => setBookOpen(true)}
+          <button onClick={() => navigate("/appointments")}
             className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
             <Plus size={15} /> Book
           </button>
@@ -175,7 +174,7 @@ export default function PatientDashboard() {
               <Calendar size={36} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">No {tab} appointments</p>
               {tab === "upcoming" && (
-                <button onClick={() => setBookOpen(true)}
+                <button onClick={() => navigate("/appointments")}
                   className="mt-4 text-sm text-primary font-semibold hover:underline flex items-center gap-1 mx-auto">
                   <Plus size={14} /> Book your first appointment
                 </button>
@@ -231,101 +230,6 @@ export default function PatientDashboard() {
         </div>
       </div>
 
-      {/* Book Appointment Modal */}
-      {bookOpen && <BookModal patient={patient!} onClose={() => setBookOpen(false)} onBooked={(a) => { setAppts((prev) => [a, ...prev]); setBookOpen(false); setTab("upcoming"); }} />}
-    </div>
-  );
-}
-
-function BookModal({ patient, onClose, onBooked }: { patient: Patient; onClose: () => void; onBooked: (a: Appt) => void }) {
-  const [form, setForm] = useState({ date: "", timeSlot: "", reason: "", patientName: patient.name, patientPhone: patient.phone || "" });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const SLOTS = [
-    "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
-    "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM", "08:00 PM", "08:30 PM", "09:00 PM", "09:30 PM",
-  ];
-
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const a = await patientApi.bookAppointment(form);
-      onBooked(a);
-    } catch (err: any) {
-      setError(err?.message || "Could not book appointment. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
-        className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
-        <div className="bg-[#1a3d2b] px-6 py-5 flex items-center justify-between">
-          <h2 className="text-white font-serif font-bold text-lg">Book Appointment</h2>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>
-        </div>
-        <form onSubmit={submit} className="p-6 space-y-4">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Your Name</label>
-              <input type="text" value={form.patientName} onChange={set("patientName")} required
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Phone</label>
-              <input type="tel" value={form.patientPhone} onChange={set("patientPhone")} required
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Date</label>
-              <input type="date" min={today} value={form.date} onChange={set("date")} required
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Time Slot</label>
-              <select value={form.timeSlot} onChange={set("timeSlot")} required
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
-                <option value="">Choose time</option>
-                <optgroup label="Morning">
-                  {SLOTS.filter((s) => s.includes("AM") || s === "12:00 PM" || s === "12:30 PM").map((s) => <option key={s}>{s}</option>)}
-                </optgroup>
-                <optgroup label="Evening">
-                  {SLOTS.filter((s) => s.includes("PM") && !s.startsWith("12")).map((s) => <option key={s}>{s}</option>)}
-                </optgroup>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Reason / Symptoms <span className="text-muted-foreground">(optional)</span></label>
-            <textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} rows={3}
-              placeholder="Briefly describe your symptoms or reason for the visit..."
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-3 border border-border rounded-xl text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
-              {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : "Request Appointment"}
-            </button>
-          </div>
-        </form>
-      </motion.div>
     </div>
   );
 }
