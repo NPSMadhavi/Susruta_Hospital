@@ -175,9 +175,30 @@ export default function Appointments() {
   }, [calendarMonth]);
 
   const today = new Date().toISOString().split("T")[0];
+
+  // Parse "10:30 AM" / "06:00 PM" → total minutes since midnight for comparison
+  function parseSlotMinutes(timeStr: string): number {
+    const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+    if (!match) return 0;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // When today is selected, hide slots that have already passed (add 30-min buffer)
+  const visibleSlots = useMemo(() => {
+    if (selectedDate !== today) return slots;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes() + 30; // 30-min lookahead
+    return slots.filter(s => parseSlotMinutes(s.time) > currentMinutes);
+  }, [slots, selectedDate, today]);
+
   const MORNING_TIMES = new Set(["10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","01:00 PM"]);
-  const morningSlots = slots.filter(s => MORNING_TIMES.has(s.time));
-  const eveningSlots = slots.filter(s => !MORNING_TIMES.has(s.time));
+  const morningSlots = visibleSlots.filter(s => MORNING_TIMES.has(s.time));
+  const eveningSlots = visibleSlots.filter(s => !MORNING_TIMES.has(s.time));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,9 +404,14 @@ export default function Appointments() {
                               </p>
                               {loadingSlots ? (
                                 <div className="flex gap-2 flex-wrap">{[...Array(7)].map((_, i) => <div key={i} className="h-10 w-24 bg-muted animate-pulse rounded-lg" />)}</div>
+                              ) : visibleSlots.length === 0 && selectedDate === today ? (
+                                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 text-sm text-amber-800">
+                                  <Clock size={16} className="shrink-0 text-amber-500" />
+                                  <span>No more slots available for today. Please select a future date.</span>
+                                </div>
                               ) : (
                                 <div className="space-y-5">
-                                  <SlotGroup label={`🌅 ${tr("appt.morning", lang)}`} slots={morningSlots} selected={selectedSlot} onSelect={setSelectedSlot} />
+                                  {morningSlots.length > 0 && <SlotGroup label={`🌅 ${tr("appt.morning", lang)}`} slots={morningSlots} selected={selectedSlot} onSelect={setSelectedSlot} />}
                                   {eveningSlots.length > 0 && <SlotGroup label={`🌙 ${tr("appt.evening", lang)}`} slots={eveningSlots} selected={selectedSlot} onSelect={setSelectedSlot} />}
                                 </div>
                               )}
