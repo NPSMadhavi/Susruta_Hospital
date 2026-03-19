@@ -86,7 +86,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
           {/* Logo — pinned to extreme left edge */}
           <a href="#home" onClick={(e) => scrollTo(e, "home")} className="flex-shrink-0 min-w-0">
-            <img src={logoImg} alt="Susruta Hospital" className="h-10 sm:h-12 lg:h-16 w-auto max-w-[160px] sm:max-w-[220px] lg:max-w-none object-contain object-left" />
+            <img src={logoImg} alt="Susruta Hospital" className="h-12 sm:h-14 lg:h-16 w-auto max-w-[240px] sm:max-w-[300px] lg:max-w-none object-contain object-left" />
           </a>
 
           {/* Desktop nav — centred in the remaining space */}
