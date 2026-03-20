@@ -8,46 +8,118 @@ const TARGET_URL = "https://susrutahospital.com";
 
 function playCelebration() {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const now = ctx.currentTime;
 
-  const note = (freq: number, start: number, dur: number, vol = 0.28, type: OscillatorType = "triangle") => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = type;
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0, ctx.currentTime + start);
-    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-    osc.start(ctx.currentTime + start);
-    osc.stop(ctx.currentTime + start + dur + 0.05);
+  // ── Utility: white noise buffer ─────────────────────────────
+  const noise = (dur: number) => {
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    return src;
   };
 
-  const chord = (freqs: number[], start: number, dur: number, vol = 0.18) =>
-    freqs.forEach((f) => note(f, start, dur, vol, "sine"));
+  // ── 1. DRUMROLL (0 → 2.2s): noise through bandpass, gates accelerating ──
+  const drumNoise = noise(2.5);
+  const drumBp = ctx.createBiquadFilter();
+  drumBp.type = "bandpass";
+  drumBp.frequency.value = 190;
+  drumBp.Q.value = 1.2;
+  const drumGain = ctx.createGain();
+  drumGain.gain.value = 0;
+  drumNoise.connect(drumBp);
+  drumBp.connect(drumGain);
+  drumGain.connect(ctx.destination);
+  drumNoise.start(now);
+  drumNoise.stop(now + 2.5);
 
-  // Fanfare: ascending arpeggio C5→E5→G5→C6→E6
-  note(523.25, 0.00, 0.18, 0.32, "triangle");
-  note(659.25, 0.16, 0.18, 0.30, "triangle");
-  note(783.99, 0.30, 0.18, 0.30, "triangle");
-  note(1046.50, 0.44, 0.28, 0.34, "triangle");
-  note(1318.51, 0.68, 0.50, 0.36, "triangle");
+  // Gate: 55 hits, exponentially accelerating like a real drum roll
+  for (let i = 0; i < 55; i++) {
+    const t = now + Math.pow(i / 55, 1.9) * 2.05;
+    const decay = 0.055 - (i / 55) * 0.038; // gets snappier as it speeds up
+    drumGain.gain.setValueAtTime(0, t);
+    drumGain.gain.linearRampToValueAtTime(0.45, t + 0.006);
+    drumGain.gain.exponentialRampToValueAtTime(0.001, t + decay);
+  }
+  // Final BIG hit at end of roll
+  drumGain.gain.setValueAtTime(0.7, now + 2.08);
+  drumGain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
 
-  // Harmony layer under the fanfare
-  note(392.00, 0.00, 0.85, 0.10, "sine");
-  note(523.25, 0.44, 0.60, 0.12, "sine");
+  // ── 2. CROWD APPLAUSE (2.0s → 5.5s): high-pass noise + individual claps ──
+  const clappingNoise = noise(4);
+  const clappingHp = ctx.createBiquadFilter();
+  clappingHp.type = "bandpass";
+  clappingHp.frequency.value = 1400;
+  clappingHp.Q.value = 0.25;
+  const clappingGain = ctx.createGain();
+  clappingNoise.connect(clappingHp);
+  clappingHp.connect(clappingGain);
+  clappingGain.connect(ctx.destination);
+  clappingNoise.start(now + 2.0);
+  clappingNoise.stop(now + 6.0);
+  // Swell in, sustain, fade out
+  clappingGain.gain.setValueAtTime(0, now + 2.0);
+  clappingGain.gain.linearRampToValueAtTime(0.38, now + 2.5);
+  clappingGain.gain.setValueAtTime(0.38, now + 5.0);
+  clappingGain.gain.linearRampToValueAtTime(0, now + 5.8);
 
-  // Final big chord burst at the end
-  chord([523.25, 659.25, 783.99, 1046.50], 1.10, 1.2, 0.14);
+  // Individual hand-clap bursts layered on top of the crowd noise
+  for (let i = 0; i < 38; i++) {
+    const t = now + 2.05 + Math.random() * 3.2;
+    const clapSrc = noise(0.07);
+    const clapFilt = ctx.createBiquadFilter();
+    clapFilt.type = "bandpass";
+    clapFilt.frequency.value = 900 + Math.random() * 900;
+    clapFilt.Q.value = 0.7;
+    const clapGain = ctx.createGain();
+    clapGain.gain.setValueAtTime(0, t);
+    clapGain.gain.linearRampToValueAtTime(0.22, t + 0.005);
+    clapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
+    clapSrc.connect(clapFilt);
+    clapFilt.connect(clapGain);
+    clapGain.connect(ctx.destination);
+    clapSrc.start(t);
+    clapSrc.stop(t + 0.08);
+  }
 
-  // Chime sparkles scattered across the celebration window
-  const chimeFreqs = [1174.66, 1318.51, 1567.98, 1760.00, 2093.00, 1046.50, 1396.91];
-  chimeFreqs.forEach((f, i) => note(f, 1.3 + i * 0.28, 0.35, 0.12, "sine"));
+  // ── 3. CROWD CHEER / "HURRAAYYY" (2.0s → 4.5s) ──────────────────────────
+  // Multiple sawtooth oscillators at voice frequencies, pitch rising = crowd yelling up
+  [160, 230, 310, 390, 470].forEach((baseFreq, i) => {
+    const osc = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.value = 600 + i * 80;
+    const gain = ctx.createGain();
+    osc.connect(filt);
+    filt.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sawtooth";
+    // Rising pitch — sounds like a crowd going "Yeahhhhh!" with pitch going up
+    osc.frequency.setValueAtTime(baseFreq, now + 2.0);
+    osc.frequency.linearRampToValueAtTime(baseFreq * 1.45, now + 3.8);
+    gain.gain.setValueAtTime(0, now + 2.0);
+    gain.gain.linearRampToValueAtTime(0.055 - i * 0.006, now + 2.25);
+    gain.gain.setValueAtTime(0.055 - i * 0.006, now + 3.6);
+    gain.gain.linearRampToValueAtTime(0, now + 4.2);
+    osc.start(now + 2.0);
+    osc.stop(now + 4.5);
+  });
 
-  // Extra bell hits during confetti peaks
-  note(2093.00, 0.45, 0.25, 0.10, "sine");
-  note(2637.02, 0.72, 0.20, 0.08, "sine");
-  note(1760.00, 1.05, 0.30, 0.10, "sine");
+  // ── 4. WHOOSH / excitement swell (0 → 0.5s) overlapping drumroll start ──
+  const whooshNoise = noise(0.6);
+  const whooshFilt = ctx.createBiquadFilter();
+  whooshFilt.type = "highpass";
+  whooshFilt.frequency.value = 1000;
+  const whooshGain = ctx.createGain();
+  whooshNoise.connect(whooshFilt);
+  whooshFilt.connect(whooshGain);
+  whooshGain.connect(ctx.destination);
+  whooshNoise.start(now);
+  whooshNoise.stop(now + 0.6);
+  whooshGain.gain.setValueAtTime(0, now);
+  whooshGain.gain.linearRampToValueAtTime(0.18, now + 0.15);
+  whooshGain.gain.linearRampToValueAtTime(0, now + 0.55);
 }
 
 const FLOWERS = ["🌸", "🌺", "🌼", "🪷", "🌹", "🌻", "💐", "🌷"];
