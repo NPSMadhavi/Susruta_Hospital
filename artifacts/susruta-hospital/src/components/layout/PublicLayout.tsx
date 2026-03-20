@@ -2,7 +2,7 @@ import React from "react";
 import { useLanguage } from "@/store/use-language";
 import { t as tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { Menu, X, Phone, Clock, MapPin, Globe, ChevronDown } from "lucide-react";
+import { Menu, X, Phone, Clock, MapPin } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
@@ -135,37 +135,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          {/* Right side: language dropdown + Book CTA */}
+          {/* Right side: Book CTA */}
           <div className="hidden lg:flex items-center gap-3 ml-auto flex-shrink-0">
-
-            {/* Language dropdown */}
-            <div className="relative" ref={langDropRef}>
-              <button
-                onClick={() => setLangDropOpen(!langDropOpen)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-foreground/60 hover:bg-muted hover:text-primary transition-colors"
-              >
-                <Globe size={14} />
-                <span>{lang === "en" ? "English" : "తెలుగు"}</span>
-                <ChevronDown size={12} className={cn("transition-transform duration-200", langDropOpen && "rotate-180")} />
-              </button>
-
-              {langDropOpen && (
-                <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-border py-1 w-36 z-50">
-                  <button onClick={() => setLang("en")}
-                    className={cn("w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
-                      lang === "en" ? "text-primary font-semibold" : "text-foreground/70")}
-                  >
-                    🇬🇧 English
-                  </button>
-                  <button onClick={() => setLang("te")}
-                    className={cn("w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted flex items-center gap-2",
-                      lang === "te" ? "text-primary font-semibold" : "text-foreground/70")}
-                  >
-                    🇮🇳 తెలుగు
-                  </button>
-                </div>
-              )}
-            </div>
 
             {/* Book Appointment button */}
             <button
@@ -201,18 +172,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 {link.label}
               </a>
             ))}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => { if (lang !== "en") toggleLanguage(); setIsMobileMenuOpen(false); }}
-                className={cn("flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors",
-                  lang === "en" ? "bg-primary text-white border-primary" : "border-border text-foreground/65")}
-              >🇬🇧 English</button>
-              <button
-                onClick={() => { if (lang !== "te") toggleLanguage(); setIsMobileMenuOpen(false); }}
-                className={cn("flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors",
-                  lang === "te" ? "bg-primary text-white border-primary" : "border-border text-foreground/65")}
-              >🇮🇳 తెలుగు</button>
-            </div>
             <button
               onClick={handleBookClick}
               className="mt-2 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center w-full"
