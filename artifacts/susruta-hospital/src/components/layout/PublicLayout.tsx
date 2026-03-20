@@ -202,9 +202,27 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         />
 
         <div className="w-full px-4 sm:px-8 lg:px-14 grid grid-cols-1 md:grid-cols-3 gap-10 relative z-10">
-          <div>
-            <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert mb-4" />
-            <p className="text-sm leading-relaxed text-white/50">{tr("footer.desc", lang)}</p>
+          <div className="space-y-5">
+            <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert" />
+            <p className="text-sm leading-relaxed text-white/50">
+              Rooted in the ancient wisdom of Ayurveda, Susruta Hospital brings authentic classical
+              treatments to Tirupati under the expert guidance of Dr. P. Murali Krishna — a
+              distinguished Gold Medalist physician and former Principal of S.V. Ayurvedic College,
+              T.T. Devasthanams.
+            </p>
+            <div className="space-y-2 pt-1">
+              {[
+                "B.A.M.S. (Gold Medalist) · M.D. · Ph.D.",
+                "Fellow — Rashtriya Ayurveda Vidyapeeth",
+                "Governing Body Member, CCRAS New Delhi",
+                "30+ Years of Clinical Excellence",
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs text-white/40">
+                  <span className="mt-1.5 w-1 h-1 rounded-full bg-green-400/50 flex-shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div>
             <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
