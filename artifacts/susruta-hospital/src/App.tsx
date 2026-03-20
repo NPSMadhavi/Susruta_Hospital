@@ -20,6 +20,7 @@ import AdminSettings from "./pages/admin/settings";
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
 import PatientDashboard from "./pages/portal/dashboard";
+import PortalBook from "./pages/portal/book";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,7 @@ function Router() {
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />
       <Route path="/portal/dashboard" component={PatientDashboard} />
+      <Route path="/portal/book" component={PortalBook} />
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />

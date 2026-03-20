@@ -198,7 +198,7 @@ export default function PatientDashboard() {
             <h1 className="text-xl font-serif font-bold">Welcome back, {patient?.name?.split(" ")[0]}!</h1>
             <p className="text-white/60 text-sm mt-1">Manage your Ayurvedic care journey</p>
           </div>
-          <button onClick={() => navigate("/appointments")}
+          <button onClick={() => navigate("/portal/book")}
             className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
             <Plus size={15} /> Book
           </button>
@@ -257,7 +257,7 @@ export default function PatientDashboard() {
               <Calendar size={36} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">No {tab} appointments</p>
               {tab === "upcoming" && (
-                <button onClick={() => navigate("/appointments")}
+                <button onClick={() => navigate("/portal/book")}
                   className="mt-4 text-sm text-primary font-semibold hover:underline flex items-center gap-1 mx-auto">
                   <Plus size={14} /> Book your first appointment
                 </button>

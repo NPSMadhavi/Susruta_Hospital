@@ -6,122 +6,6 @@ const COUNTDOWN = 10;
 const SESSION_KEY = "susruta_launched";
 const TARGET_URL = "https://susrutahospital.com";
 
-function playCelebration() {
-  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const now = ctx.currentTime;
-
-  // ── Utility: white noise buffer ─────────────────────────────
-  const noise = (dur: number) => {
-    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    return src;
-  };
-
-  // ── 1. DRUMROLL (0 → 2.2s): noise through bandpass, gates accelerating ──
-  const drumNoise = noise(2.5);
-  const drumBp = ctx.createBiquadFilter();
-  drumBp.type = "bandpass";
-  drumBp.frequency.value = 190;
-  drumBp.Q.value = 1.2;
-  const drumGain = ctx.createGain();
-  drumGain.gain.value = 0;
-  drumNoise.connect(drumBp);
-  drumBp.connect(drumGain);
-  drumGain.connect(ctx.destination);
-  drumNoise.start(now);
-  drumNoise.stop(now + 2.5);
-
-  // Gate: 55 hits, exponentially accelerating like a real drum roll
-  for (let i = 0; i < 55; i++) {
-    const t = now + Math.pow(i / 55, 1.9) * 2.05;
-    const decay = 0.055 - (i / 55) * 0.038; // gets snappier as it speeds up
-    drumGain.gain.setValueAtTime(0, t);
-    drumGain.gain.linearRampToValueAtTime(0.45, t + 0.006);
-    drumGain.gain.exponentialRampToValueAtTime(0.001, t + decay);
-  }
-  // Final BIG hit at end of roll
-  drumGain.gain.setValueAtTime(0.7, now + 2.08);
-  drumGain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
-
-  // ── 2. CROWD APPLAUSE (2.0s → 5.5s): high-pass noise + individual claps ──
-  const clappingNoise = noise(4);
-  const clappingHp = ctx.createBiquadFilter();
-  clappingHp.type = "bandpass";
-  clappingHp.frequency.value = 1400;
-  clappingHp.Q.value = 0.25;
-  const clappingGain = ctx.createGain();
-  clappingNoise.connect(clappingHp);
-  clappingHp.connect(clappingGain);
-  clappingGain.connect(ctx.destination);
-  clappingNoise.start(now + 2.0);
-  clappingNoise.stop(now + 6.0);
-  // Swell in, sustain, fade out
-  clappingGain.gain.setValueAtTime(0, now + 2.0);
-  clappingGain.gain.linearRampToValueAtTime(0.38, now + 2.5);
-  clappingGain.gain.setValueAtTime(0.38, now + 5.0);
-  clappingGain.gain.linearRampToValueAtTime(0, now + 5.8);
-
-  // Individual hand-clap bursts layered on top of the crowd noise
-  for (let i = 0; i < 38; i++) {
-    const t = now + 2.05 + Math.random() * 3.2;
-    const clapSrc = noise(0.07);
-    const clapFilt = ctx.createBiquadFilter();
-    clapFilt.type = "bandpass";
-    clapFilt.frequency.value = 900 + Math.random() * 900;
-    clapFilt.Q.value = 0.7;
-    const clapGain = ctx.createGain();
-    clapGain.gain.setValueAtTime(0, t);
-    clapGain.gain.linearRampToValueAtTime(0.22, t + 0.005);
-    clapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
-    clapSrc.connect(clapFilt);
-    clapFilt.connect(clapGain);
-    clapGain.connect(ctx.destination);
-    clapSrc.start(t);
-    clapSrc.stop(t + 0.08);
-  }
-
-  // ── 3. CROWD CHEER / "HURRAAYYY" (2.0s → 4.5s) ──────────────────────────
-  // Multiple sawtooth oscillators at voice frequencies, pitch rising = crowd yelling up
-  [160, 230, 310, 390, 470].forEach((baseFreq, i) => {
-    const osc = ctx.createOscillator();
-    const filt = ctx.createBiquadFilter();
-    filt.type = "lowpass";
-    filt.frequency.value = 600 + i * 80;
-    const gain = ctx.createGain();
-    osc.connect(filt);
-    filt.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = "sawtooth";
-    // Rising pitch — sounds like a crowd going "Yeahhhhh!" with pitch going up
-    osc.frequency.setValueAtTime(baseFreq, now + 2.0);
-    osc.frequency.linearRampToValueAtTime(baseFreq * 1.45, now + 3.8);
-    gain.gain.setValueAtTime(0, now + 2.0);
-    gain.gain.linearRampToValueAtTime(0.055 - i * 0.006, now + 2.25);
-    gain.gain.setValueAtTime(0.055 - i * 0.006, now + 3.6);
-    gain.gain.linearRampToValueAtTime(0, now + 4.2);
-    osc.start(now + 2.0);
-    osc.stop(now + 4.5);
-  });
-
-  // ── 4. WHOOSH / excitement swell (0 → 0.5s) overlapping drumroll start ──
-  const whooshNoise = noise(0.6);
-  const whooshFilt = ctx.createBiquadFilter();
-  whooshFilt.type = "highpass";
-  whooshFilt.frequency.value = 1000;
-  const whooshGain = ctx.createGain();
-  whooshNoise.connect(whooshFilt);
-  whooshFilt.connect(whooshGain);
-  whooshGain.connect(ctx.destination);
-  whooshNoise.start(now);
-  whooshNoise.stop(now + 0.6);
-  whooshGain.gain.setValueAtTime(0, now);
-  whooshGain.gain.linearRampToValueAtTime(0.18, now + 0.15);
-  whooshGain.gain.linearRampToValueAtTime(0, now + 0.55);
-}
-
 const FLOWERS = ["🌸", "🌺", "🌼", "🪷", "🌹", "🌻", "💐", "🌷"];
 
 interface Petal {
@@ -163,10 +47,7 @@ export default function Launch() {
 
   useEffect(() => {
     if (phase !== "countdown") return;
-    if (count <= 0) {
-      setPhase("button");
-      return;
-    }
+    if (count <= 0) { setPhase("button"); return; }
     const t = setTimeout(() => setCount((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [count, phase]);
@@ -176,7 +57,6 @@ export default function Launch() {
     setPhase("celebrate");
     setPetals(makePetals(70));
     sessionStorage.setItem(SESSION_KEY, "true");
-    playCelebration();
 
     if (!canvasRef.current) return;
     const fire = confetti.create(canvasRef.current, { resize: true, useWorker: true });
@@ -203,11 +83,11 @@ export default function Launch() {
       <style>{`
         @keyframes petalFall {
           0%   { transform: translateY(-80px) translateX(0) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(110vh) translateX(var(--drift)) rotate(var(--rotate)); opacity: 0.5; }
+          100% { transform: translateY(110vh) translateX(var(--drift)) rotate(var(--rotate)); opacity: 0.4; }
         }
         @keyframes pulseGlow {
-          0%, 100% { box-shadow: 0 0 24px rgba(212,175,55,0.5), 0 0 60px rgba(212,175,55,0.2); transform: scale(1); }
-          50%       { box-shadow: 0 0 48px rgba(212,175,55,0.9), 0 0 100px rgba(212,175,55,0.4); transform: scale(1.03); }
+          0%, 100% { box-shadow: 0 0 24px rgba(212,175,55,0.4), 0 0 60px rgba(212,175,55,0.15); transform: scale(1); }
+          50%       { box-shadow: 0 0 48px rgba(212,175,55,0.8), 0 0 100px rgba(212,175,55,0.3); transform: scale(1.03); }
         }
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(28px); }
@@ -219,20 +99,20 @@ export default function Launch() {
           100% { transform: scale(1);   opacity: 1; }
         }
         @keyframes shimmer {
-          0%   { opacity: 0.3; }
-          50%  { opacity: 0.7; }
-          100% { opacity: 0.3; }
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.75; }
+          100% { opacity: 0.4; }
         }
         @keyframes ringPulse {
-          0%, 100% { opacity: 0.15; transform: scale(1); }
-          50%      { opacity: 0.35; transform: scale(1.06); }
+          0%, 100% { opacity: 0.12; transform: scale(1); }
+          50%      { opacity: 0.28; transform: scale(1.05); }
         }
       `}</style>
 
       <div
         style={{
           position: "fixed", inset: 0,
-          background: "radial-gradient(ellipse at center, #1e3a1a 0%, #162814 50%, #0d1a0b 100%)",
+          background: "radial-gradient(ellipse at center, #fffef8 0%, #f8f3e6 55%, #f0e9d4 100%)",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
           zIndex: 9999, overflow: "hidden",
@@ -279,7 +159,7 @@ export default function Launch() {
               position: "absolute",
               width: size, height: size,
               borderRadius: "50%",
-              border: "1px solid rgba(212,175,55,0.15)",
+              border: "1px solid rgba(212,175,55,0.25)",
               animationName: "ringPulse",
               animationDuration: `${3 + i}s`,
               animationDelay: `${i * 0.6}s`,
@@ -290,16 +170,16 @@ export default function Launch() {
           />
         ))}
 
-        {/* Logo */}
+        {/* Logo — original colours */}
         <div style={{ marginBottom: 44, position: "relative", zIndex: 5 }}>
-          <img src={logoImg} alt="Susruta Hospital" style={{ height: 68, filter: "brightness(0) invert(1)", opacity: 0.95 }} />
+          <img src={logoImg} alt="Susruta Hospital" style={{ height: 72, objectFit: "contain" }} />
         </div>
 
         {/* Countdown ring */}
         {phase === "countdown" && (
           <div style={{ position: "relative", width: 168, height: 168, marginBottom: 36, zIndex: 5 }}>
             <svg width="168" height="168" style={{ transform: "rotate(-90deg)" }}>
-              <circle cx="84" cy="84" r={radius} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
+              <circle cx="84" cy="84" r={radius} fill="none" stroke="rgba(22,40,20,0.08)" strokeWidth="9" />
               <circle
                 cx="84" cy="84" r={radius}
                 fill="none"
@@ -322,10 +202,10 @@ export default function Launch() {
                 animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             >
-              <span style={{ fontSize: 58, fontWeight: 800, color: "#D4AF37", lineHeight: 1, fontFamily: "'Georgia', serif" }}>
+              <span style={{ fontSize: 58, fontWeight: 800, color: "#162814", lineHeight: 1, fontFamily: "'Georgia', serif" }}>
                 {count}
               </span>
-              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 6, letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: "sans-serif" }}>
+              <span style={{ fontSize: 10, color: "rgba(22,40,20,0.4)", marginTop: 6, letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: "sans-serif" }}>
                 seconds
               </span>
             </div>
@@ -368,7 +248,7 @@ export default function Launch() {
           style={{
             position: "relative", zIndex: 5,
             marginTop: phase === "countdown" ? 28 : 36,
-            color: "rgba(255,255,255,0.25)",
+            color: "rgba(22,40,20,0.4)",
             fontSize: 12,
             letterSpacing: "0.22em",
             textTransform: "uppercase",
