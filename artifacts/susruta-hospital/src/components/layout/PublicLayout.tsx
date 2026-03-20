@@ -193,7 +193,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col">{children}</main>
 
       {/* ── Footer ── */}
-      <footer className="relative bg-[#162814] text-white/80 py-14 overflow-hidden">
+      <footer className="relative bg-[#162814] text-white/80 pt-14 pb-6 overflow-hidden">
 
         <img
           src="/ayurveda-herbs.png" alt="" aria-hidden="true"
