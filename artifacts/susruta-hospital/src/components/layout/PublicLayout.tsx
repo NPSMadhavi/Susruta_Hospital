@@ -260,10 +260,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="w-full px-4 sm:px-8 lg:px-14 mt-10 pt-6 border-t border-white/10 text-center text-sm text-white/40 relative z-10 space-y-1.5">
-          <p>© {new Date().getFullYear()} Susruta Hospital, Tirupati. All rights reserved.</p>
+        <div className="w-full px-4 sm:px-8 lg:px-14 mt-10 pt-6 border-t border-white/10 text-center text-base text-white/40 relative z-10">
           <p>
-            Designed with Gratitude from{" "}
+            © {new Date().getFullYear()} Susruta Hospital, Tirupati. All rights reserved. &nbsp;·&nbsp; Designed with Gratitude from{" "}
             <a href="https://myrsv.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white underline underline-offset-2 transition-colors">
               RSV Infotech Pte. Ltd.
             </a>
