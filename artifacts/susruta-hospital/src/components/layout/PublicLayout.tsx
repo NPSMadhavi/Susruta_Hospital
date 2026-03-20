@@ -224,17 +224,19 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               ))}
             </div>
           </div>
-          <div>
-            <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
-            <ul className="space-y-2 text-sm">
-              {navLinks.map((link) => (
-                <li key={link.id}>
-                  <a href={link.href} onClick={(e) => scrollTo(e, link.id)} className="hover:text-white transition-colors">
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
+          <div className="flex flex-col items-center">
+            <div>
+              <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
+              <ul className="space-y-2 text-sm">
+                {navLinks.map((link) => (
+                  <li key={link.id}>
+                    <a href={link.href} onClick={(e) => scrollTo(e, link.id)} className="hover:text-white transition-colors">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
           <div>
             <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.contact", lang)}</h3>
