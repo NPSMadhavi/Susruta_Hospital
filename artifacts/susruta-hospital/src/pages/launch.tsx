@@ -6,6 +6,50 @@ const COUNTDOWN = 10;
 const SESSION_KEY = "susruta_launched";
 const TARGET_URL = "https://susrutahospital.com";
 
+function playCelebration() {
+  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+  const note = (freq: number, start: number, dur: number, vol = 0.28, type: OscillatorType = "triangle") => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, ctx.currentTime + start);
+    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+    osc.start(ctx.currentTime + start);
+    osc.stop(ctx.currentTime + start + dur + 0.05);
+  };
+
+  const chord = (freqs: number[], start: number, dur: number, vol = 0.18) =>
+    freqs.forEach((f) => note(f, start, dur, vol, "sine"));
+
+  // Fanfare: ascending arpeggio C5→E5→G5→C6→E6
+  note(523.25, 0.00, 0.18, 0.32, "triangle");
+  note(659.25, 0.16, 0.18, 0.30, "triangle");
+  note(783.99, 0.30, 0.18, 0.30, "triangle");
+  note(1046.50, 0.44, 0.28, 0.34, "triangle");
+  note(1318.51, 0.68, 0.50, 0.36, "triangle");
+
+  // Harmony layer under the fanfare
+  note(392.00, 0.00, 0.85, 0.10, "sine");
+  note(523.25, 0.44, 0.60, 0.12, "sine");
+
+  // Final big chord burst at the end
+  chord([523.25, 659.25, 783.99, 1046.50], 1.10, 1.2, 0.14);
+
+  // Chime sparkles scattered across the celebration window
+  const chimeFreqs = [1174.66, 1318.51, 1567.98, 1760.00, 2093.00, 1046.50, 1396.91];
+  chimeFreqs.forEach((f, i) => note(f, 1.3 + i * 0.28, 0.35, 0.12, "sine"));
+
+  // Extra bell hits during confetti peaks
+  note(2093.00, 0.45, 0.25, 0.10, "sine");
+  note(2637.02, 0.72, 0.20, 0.08, "sine");
+  note(1760.00, 1.05, 0.30, 0.10, "sine");
+}
+
 const FLOWERS = ["🌸", "🌺", "🌼", "🪷", "🌹", "🌻", "💐", "🌷"];
 
 interface Petal {
@@ -60,6 +104,7 @@ export default function Launch() {
     setPhase("celebrate");
     setPetals(makePetals(70));
     sessionStorage.setItem(SESSION_KEY, "true");
+    playCelebration();
 
     if (!canvasRef.current) return;
     const fire = confetti.create(canvasRef.current, { resize: true, useWorker: true });
