@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 // Single public page
 import Home from "./pages/home";
 import Appointments from "./pages/appointments";
+import Launch from "./pages/launch";
 
 // Admin Pages
 import AdminLogin from "./pages/admin/login";
@@ -35,6 +36,7 @@ function Router() {
       {/* Single-page public website */}
       <Route path="/" component={Home} />
       <Route path="/appointments" component={Appointments} />
+      <Route path="/launch" component={Launch} />
 
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />
