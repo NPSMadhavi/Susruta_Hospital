@@ -441,15 +441,15 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
             })}
           </div>
         </div>
-        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 items-stretch">
           {[
             { num: "5",    en: "CME Programs Organized",      te: "CME కార్యక్రమాలు నిర్వహించారు" },
             { num: "25+",  en: "Scientific Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
             { num: "6",    en: "Countries Visited",           te: "సందర్శించిన దేశాలు" },
             { num: "200+", en: "Health Lectures (SVETA)",     te: "ఆరోగ్య ఉపన్యాసాలు (SVETA)" },
           ].map((s, i) => (
-            <Reveal key={i} delay={i * 0.08}>
-              <div className="bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm">
+            <Reveal key={i} delay={i * 0.08} className="h-full">
+              <div className="h-full bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm flex flex-col items-center justify-center">
                 <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
                 <div className="text-sm font-semibold text-muted-foreground">{s[lang]}</div>
               </div>
