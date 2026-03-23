@@ -177,11 +177,35 @@ export function SubscribePopup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStorage.getItem(STORAGE_KEY)) return;
     const t = setTimeout(() => setVisible(true), 2500);
     return () => clearTimeout(t);
+  }, []);
+
+  // Auto-detect visitor country via IP geolocation
+  useEffect(() => {
+    const cached = sessionStorage.getItem("susruta_detected_country");
+    if (cached) {
+      setDetectedCountry(cached);
+      setForm((f) => ({ ...f, country: cached }));
+      return;
+    }
+    fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
+      .then((r) => r.json())
+      .then((data: { country_name?: string }) => {
+        const name = data.country_name ?? "";
+        const match = COUNTRIES.find(
+          (c) => c.name.toLowerCase() === name.toLowerCase()
+        );
+        const resolved = match?.name ?? "India";
+        sessionStorage.setItem("susruta_detected_country", resolved);
+        setDetectedCountry(resolved);
+        setForm((f) => ({ ...f, country: resolved }));
+      })
+      .catch(() => {});
   }, []);
 
   function dismiss() {
@@ -313,10 +337,17 @@ export function SubscribePopup() {
                       className={inputCls}
                     />
 
-                    <CountryDropdown
-                      value={form.country}
-                      onChange={(v) => setForm((f) => ({ ...f, country: v }))}
-                    />
+                    <div>
+                      <CountryDropdown
+                        value={form.country}
+                        onChange={(v) => setForm((f) => ({ ...f, country: v }))}
+                      />
+                      {detectedCountry && form.country === detectedCountry && (
+                        <p className="text-[10px] text-muted-foreground/60 mt-1 pl-1 flex items-center gap-1">
+                          <span>📍</span> Auto-detected from your location
+                        </p>
+                      )}
+                    </div>
 
                     {error && (
                       <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
