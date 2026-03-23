@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Users, Upload, Download, Trash2, RefreshCw, AlertCircle, CheckCircle2, FileSpreadsheet, Send, X, Loader2, Mail } from "lucide-react";
+import {
+  Users, Upload, Download, Trash2, RefreshCw, AlertCircle,
+  CheckCircle2, FileSpreadsheet, Send, X, Loader2, Mail, Bell, BellOff,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -14,7 +17,6 @@ function apiFetch(path: string, opts: RequestInit = {}) {
   );
 }
 
-// ── Simple rich text → HTML helper (newlines → <br>) ─────────
 function textToHtml(text: string) {
   return text
     .split("\n")
@@ -23,21 +25,184 @@ function textToHtml(text: string) {
     .join("");
 }
 
+// ── Notification hook (same pattern as admin appointments) ────
+function useNotifications() {
+  const [permission, setPermission] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+  const permRef = useRef(permission);
+  useEffect(() => { permRef.current = permission; }, [permission]);
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  function getAudioCtx(): AudioContext | null {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return null;
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+      return audioCtxRef.current;
+    } catch { return null; }
+  }
+
+  useEffect(() => {
+    const warmUp = () => { getAudioCtx()?.resume().catch(() => {}); };
+    document.addEventListener("click", warmUp, { once: true });
+    return () => document.removeEventListener("click", warmUp);
+  }, []);
+
+  function playSound() {
+    try {
+      const ctx = getAudioCtx();
+      if (!ctx) return;
+      ctx.resume().then(() => {
+        // Pleasant three-tone ascending chime (different from appointment beep)
+        [[660, 0, 0.12], [880, 0.15, 0.12], [1100, 0.30, 0.18]].forEach(([freq, start, dur]) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, ctx.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur + 0.05);
+        });
+      });
+    } catch {}
+  }
+
+  async function requestPermission() {
+    if (typeof Notification === "undefined") return;
+    getAudioCtx()?.resume().catch(() => {});
+    const perm = await Notification.requestPermission();
+    setPermission(perm);
+    permRef.current = perm;
+    return perm;
+  }
+
+  function notify(title: string, body: string) {
+    playSound();
+    if (permRef.current === "granted") {
+      try { new Notification(title, { body, icon: "/favicon.png" }); } catch {}
+    }
+  }
+
+  return { permission, requestPermission, notify };
+}
+
+// ── Broadcast Modal ───────────────────────────────────────────
+function BroadcastModal({ count, onClose }: { count: number; onClose: () => void }) {
+  const [bSubject, setBSubject] = useState("");
+  const [bBody, setBBody] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [result, setResult] = useState<{ sent: number; failed: number; total: number; errors: string[] } | null>(null);
+  const [error, setError] = useState("");
+
+  async function send() {
+    if (!bSubject.trim() || !bBody.trim()) return;
+    setBroadcasting(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/subscribers/broadcast`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: bSubject, bodyHtml: textToHtml(bBody) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Broadcast failed.");
+      setResult(data);
+    } catch (err: any) {
+      setError(err.message || "Broadcast failed.");
+    } finally {
+      setBroadcasting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="bg-[#1a3d2b] px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Mail size={18} className="text-[#D4AF37]" />
+            <div>
+              <h2 className="text-white font-bold text-base">Send Update to All Subscribers</h2>
+              <p className="text-white/60 text-xs mt-0.5">{count} recipient{count !== 1 ? "s" : ""} · from updates@susrutahospital.com</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/50 hover:text-white p-1 rounded-lg hover:bg-white/10">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {result ? (
+            <div className="text-center py-4">
+              <div className={cn("w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3", result.failed === 0 ? "bg-green-100" : "bg-amber-100")}>
+                {result.failed === 0 ? <CheckCircle2 size={28} className="text-green-600" /> : <AlertCircle size={28} className="text-amber-600" />}
+              </div>
+              <h3 className="font-bold text-lg text-foreground mb-1">{result.failed === 0 ? "Emails sent!" : "Partially sent"}</h3>
+              <p className="text-muted-foreground text-sm">
+                {result.sent} of {result.total} emails delivered.{result.failed > 0 && ` ${result.failed} failed.`}
+              </p>
+              {result.errors.length > 0 && (
+                <div className="mt-3 text-left bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <ul className="text-xs text-amber-700 space-y-0.5">{result.errors.map((e, i) => <li key={i}>• {e}</li>)}</ul>
+                </div>
+              )}
+              <button onClick={onClose} className="mt-4 px-6 py-2 bg-[#1a3d2b] text-white text-sm font-bold rounded-xl">Done</button>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Subject</label>
+                <input type="text" value={bSubject} onChange={(e) => setBSubject(e.target.value)}
+                  placeholder="e.g., New appointment slots now open for April"
+                  className="w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Message</label>
+                <textarea value={bBody} onChange={(e) => setBBody(e.target.value)} rows={7}
+                  placeholder={"Dear subscriber,\n\nWe are pleased to inform you that...\n\nWarm regards,\nSusruta Hospital Team"}
+                  className="w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] resize-none" />
+                <p className="text-[11px] text-muted-foreground mt-1">Each paragraph becomes a separate block in the branded email.</p>
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
+                  <AlertCircle size={14} /> {error}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={onClose}
+                  className="flex-1 px-4 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition-colors">
+                  Cancel
+                </button>
+                <button type="button" onClick={send} disabled={broadcasting || !bSubject.trim() || !bBody.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3d2b] text-white text-sm font-bold rounded-xl hover:bg-[#1a3d2b]/90 disabled:opacity-60">
+                  {broadcasting ? <><Loader2 size={14} className="animate-spin" /> Sending…</> : <><Send size={14} /> Send to {count}</>}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────
 export default function AdminSubscribers() {
   const [subs, setSubs] = useState<Sub[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [importError, setImportError] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // Broadcast modal
   const [showBroadcast, setShowBroadcast] = useState(false);
-  const [bSubject, setBSubject] = useState("");
-  const [bBody, setBBody] = useState("");
-  const [broadcasting, setBroadcasting] = useState(false);
-  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number; errors: string[] } | null>(null);
-  const [broadcastError, setBroadcastError] = useState("");
+  const [newSubFlash, setNewSubFlash] = useState<number | null>(null); // highlights newly arrived row
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { permission, requestPermission, notify } = useNotifications();
 
   async function fetchSubs() {
     setLoading(true);
@@ -50,6 +215,47 @@ export default function AdminSubscribers() {
   }
 
   useEffect(() => { fetchSubs(); }, []);
+
+  // ── SSE: real-time subscriber notifications ───────────────
+  useEffect(() => {
+    let es: EventSource;
+    let pollTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      es = new EventSource(`${API}/subscribers/notifications`, { withCredentials: true });
+
+      es.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "new_subscriber" && msg.subscriber) {
+            const sub: Sub = msg.subscriber;
+            setSubs((prev) => {
+              if (prev.some((s) => s.id === sub.id)) return prev;
+              return [sub, ...prev];
+            });
+            setNewSubFlash(sub.id);
+            setTimeout(() => setNewSubFlash(null), 4000);
+            notify(
+              "🌿 New Subscriber!",
+              `${sub.name}${sub.country ? ` · ${sub.country}` : ""} just subscribed.`
+            );
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        es.close();
+        // Fallback: poll every 30 s
+        pollTimer = setTimeout(() => {
+          fetchSubs();
+          connect();
+        }, 30000);
+      };
+    }
+
+    connect();
+    return () => { es?.close(); clearTimeout(pollTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function deleteSub(id: number, name: string) {
     if (!confirm(`Remove ${name} from subscribers?`)) return;
@@ -67,18 +273,10 @@ export default function AdminSubscribers() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`${API}/subscribers/import`, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
-      });
+      const res = await fetch(`${API}/subscribers/import`, { method: "POST", credentials: "include", body: fd });
       const data = await res.json();
-      if (!res.ok) {
-        setImportError(data.message || "Import failed.");
-      } else {
-        setImportResult(data);
-        await fetchSubs();
-      }
+      if (!res.ok) setImportError(data.message || "Import failed.");
+      else { setImportResult(data); await fetchSubs(); }
     } catch {
       setImportError("Upload failed. Please try again.");
     } finally {
@@ -91,8 +289,7 @@ export default function AdminSubscribers() {
     const rows = subs.map((s) =>
       [s.name, s.phone, s.email, s.country ?? "", new Date(s.subscribedAt).toLocaleString("en-IN")].map((v) => `"${v}"`).join(",")
     );
-    const csv = [header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -101,142 +298,11 @@ export default function AdminSubscribers() {
     URL.revokeObjectURL(url);
   }
 
-  async function sendBroadcast() {
-    if (!bSubject.trim() || !bBody.trim()) return;
-    setBroadcasting(true);
-    setBroadcastResult(null);
-    setBroadcastError("");
-    try {
-      const res = await fetch(`${API}/subscribers/broadcast`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: bSubject, bodyHtml: textToHtml(bBody) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Broadcast failed.");
-      setBroadcastResult(data);
-    } catch (err: any) {
-      setBroadcastError(err.message || "Broadcast failed.");
-    } finally {
-      setBroadcasting(false);
-    }
-  }
-
-  function closeBroadcast() {
-    setShowBroadcast(false);
-    setBSubject("");
-    setBBody("");
-    setBroadcastResult(null);
-    setBroadcastError("");
-  }
-
   return (
     <AdminLayout>
-      {/* ── Broadcast Modal ── */}
-      {showBroadcast && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="bg-[#1a3d2b] px-6 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Mail size={18} className="text-[#D4AF37]" />
-                <div>
-                  <h2 className="text-white font-bold text-base">Send Update to All Subscribers</h2>
-                  <p className="text-white/60 text-xs mt-0.5">{subs.length} recipient{subs.length !== 1 ? "s" : ""} · from updates@susrutahospital.com</p>
-                </div>
-              </div>
-              <button onClick={closeBroadcast} className="text-white/50 hover:text-white p-1 rounded-lg hover:bg-white/10">
-                <X size={18} />
-              </button>
-            </div>
+      {showBroadcast && <BroadcastModal count={subs.length} onClose={() => setShowBroadcast(false)} />}
 
-            <div className="p-6 space-y-4">
-              {broadcastResult ? (
-                <div className="text-center py-4">
-                  <div className={cn(
-                    "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3",
-                    broadcastResult.failed === 0 ? "bg-green-100" : "bg-amber-100"
-                  )}>
-                    {broadcastResult.failed === 0
-                      ? <CheckCircle2 size={28} className="text-green-600" />
-                      : <AlertCircle size={28} className="text-amber-600" />}
-                  </div>
-                  <h3 className="font-bold text-lg text-foreground mb-1">
-                    {broadcastResult.failed === 0 ? "Emails sent!" : "Partially sent"}
-                  </h3>
-                  <p className="text-muted-foreground text-sm">
-                    {broadcastResult.sent} of {broadcastResult.total} emails delivered successfully.
-                    {broadcastResult.failed > 0 && ` ${broadcastResult.failed} failed.`}
-                  </p>
-                  {broadcastResult.errors.length > 0 && (
-                    <div className="mt-3 text-left bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <p className="text-xs font-semibold text-amber-700 mb-1">Failed deliveries:</p>
-                      <ul className="text-xs text-amber-700 space-y-0.5">
-                        {broadcastResult.errors.map((e, i) => <li key={i}>• {e}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  <button onClick={closeBroadcast} className="mt-4 px-6 py-2 bg-[#1a3d2b] text-white text-sm font-bold rounded-xl">
-                    Done
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Subject</label>
-                    <input
-                      type="text"
-                      value={bSubject}
-                      onChange={(e) => setBSubject(e.target.value)}
-                      placeholder="e.g., New appointment slots now open for April"
-                      className="w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Message</label>
-                    <textarea
-                      value={bBody}
-                      onChange={(e) => setBBody(e.target.value)}
-                      rows={7}
-                      placeholder={"Dear {{name}},\n\nWe are pleased to inform you that...\n\nWarm regards,\nSusruta Hospital Team"}
-                      className="w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all resize-none"
-                    />
-                    <p className="text-[11px] text-muted-foreground mt-1">Each paragraph becomes a separate block. The email will be sent with your Susruta Hospital branding.</p>
-                  </div>
-
-                  {broadcastError && (
-                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
-                      <AlertCircle size={14} /> {broadcastError}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={closeBroadcast}
-                      className="flex-1 px-4 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={sendBroadcast}
-                      disabled={broadcasting || !bSubject.trim() || !bBody.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3d2b] text-white text-sm font-bold rounded-xl hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60"
-                    >
-                      {broadcasting
-                        ? <><Loader2 size={14} className="animate-spin" /> Sending…</>
-                        : <><Send size={14} /> Send to {subs.length} subscriber{subs.length !== 1 ? "s" : ""}</>}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Page Header ── */}
+      {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Subscribers</h1>
@@ -245,8 +311,19 @@ export default function AdminSubscribers() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={fetchSubs}
-            className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors">
+          {/* Browser notification permission toggle */}
+          {permission !== "granted" ? (
+            <button onClick={requestPermission}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors">
+              <Bell size={13} /> Enable Notifications
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-medium border border-green-200">
+              <Bell size={13} /> Notifications On
+            </div>
+          )}
+
+          <button onClick={fetchSubs} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors">
             <RefreshCw size={15} />
           </button>
           {subs.length > 0 && (
@@ -261,9 +338,8 @@ export default function AdminSubscribers() {
               </button>
             </>
           )}
-          <button onClick={() => fileRef.current?.click()}
-            disabled={importing}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1a3d2b] text-white text-sm font-bold hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60">
+          <button onClick={() => fileRef.current?.click()} disabled={importing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1a3d2b] text-white text-sm font-bold hover:bg-[#1a3d2b]/90 disabled:opacity-60">
             {importing
               ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing…</>
               : <><Upload size={14} /> Import Excel</>}
@@ -274,22 +350,15 @@ export default function AdminSubscribers() {
 
       {/* ── Import result ── */}
       {importResult && (
-        <div className={cn(
-          "rounded-2xl border p-4 mb-6 flex items-start gap-3",
-          importResult.skipped > 0 ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200"
-        )}>
+        <div className={cn("rounded-2xl border p-4 mb-6 flex items-start gap-3", importResult.skipped > 0 ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200")}>
           <CheckCircle2 size={18} className={importResult.skipped > 0 ? "text-amber-600 mt-0.5" : "text-green-600 mt-0.5"} />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm text-foreground">
-              Import complete — {importResult.imported} added{importResult.skipped > 0 ? `, ${importResult.skipped} skipped` : ""}
-            </p>
+            <p className="font-semibold text-sm">Import complete — {importResult.imported} added{importResult.skipped > 0 ? `, ${importResult.skipped} skipped` : ""}</p>
             {importResult.errors.length > 0 && (
-              <ul className="mt-2 text-xs text-amber-800 space-y-0.5">
-                {importResult.errors.map((e, i) => <li key={i}>• {e}</li>)}
-              </ul>
+              <ul className="mt-2 text-xs text-amber-800 space-y-0.5">{importResult.errors.map((e, i) => <li key={i}>• {e}</li>)}</ul>
             )}
           </div>
-          <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-xs flex-shrink-0">Dismiss</button>
+          <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-xs">Dismiss</button>
         </div>
       )}
       {importError && (
@@ -306,7 +375,7 @@ export default function AdminSubscribers() {
           <div>
             <p className="text-sm font-semibold text-blue-800 mb-1">Excel / CSV Import Format</p>
             <p className="text-xs text-blue-700 leading-relaxed">
-              Your file should have columns: <strong>Name</strong>, <strong>Phone</strong>, <strong>Email</strong>, <strong>Country</strong> (optional). Duplicate emails are skipped automatically. Supported: .xlsx, .xls, .csv
+              Columns: <strong>Name</strong>, <strong>Phone</strong>, <strong>Email</strong>, <strong>Country</strong> (optional). Duplicate emails are skipped. Formats: .xlsx, .xls, .csv
             </p>
           </div>
         </div>
@@ -340,9 +409,23 @@ export default function AdminSubscribers() {
               </thead>
               <tbody>
                 {subs.map((s, i) => (
-                  <tr key={s.id} className="border-b border-border/60 last:border-0 hover:bg-muted/20 transition-colors">
+                  <tr key={s.id}
+                    className={cn(
+                      "border-b border-border/60 last:border-0 transition-colors",
+                      newSubFlash === s.id
+                        ? "bg-green-50 animate-pulse"
+                        : "hover:bg-muted/20"
+                    )}
+                  >
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{i + 1}</td>
-                    <td className="px-5 py-3.5 font-medium text-foreground">{s.name}</td>
+                    <td className="px-5 py-3.5 font-medium text-foreground">
+                      {s.name}
+                      {newSubFlash === s.id && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+                          NEW
+                        </span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-muted-foreground">{s.phone}</td>
                     <td className="px-5 py-3.5 text-primary">{s.email}</td>
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.country || <span className="opacity-30">—</span>}</td>

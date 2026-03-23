@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { db, subscribersTable } from "@workspace/db";
@@ -17,6 +17,34 @@ const SubscribeBody = z.object({
   country: z.string().max(100).optional(),
 });
 
+// ── SSE Notification Clients ──────────────────────────────────
+const sseClients = new Set<Response>();
+
+export function notifyNewSubscriber(sub: any) {
+  const payload = JSON.stringify({ type: "new_subscriber", subscriber: sub });
+  for (const client of sseClients) {
+    try { client.write(`data: ${payload}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
+// ── Admin: SSE stream ─────────────────────────────────────────
+router.get("/notifications", requireAdmin, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Transfer-Encoding", "chunked");
+  res.flushHeaders();
+
+  res.write(": connected\n\n");
+  const heartbeat = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); }
+  }, 10000);
+
+  sseClients.add(res);
+  req.on("close", () => { sseClients.delete(res); clearInterval(heartbeat); });
+});
+
 // ── Public: Subscribe ────────────────────────────────────────
 router.post("/", async (req, res) => {
   const parsed = SubscribeBody.safeParse(req.body);
@@ -33,6 +61,11 @@ router.post("/", async (req, res) => {
   }
 
   const [sub] = await db.insert(subscribersTable).values({ name, phone, email, country: country ?? null }).returning();
+  const serialized = { ...sub, subscribedAt: sub.subscribedAt.toISOString() };
+
+  // Real-time push to admin panel
+  notifyNewSubscriber(serialized);
+
   sendSubscriptionConfirmation({ to: email, name }).catch(() => {});
   res.status(201).json({ id: sub.id, message: "Subscribed successfully." });
 });
