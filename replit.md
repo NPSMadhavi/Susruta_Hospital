@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete bilingual (English/Telugu) Ayurvedic hospital website for Susruta Hospital, Tirupati, India. The website showcases Dr. P. Murali Krishna's expertise, handles appointment bookings, and includes an admin panel for hospital management.
+A complete bilingual (English/Telugu) Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, and newsletter subscription management.
 
 ## Stack
 
@@ -16,7 +16,7 @@ A complete bilingual (English/Telugu) Ayurvedic hospital website for Susruta Hos
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 - **Frontend**: React + Vite, Tailwind CSS, Wouter routing, Zustand, Framer Motion, date-fns, Lucide icons
-- **Design**: White & green nature/Ayurveda inspired theme
+- **Design**: White & deep forest green Ayurvedic theme
 
 ## Structure
 
@@ -25,98 +25,150 @@ artifacts-monorepo/
 ├── artifacts/
 │   ├── api-server/           # Express API server (port 8080)
 │   │   └── src/
-│   │       ├── lib/auth.ts   # Admin session management
+│   │       ├── lib/
+│   │       │   ├── auth.ts          # Admin session management
+│   │       │   ├── patient-auth.ts  # Patient session management
+│   │       │   └── email.ts         # Email (magic link, subscription)
 │   │       └── routes/
 │   │           ├── admin.ts           # Admin auth & settings
-│   │           ├── appointments.ts    # Appointment CRUD
+│   │           ├── appointments.ts    # Appointment CRUD + SSE notifications
 │   │           ├── availability.ts    # Date/slot management
-│   │           └── testimonials.ts    # Testimonials CRUD
+│   │           ├── testimonials.ts    # Testimonials CRUD
+│   │           ├── patient.ts         # Patient auth + portal appointments
+│   │           └── subscribers.ts     # Newsletter subscription management
 │   └── susruta-hospital/     # React Vite frontend (root /)
 │       └── src/
 │           ├── pages/
-│           │   ├── home.tsx, about.tsx, achievements.tsx
-│           │   ├── services.tsx, appointments.tsx
-│           │   ├── testimonials.tsx, contact.tsx
-│           │   └── admin/
-│           │       ├── login.tsx, dashboard.tsx
-│           │       ├── appointments.tsx, availability.tsx
-│           │       ├── testimonials.tsx, settings.tsx
-│           ├── components/layout/PublicLayout.tsx
-│           ├── components/admin/AdminLayout.tsx
-│           ├── store/use-language.ts   # Zustand lang store
-│           └── lib/i18n.ts             # EN/TE translations
+│           │   ├── home.tsx              # Main home page (SPA sections)
+│           │   ├── appointments.tsx      # Public walk-in booking
+│           │   ├── not-found.tsx
+│           │   ├── admin/
+│           │   │   ├── login.tsx, dashboard.tsx
+│           │   │   ├── appointments.tsx  # Full lifecycle admin view
+│           │   │   ├── availability.tsx
+│           │   │   ├── testimonials.tsx
+│           │   │   ├── subscribers.tsx   # Newsletter subscriber mgmt
+│           │   │   └── settings.tsx
+│           │   └── portal/
+│           │       ├── login.tsx         # Patient login/register
+│           │       ├── dashboard.tsx     # Appointment tracking dashboard
+│           │       └── book.tsx          # Calendar appointment booking
+│           ├── components/
+│           │   ├── layout/PublicLayout.tsx
+│           │   ├── admin/AdminLayout.tsx
+│           │   └── SubscribePopup.tsx    # Newsletter popup modal
+│           ├── lib/
+│           │   ├── patient-api.ts   # Patient API client
+│           │   └── i18n.ts          # EN/TE translations
+│           └── store/use-language.ts # Zustand lang store
 ├── lib/
 │   ├── api-spec/openapi.yaml  # Full API contract
 │   ├── api-client-react/      # Generated React Query hooks
 │   ├── api-zod/               # Generated Zod schemas
-│   └── db/src/schema/         # Database tables
-│       ├── appointments.ts
+│   └── db/src/schema/
+│       ├── appointments.ts    # id, patientId, date, timeSlot, status, arrivedAt, paymentMode, rescheduleDates, followUpDate...
+│       ├── patients.ts        # id, email, name, phone, passwordHash, emailVerified
+│       ├── patient_sessions.ts
+│       ├── login_tokens.ts    # Email verification tokens
 │       ├── blocked_dates.ts
 │       ├── open_months.ts
 │       ├── testimonials.ts
+│       ├── subscribers.ts     # Newsletter subscribers
 │       ├── site_settings.ts
 │       └── admin_sessions.ts
 ```
 
 ## Features
 
-### Public Website
-- **Home** - Hero with Dr. Murali Krishna's photo, credentials, CTA
-- **About Doctor** - Full bio, qualifications, career
-- **Achievements** - 10+ awards, positions, publications (30+), lectures (147+)
-- **Services** - Ayurvedic treatments & Panchakarma
-- **Appointments** - Step-by-step booking (only shows open months/dates)
-- **Testimonials** - Patient reviews (conditionally shown)
-- **Contact** - Address, phone, working hours
+### Public Website (Single Page)
+- **Hero** — Dr. Murali Krishna photo, rotating taglines, credentials CTA
+- **About Doctor** — Full bio, qualifications (BAMS Gold Medalist, MD, PhD, FRAV, DYoga)
+- **Achievements** — 10+ national awards, publications (30+), lectures (147+), positions
+- **Services** — Ayurvedic treatments & Panchakarma
+- **Testimonials** — Patient reviews (conditionally shown)
+- **Contact** — Address (GS North Mada Veedhi, Tirupati), phone, hours, Google Maps embed
+- **Newsletter Popup** — Appears 2.5s after load, session-dismissed, collects name/phone/email
 
-### Language Support
-- English (default) + Telugu toggle in top navbar
-- All key UI text has EN/TE translations in `lib/i18n.ts`
+### Patient Portal (`/portal`)
+- **Auth** — Email + password register/login; auto-login on register; email verification via magic link
+- **Dashboard** (`/portal/dashboard`) — Welcome card, stats (upcoming/completed/missed), 4-stage appointment progress tracker, follow-up confirmation, reschedule date picker. Polls every 15s for live updates.
+- **Booking** (`/portal/book`) — Calendar grid (open months only), time slot picker (available slots), phone input if not on record
 
 ### Admin Panel (`/admin`)
-- **Login** - Secure session-based auth
-- **Dashboard** - Appointment summary
-- **Appointments** - View, filter, confirm/cancel appointments
-- **Availability** - Open/close months, block specific dates
-- **Testimonials** - Add, edit, publish/unpublish, delete
-- **Settings** - Toggle testimonials, enable/disable booking, contact info
+- **Login** — Session-based auth (30-day cookie)
+- **Dashboard** — Appointment summary cards
+- **Appointments** — Full lifecycle: Pending → Approve/Reschedule/Decline → Arrived → Paid (Cash/UPI modal) → Follow-up; SSE real-time notifications + browser notification API + audio chime; 30s polling fallback
+- **Availability** — Open/close months, block specific dates
+- **Testimonials** — Add, edit, publish/unpublish, delete
+- **Subscribers** — List, delete, CSV export, Excel/CSV bulk import
+- **Settings** — Toggle testimonials, enable/disable booking, contact info
+
+### Language Support
+- English default; Telugu translations exist but language selector hidden pending translation quality review
+- Translations in `lib/i18n.ts`
 
 ## Admin Credentials
 - **Username**: `admin`
 - **Password**: `susruta2024`
+- Override with `ADMIN_USERNAME` / `ADMIN_PASSWORD` environment variables
 
-To change: Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables.
+## Key API Endpoints
 
-## API Endpoints
-
+### Patient Portal
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | /api/admin/login | Admin login |
-| POST | /api/admin/logout | Admin logout |
-| GET | /api/admin/me | Session check |
-| GET/PATCH | /api/admin/settings | Site settings |
-| POST | /api/appointments | Book appointment |
-| GET | /api/appointments | List appointments (admin) |
-| PATCH | /api/appointments/:id | Update status (admin) |
-| DELETE | /api/appointments/:id | Delete (admin) |
-| GET | /api/availability?month= | Month availability |
-| GET | /api/availability/slots?date= | Time slots for date |
-| GET/POST | /api/availability/blocked-dates | Blocked dates |
-| DELETE | /api/availability/blocked-dates/:id | Unblock date |
-| GET/POST | /api/availability/months | Open months |
-| DELETE | /api/availability/months/:id | Close month |
-| GET | /api/testimonials | Published testimonials |
-| POST | /api/testimonials | Create (admin) |
-| PATCH | /api/testimonials/:id | Update (admin) |
-| DELETE | /api/testimonials/:id | Delete (admin) |
+| POST | /api/patient/auth/register | Register (sets cookie, auto-login) |
+| POST | /api/patient/auth/login | Login |
+| GET | /api/patient/auth/verify?token= | Email verification (redirects) |
+| POST | /api/patient/logout | Logout |
+| GET | /api/patient/me | Current patient |
+| GET | /api/patient/appointments | My appointments |
+| POST | /api/patient/appointments | Book appointment |
+| PATCH | /api/patient/appointments/:id/confirm-followup | Confirm follow-up |
+| PATCH | /api/patient/appointments/:id/choose-reschedule | Choose reschedule date |
 
-## Color Theme (White & Green Ayurvedic)
-- Primary: Deep forest green
+### Appointments (Admin)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/appointments/notifications | SSE stream |
+| POST | /api/appointments | Walk-in booking |
+| GET | /api/appointments | List (with filters) |
+| PATCH | /api/appointments/:id | Update status/notes |
+| PATCH | /api/appointments/:id/arrive | Mark arrived |
+| PATCH | /api/appointments/:id/pay | Mark paid (cash/upi) |
+| PATCH | /api/appointments/:id/reschedule | Propose reschedule dates |
+| PATCH | /api/appointments/:id/followup | Set follow-up date |
+| DELETE | /api/appointments/:id | Delete |
+
+### Subscribers
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/subscribers | Subscribe (public) |
+| GET | /api/subscribers | List (admin) |
+| DELETE | /api/subscribers/:id | Delete (admin) |
+| POST | /api/subscribers/import | Bulk import CSV/Excel (admin) |
+
+## Important Implementation Notes
+
+- **Zod import**: `import { z } from "zod/v4"` (not `"zod"`)
+- **Logo**: `@assets/logo_1773840200056.png`
+- **DB push**: `cd lib/db && pnpm run push`
+- **useListOpenMonths hook**: Returns `{ id, month, isOpen, createdAt }[]` — map to string[] with `.filter(m => m.isOpen).map(m => m.month)`
+- **useGetAvailability hook**: Takes `{ month: string }` object as first arg
+- **useGetSlots hook**: Takes `{ date: string }` object as first arg; returns `{ time, available }[]` — filter `available` and map `.time`
+- **SSE notifications**: `notifyNewAppointment` in `appointments.ts` — called from both walk-in and portal booking routes
+- **Newsletter popup**: `sessionStorage` key `susruta_popup_dismissed`; appears once per session after 2.5s
+
+## Color Theme
+- Primary: Deep forest green `#1a3d2b` / Tailwind `primary`
 - Background: White / light mint
-- Accents: Golden/warm earth tones
-- Typography: Serif for headings, Sans-serif for body
+- Accents: Amber/golden for follow-ups, teal for arrived, orange for reschedule
+- Typography: Serif (headings), sans-serif (body)
 
 ## Key Assets
-- `attached_assets/logo_1773840200056.png` - Hospital logo
-- `attached_assets/Dr_Murali_Krishna_1773837837953.jpeg` - Doctor photo
+- `attached_assets/logo_1773840200056.png` — Hospital logo
+- `attached_assets/Dr_Murali_Krishna_1773837837953.jpeg` — Doctor photo
 - Imported via `@assets/` alias in frontend
+
+## Footer Credit
+"Designed with Gratitude from RSV Infotech Pte. Ltd." → https://myrsv.com

@@ -5,6 +5,7 @@ import availabilityRouter from "./availability";
 import testimonialsRouter from "./testimonials";
 import adminRouter from "./admin";
 import patientRouter from "./patient";
+import subscribersRouter from "./subscribers";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/availability", availabilityRouter);
 router.use("/testimonials", testimonialsRouter);
 router.use("/admin", adminRouter);
 router.use("/patient", patientRouter);
+router.use("/subscribers", subscribersRouter);
 
 export default router;

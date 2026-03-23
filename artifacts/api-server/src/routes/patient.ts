@@ -8,6 +8,7 @@ import {
 import { sendMagicLink } from "../lib/email";
 import { randomBytes } from "crypto";
 import { z } from "zod/v4";
+import { notifyNewAppointment } from "./appointments";
 
 const router = Router();
 
@@ -186,7 +187,10 @@ router.post("/appointments", requirePatient, async (req, res) => {
     status: "pending",
   }).returning();
 
-  res.status(201).json({ ...appt, createdAt: appt.createdAt?.toISOString() ?? null });
+  const serialized = { ...appt, createdAt: appt.createdAt?.toISOString() ?? null, arrivedAt: null };
+  notifyNewAppointment(serialized);
+
+  res.status(201).json(serialized);
 });
 
 // ── Confirm Follow-up ─────────────────────────────────────────

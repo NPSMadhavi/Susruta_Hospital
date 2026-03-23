@@ -7,7 +7,6 @@ import NotFound from "@/pages/not-found";
 // Single public page
 import Home from "./pages/home";
 import Appointments from "./pages/appointments";
-import Launch from "./pages/launch";
 
 // Admin Pages
 import AdminLogin from "./pages/admin/login";
@@ -16,6 +15,7 @@ import AdminAppointments from "./pages/admin/appointments";
 import AdminAvailability from "./pages/admin/availability";
 import AdminTestimonials from "./pages/admin/testimonials";
 import AdminSettings from "./pages/admin/settings";
+import AdminSubscribers from "./pages/admin/subscribers";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
@@ -37,7 +37,6 @@ function Router() {
       {/* Single-page public website */}
       <Route path="/" component={Home} />
       <Route path="/appointments" component={Appointments} />
-      <Route path="/launch" component={Launch} />
 
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />
@@ -50,6 +49,7 @@ function Router() {
       <Route path="/admin/appointments" component={AdminAppointments} />
       <Route path="/admin/availability" component={AdminAvailability} />
       <Route path="/admin/testimonials" component={AdminTestimonials} />
+      <Route path="/admin/subscribers" component={AdminSubscribers} />
       <Route path="/admin/settings" component={AdminSettings} />
 
       <Route component={NotFound} />

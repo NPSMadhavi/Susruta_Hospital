@@ -92,11 +92,12 @@ export default function PortalBook() {
   const [success, setSuccess] = useState(false);
   const [phone, setPhone] = useState("");
 
-  const { data: openMonths = [] } = useListOpenMonths();
-  const currentMonth = openMonths[monthIdx] ?? "";
-  const { data: availability } = useGetAvailability(currentMonth, { enabled: !!currentMonth });
-  const { data: slotsData } = useGetSlots(selectedDate ?? "", { enabled: !!selectedDate });
-  const slots: string[] = slotsData ?? [];
+  const { data: openMonthsRaw = [] } = useListOpenMonths();
+  const openMonths = openMonthsRaw.filter((m: any) => m.isOpen).map((m: any) => m.month as string);
+  const currentMonth: string = openMonths[monthIdx] ?? "";
+  const { data: availability } = useGetAvailability({ month: currentMonth }, { query: { enabled: !!currentMonth } });
+  const { data: slotsData } = useGetSlots({ date: selectedDate ?? "" }, { query: { enabled: !!selectedDate } });
+  const slots: string[] = (slotsData as any[] ?? []).filter((s: any) => s.available).map((s: any) => s.time as string);
 
   useEffect(() => {
     patientApi.me()

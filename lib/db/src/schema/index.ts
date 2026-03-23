@@ -7,3 +7,4 @@ export * from "./open_months";
 export * from "./testimonials";
 export * from "./site_settings";
 export * from "./admin_sessions";
+export * from "./subscribers";

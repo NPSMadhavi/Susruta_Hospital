@@ -97,3 +97,65 @@ export async function sendMagicLink(opts: {
   const transport = createTransport()!;
   await transport.sendMail({ from: SMTP_FROM, to, subject, html });
 }
+
+export async function sendSubscriptionConfirmation(opts: { to: string; name: string }) {
+  const { to, name } = opts;
+  const subject = "You're on the list! — Susruta Hospital";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#1a3d2b;padding:32px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:bold;letter-spacing:0.5px;">SUSRUTA HOSPITAL</h1>
+            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:13px;">Authentic Ayurvedic Healthcare · Tirupati</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 36px 24px;">
+            <p style="color:#444;font-size:16px;margin:0 0 12px;">Namaste, <strong>${name}</strong> 🙏</p>
+            <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
+              Thank you for subscribing! You are now on our early-access list.
+            </p>
+            <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;">
+              As soon as our <strong>online appointment booking, patient portal, and other digital services</strong> go live, you will be among the very first to know — right in your inbox.
+            </p>
+            <div style="background:#f0f7f4;border-left:4px solid #2d6a4f;border-radius:8px;padding:16px 20px;margin:0 0 24px;">
+              <p style="color:#2d6a4f;font-size:14px;margin:0;font-style:italic;">
+                "Healing through nature, guided by science — your Ayurvedic journey begins here."
+              </p>
+            </div>
+            <p style="color:#777;font-size:13px;line-height:1.6;margin:0;">
+              In the meantime, feel free to reach us directly:<br>
+              📞 <strong>+91 9492068180</strong><br>
+              📍 119, Ramulavari North Mada Street, Tirupati
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 36px 28px;border-top:1px solid #f0f0f0;">
+            <p style="color:#bbb;font-size:11px;margin:0;text-align:center;">
+              Susruta Hospital · Tirupati - 517 507 · Andhra Pradesh, India<br>
+              You received this because you subscribed at susrutahospital.com
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  if (!SMTP_CONFIGURED) {
+    console.log(`\n📧 SUBSCRIPTION CONFIRMATION → ${to} (${name}) — SMTP not configured\n`);
+    return;
+  }
+
+  const transport = createTransport()!;
+  await transport.sendMail({ from: SMTP_FROM, to, subject, html });
+}
