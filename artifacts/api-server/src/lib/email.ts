@@ -1,109 +1,83 @@
 import nodemailer from "nodemailer";
+import { db, siteSettingsTable } from "@workspace/db";
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587");
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || `Susruta Hospital <noreply@susrutahospital.com>`;
+// ── Load SMTP config from DB (env vars as fallback) ───────────
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  secure: boolean;
+  fromName: string;
+  fromEmail: string;
+  subscriberFrom: string;
+}
 
-const SMTP_CONFIGURED = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
+export async function getSmtpConfig(): Promise<SmtpConfig | null> {
+  // Try DB first
+  try {
+    const [row] = await db.select().from(siteSettingsTable);
+    if (row?.smtpHost && row?.smtpUser && row?.smtpPass) {
+      return {
+        host: row.smtpHost,
+        port: row.smtpPort ?? 587,
+        user: row.smtpUser,
+        pass: row.smtpPass,
+        secure: row.smtpSecure ?? false,
+        fromName: row.smtpFromName ?? "Susruta Hospital",
+        fromEmail: row.smtpFromEmail ?? "noreply@susrutahospital.com",
+        subscriberFrom: row.smtpSubscriberFrom ?? "updates@susrutahospital.com",
+      };
+    }
+  } catch {}
 
-function createTransport() {
-  if (!SMTP_CONFIGURED) return null;
+  // Fallback: env vars
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (host && user && pass) {
+    return {
+      host,
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      user,
+      pass,
+      secure: process.env.SMTP_PORT === "465",
+      fromName: "Susruta Hospital",
+      fromEmail: process.env.SMTP_FROM_EMAIL || "noreply@susrutahospital.com",
+      subscriberFrom: "updates@susrutahospital.com",
+    };
+  }
+
+  return null;
+}
+
+function buildTransport(cfg: SmtpConfig) {
   return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: { user: cfg.user, pass: cfg.pass },
+    tls: { rejectUnauthorized: false },
   });
 }
 
-export async function sendMagicLink(opts: {
-  to: string;
-  name: string;
-  verifyUrl: string;
-  isNewAccount: boolean;
-}) {
-  const { to, name, verifyUrl, isNewAccount } = opts;
-  const subject = isNewAccount
-    ? "Verify your Susruta Hospital Patient Account"
-    : "Your Susruta Hospital Login Link";
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 20px;">
-    <tr>
-      <td align="center">
-        <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-          <!-- Header -->
-          <tr>
-            <td style="background:#1a3d2b;padding:32px;text-align:center;">
-              <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:bold;letter-spacing:0.5px;">SUSRUTA HOSPITAL</h1>
-              <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:13px;">Authentic Ayurvedic Healthcare · Tirupati</p>
-            </td>
-          </tr>
-          <!-- Body -->
-          <tr>
-            <td style="padding:36px 36px 24px;">
-              <p style="color:#444;font-size:16px;margin:0 0 12px;">Namaste, <strong>${name}</strong> 🙏</p>
-              <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;">
-                ${isNewAccount
-                  ? "Welcome! Please click the button below to verify your email and activate your patient account."
-                  : "Click the button below to securely log in to your patient portal. This link is valid for <strong>15 minutes</strong>."}
-              </p>
-              <div style="text-align:center;margin:0 0 28px;">
-                <a href="${verifyUrl}" style="display:inline-block;background:#2d6a4f;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:16px;font-weight:bold;">
-                  ${isNewAccount ? "Verify Email & Continue" : "Log In to Portal →"}
-                </a>
-              </div>
-              <p style="color:#999;font-size:12px;line-height:1.6;margin:0;">
-                If you didn't request this, you can safely ignore this email.<br>
-                This link expires in 15 minutes and can only be used once.
-              </p>
-            </td>
-          </tr>
-          <!-- Footer -->
-          <tr>
-            <td style="padding:16px 36px 28px;border-top:1px solid #f0f0f0;">
-              <p style="color:#bbb;font-size:11px;margin:0;text-align:center;">
-                Susruta Hospital · 119, Ramulavari North Mada Street, Tirupati - 517 507<br>
-                Phone: +91 9492068180
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-
-  if (!SMTP_CONFIGURED) {
-    console.log("\n========================================");
-    console.log("📧 MAGIC LINK (SMTP not configured)");
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Verify URL: ${verifyUrl}`);
-    console.log("========================================\n");
-    return;
-  }
-
-  const transport = createTransport()!;
-  await transport.sendMail({ from: SMTP_FROM, to, subject, html });
+function senderStr(name: string, email: string) {
+  return `${name} <${email}>`;
 }
 
-export async function sendSubscriptionConfirmation(opts: { to: string; name: string }) {
-  const { to, name } = opts;
-  const subject = "You're on the list! — Susruta Hospital";
+// ── Shared email footer ───────────────────────────────────────
+const EMAIL_FOOTER = `
+  <tr>
+    <td style="padding:16px 36px 28px;border-top:1px solid #f0f0f0;">
+      <p style="color:#bbb;font-size:11px;margin:0;text-align:center;">
+        Susruta Hospital · 119, Ramulavari North Mada Street, Tirupati - 517 507<br>
+        Phone: +91 9492068180 · <a href="https://susrutahospital.com" style="color:#bbb;">susrutahospital.com</a>
+      </p>
+    </td>
+  </tr>`;
 
-  const html = `
-<!DOCTYPE html>
+function emailWrapper(content: string) {
+  return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
@@ -116,46 +90,161 @@ export async function sendSubscriptionConfirmation(opts: { to: string; name: str
             <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:13px;">Authentic Ayurvedic Healthcare · Tirupati</p>
           </td>
         </tr>
-        <tr>
-          <td style="padding:36px 36px 24px;">
-            <p style="color:#444;font-size:16px;margin:0 0 12px;">Namaste, <strong>${name}</strong> 🙏</p>
-            <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
-              Thank you for subscribing! You are now on our early-access list.
-            </p>
-            <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;">
-              As soon as our <strong>online appointment booking, patient portal, and other digital services</strong> go live, you will be among the very first to know — right in your inbox.
-            </p>
-            <div style="background:#f0f7f4;border-left:4px solid #2d6a4f;border-radius:8px;padding:16px 20px;margin:0 0 24px;">
-              <p style="color:#2d6a4f;font-size:14px;margin:0;font-style:italic;">
-                "Healing through nature, guided by science — your Ayurvedic journey begins here."
-              </p>
-            </div>
-            <p style="color:#777;font-size:13px;line-height:1.6;margin:0;">
-              In the meantime, feel free to reach us directly:<br>
-              📞 <strong>+91 9492068180</strong><br>
-              📍 119, Ramulavari North Mada Street, Tirupati
-            </p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:16px 36px 28px;border-top:1px solid #f0f0f0;">
-            <p style="color:#bbb;font-size:11px;margin:0;text-align:center;">
-              Susruta Hospital · Tirupati - 517 507 · Andhra Pradesh, India<br>
-              You received this because you subscribed at susrutahospital.com
-            </p>
-          </td>
-        </tr>
+        ${content}
+        ${EMAIL_FOOTER}
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
+}
 
-  if (!SMTP_CONFIGURED) {
+// ── Magic link / email verify ─────────────────────────────────
+export async function sendMagicLink(opts: {
+  to: string;
+  name: string;
+  verifyUrl: string;
+  isNewAccount: boolean;
+}) {
+  const { to, name, verifyUrl, isNewAccount } = opts;
+  const subject = isNewAccount
+    ? "Verify your Susruta Hospital Patient Account"
+    : "Your Susruta Hospital Login Link";
+
+  const body = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:16px;margin:0 0 12px;">Namaste, <strong>${name}</strong> 🙏</p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;">
+        ${isNewAccount
+          ? "Welcome! Please click the button below to verify your email and activate your patient account."
+          : "Click the button below to securely log in to your patient portal. This link is valid for <strong>15 minutes</strong>."}
+      </p>
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="${verifyUrl}" style="display:inline-block;background:#2d6a4f;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:16px;font-weight:bold;">
+          ${isNewAccount ? "Verify Email &amp; Continue" : "Log In to Portal →"}
+        </a>
+      </div>
+      <p style="color:#999;font-size:12px;line-height:1.6;margin:0;">
+        If you didn't request this, you can safely ignore this email.<br>
+        This link expires in 15 minutes and can only be used once.
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(body);
+  const cfg = await getSmtpConfig();
+
+  if (!cfg) {
+    console.log("\n========================================");
+    console.log("📧 MAGIC LINK (SMTP not configured)");
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Verify URL: ${verifyUrl}`);
+    console.log("========================================\n");
+    return;
+  }
+
+  const from = senderStr(cfg.fromName, cfg.fromEmail);
+  await buildTransport(cfg).sendMail({ from, to, subject, html });
+}
+
+// ── Subscriber acknowledgement ────────────────────────────────
+export async function sendSubscriptionConfirmation(opts: { to: string; name: string }) {
+  const { to, name } = opts;
+  const subject = "You're on the list! — Susruta Hospital";
+
+  const body = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:16px;margin:0 0 12px;">Namaste, <strong>${name}</strong> 🙏</p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
+        Thank you for subscribing! You are now on our early-access list.
+      </p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;">
+        As soon as our <strong>online appointment booking, patient portal, and other digital services</strong> go live, you will be among the very first to know — right in your inbox.
+      </p>
+      <div style="background:#f0f7f4;border-left:4px solid #2d6a4f;border-radius:8px;padding:16px 20px;margin:0 0 24px;">
+        <p style="color:#2d6a4f;font-size:14px;margin:0;font-style:italic;">
+          "Healing through nature, guided by science — your Ayurvedic journey begins here."
+        </p>
+      </div>
+      <p style="color:#777;font-size:13px;line-height:1.6;margin:0;">
+        In the meantime, feel free to reach us directly:<br>
+        📞 <strong>+91 9492068180</strong><br>
+        📍 119, Ramulavari North Mada Street, Tirupati
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(body);
+  const cfg = await getSmtpConfig();
+
+  if (!cfg) {
     console.log(`\n📧 SUBSCRIPTION CONFIRMATION → ${to} (${name}) — SMTP not configured\n`);
     return;
   }
 
-  const transport = createTransport()!;
-  await transport.sendMail({ from: SMTP_FROM, to, subject, html });
+  const from = senderStr(cfg.fromName, cfg.subscriberFrom);
+  await buildTransport(cfg).sendMail({
+    from,
+    replyTo: cfg.subscriberFrom,
+    to,
+    subject,
+    html,
+  });
+}
+
+// ── Broadcast to subscriber ───────────────────────────────────
+export async function sendBroadcastEmail(opts: {
+  to: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+}) {
+  const { to, name, subject, bodyHtml } = opts;
+  const cfg = await getSmtpConfig();
+  if (!cfg) throw new Error("SMTP not configured. Please set up email settings first.");
+
+  const body = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 20px;">Namaste, <strong>${name}</strong> 🙏</p>
+      <div style="color:#555;font-size:15px;line-height:1.7;">${bodyHtml}</div>
+      <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0 20px;">
+      <p style="color:#aaa;font-size:11px;margin:0;">
+        You are receiving this because you subscribed for updates from Susruta Hospital.
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(body);
+  const from = senderStr(cfg.fromName, cfg.subscriberFrom);
+  await buildTransport(cfg).sendMail({
+    from,
+    replyTo: cfg.subscriberFrom,
+    to,
+    subject,
+    html,
+  });
+}
+
+// ── SMTP connection test ──────────────────────────────────────
+export async function testSmtpConnection(cfg: SmtpConfig, testTo: string): Promise<void> {
+  const transport = buildTransport(cfg);
+  await transport.verify();
+
+  const html = emailWrapper(`
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:16px;margin:0 0 16px;">✅ <strong>SMTP Test Successful!</strong></p>
+      <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px;">
+        Your email settings are working correctly. Emails from Susruta Hospital will be delivered from:<br>
+        <strong style="color:#1a3d2b;">${senderStr(cfg.fromName, cfg.fromEmail)}</strong>
+      </p>
+      <p style="color:#555;font-size:14px;line-height:1.6;margin:0;">
+        Subscriber communications will show:<br>
+        <strong style="color:#1a3d2b;">${senderStr(cfg.fromName, cfg.subscriberFrom)}</strong>
+      </p>
+    </td></tr>`);
+
+  await transport.sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to: testTo,
+    subject: "✅ Susruta Hospital — SMTP Test Successful",
+    html,
+  });
 }

@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { db, subscribersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
-import { sendSubscriptionConfirmation } from "../lib/email";
+import { sendSubscriptionConfirmation, sendBroadcastEmail } from "../lib/email";
 import { z } from "zod/v4";
 
 const router = Router();
@@ -26,7 +26,6 @@ router.post("/", async (req, res) => {
   }
   const { name, phone, email, country } = parsed.data;
 
-  // Upsert — re-subscribing with same email is fine
   const existing = await db.select().from(subscribersTable).where(eq(subscribersTable.email, email));
   if (existing.length > 0) {
     res.status(200).json({ already_subscribed: true, message: "You are already subscribed! We will notify you when our services go live." });
@@ -49,6 +48,37 @@ router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   await db.delete(subscribersTable).where(eq(subscribersTable.id, id));
   res.status(204).send();
+});
+
+// ── Admin: Broadcast to all subscribers ──────────────────────
+router.post("/broadcast", requireAdmin, async (req, res) => {
+  const { subject, bodyHtml } = req.body;
+  if (!subject?.trim() || !bodyHtml?.trim()) {
+    res.status(400).json({ error: "missing_fields", message: "Subject and message body are required." });
+    return;
+  }
+
+  const subs = await db.select().from(subscribersTable).orderBy(desc(subscribersTable.subscribedAt));
+  if (subs.length === 0) {
+    res.status(400).json({ error: "no_subscribers", message: "No subscribers to send to." });
+    return;
+  }
+
+  let sent = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const s of subs) {
+    try {
+      await sendBroadcastEmail({ to: s.email, name: s.name, subject, bodyHtml });
+      sent++;
+    } catch (err: any) {
+      failed++;
+      errors.push(`${s.email}: ${err.message}`);
+    }
+  }
+
+  res.json({ sent, failed, total: subs.length, errors: errors.slice(0, 10) });
 });
 
 // ── Admin: Import from Excel ─────────────────────────────────
@@ -74,7 +104,6 @@ router.post("/import", requireAdmin, upload.single("file"), async (req, res) => 
     return;
   }
 
-  // Flexible column name matching
   function findCol(row: any, ...keys: string[]): string {
     for (const k of keys) {
       for (const col of Object.keys(row)) {
@@ -95,6 +124,7 @@ router.post("/import", requireAdmin, upload.single("file"), async (req, res) => 
     const name = findCol(row, "name", "fullname", "full_name", "patientname");
     const phone = findCol(row, "phone", "phonenumber", "phone_number", "mobile", "contact");
     const email = findCol(row, "email", "emailaddress", "email_address");
+    const country = findCol(row, "country", "location", "region");
 
     if (!name || !email) {
       skipped++;
@@ -111,7 +141,7 @@ router.post("/import", requireAdmin, upload.single("file"), async (req, res) => 
 
     try {
       await db.insert(subscribersTable)
-        .values({ name, phone: phone || "—", email })
+        .values({ name, phone: phone || "—", email, country: country || null })
         .onConflictDoNothing();
       imported++;
     } catch {

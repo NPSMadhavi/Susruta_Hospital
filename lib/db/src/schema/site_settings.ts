@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, varchar, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,15 @@ export const siteSettingsTable = pgTable("site_settings", {
   clinicEmail: varchar("clinic_email", { length: 255 }),
   clinicAddress: text("clinic_address").notNull().default("119, Ramulavari North Mada Street, Tirupati - 517 507"),
   workingHours: varchar("working_hours", { length: 255 }),
+  // SMTP Settings
+  smtpHost: varchar("smtp_host", { length: 255 }),
+  smtpPort: integer("smtp_port").default(587),
+  smtpUser: varchar("smtp_user", { length: 255 }),
+  smtpPass: varchar("smtp_pass", { length: 255 }),
+  smtpSecure: boolean("smtp_secure").notNull().default(false),
+  smtpFromName: varchar("smtp_from_name", { length: 255 }).notNull().default("Susruta Hospital"),
+  smtpFromEmail: varchar("smtp_from_email", { length: 255 }).notNull().default("noreply@susrutahospital.com"),
+  smtpSubscriberFrom: varchar("smtp_subscriber_from", { length: 255 }).notNull().default("updates@susrutahospital.com"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
