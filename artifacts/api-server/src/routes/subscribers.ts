@@ -14,6 +14,7 @@ const SubscribeBody = z.object({
   name: z.string().min(2).max(100),
   phone: z.string().min(6).max(20),
   email: z.string().email(),
+  country: z.string().max(100).optional(),
 });
 
 // ── Public: Subscribe ────────────────────────────────────────
@@ -23,7 +24,7 @@ router.post("/", async (req, res) => {
     res.status(400).json({ error: "validation_error", message: "Please provide a valid name, phone number, and email address." });
     return;
   }
-  const { name, phone, email } = parsed.data;
+  const { name, phone, email, country } = parsed.data;
 
   // Upsert — re-subscribing with same email is fine
   const existing = await db.select().from(subscribersTable).where(eq(subscribersTable.email, email));
@@ -32,7 +33,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const [sub] = await db.insert(subscribersTable).values({ name, phone, email }).returning();
+  const [sub] = await db.insert(subscribersTable).values({ name, phone, email, country: country ?? null }).returning();
   sendSubscriptionConfirmation({ to: email, name }).catch(() => {});
   res.status(201).json({ id: sub.id, message: "Subscribed successfully." });
 });

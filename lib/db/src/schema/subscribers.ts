@@ -5,6 +5,7 @@ export const subscribersTable = pgTable("subscribers", {
   name: varchar("name", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 20 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
+  country: varchar("country", { length: 100 }),
   subscribedAt: timestamp("subscribed_at").notNull().defaultNow(),
 });
 

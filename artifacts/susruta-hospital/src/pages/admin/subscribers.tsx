@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
-type Sub = { id: number; name: string; phone: string; email: string; subscribedAt: string };
+type Sub = { id: number; name: string; phone: string; email: string; country?: string; subscribedAt: string };
 
 function apiFetch(path: string, opts: RequestInit = {}) {
   return fetch(`${API}${path}`, { credentials: "include", ...opts }).then((r) => r.json());
@@ -68,9 +68,9 @@ export default function AdminSubscribers() {
   }
 
   function downloadCSV() {
-    const header = "Name,Phone,Email,Subscribed At";
+    const header = "Name,Phone,Email,Country,Subscribed At";
     const rows = subs.map((s) =>
-      [s.name, s.phone, s.email, new Date(s.subscribedAt).toLocaleString("en-IN")].map((v) => `"${v}"`).join(",")
+      [s.name, s.phone, s.email, s.country ?? "", new Date(s.subscribedAt).toLocaleString("en-IN")].map((v) => `"${v}"`).join(",")
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
