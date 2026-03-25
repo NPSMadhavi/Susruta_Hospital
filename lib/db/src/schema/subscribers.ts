@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, boolean, text } from "drizzle-orm/pg-core";
 
 export const subscribersTable = pgTable("subscribers", {
   id: serial("id").primaryKey(),
@@ -7,6 +7,10 @@ export const subscribersTable = pgTable("subscribers", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   country: varchar("country", { length: 100 }),
   subscribedAt: timestamp("subscribed_at").notNull().defaultNow(),
+  // Soft unsubscribe — row kept for audit/suppression, excluded from sends
+  unsubscribed: boolean("unsubscribed").notNull().default(false),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+  unsubscribeReason: text("unsubscribe_reason"),
 });
 
 export type Subscriber = typeof subscribersTable.$inferSelect;

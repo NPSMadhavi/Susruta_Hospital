@@ -268,9 +268,11 @@ export async function sendSubscriptionConfirmation(opts: { to: string; name: str
         Address: 119, Ramulavari North Mada Street, Tirupati
       </p>
       <hr style="border:none;border-top:1px solid #f0f0f0;margin:24px 0 16px;">
-      <p style="color:#ccc;font-size:11px;margin:0;line-height:1.6;font-family:Arial,sans-serif;">
-        You subscribed to updates from Susruta Hospital.<br>
-        <a href="${unsubUrl}" style="color:#aaa;text-decoration:underline;">Unsubscribe</a>
+      <p style="color:#ccc;font-size:11px;margin:0 0 8px;line-height:1.6;font-family:Arial,sans-serif;">
+        You subscribed to updates from Susruta Hospital.
+      </p>
+      <p style="margin:0;font-family:Arial,sans-serif;">
+        <a href="${unsubUrl}" style="color:#aaa;font-size:11px;text-decoration:underline;font-family:Arial,sans-serif;">Unsubscribe</a>
       </p>
     </td></tr>`;
 
@@ -333,9 +335,11 @@ export async function sendBroadcastEmail(opts: {
       <p style="color:#444;font-size:15px;margin:0 0 22px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
       <div style="font-family:Arial,sans-serif;">${styledBody}</div>
       <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0 18px;">
-      <p style="color:#ccc;font-size:11px;margin:0;line-height:1.7;font-family:Arial,sans-serif;">
-        You are receiving this because you subscribed to updates from Susruta Hospital.<br>
-        <a href="${unsubUrl}" style="color:#aaa;text-decoration:underline;">Unsubscribe</a>
+      <p style="color:#ccc;font-size:11px;margin:0 0 8px;line-height:1.7;font-family:Arial,sans-serif;">
+        You are receiving this because you subscribed to updates from Susruta Hospital.
+      </p>
+      <p style="margin:0;font-family:Arial,sans-serif;">
+        <a href="${unsubUrl}" style="color:#aaa;font-size:11px;text-decoration:underline;font-family:Arial,sans-serif;">Unsubscribe</a>
       </p>
     </td></tr>`;
 

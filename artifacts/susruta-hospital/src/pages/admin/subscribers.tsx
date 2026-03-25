@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
-type Sub = { id: number; name: string; phone: string; email: string; country?: string; subscribedAt: string };
+type Sub = { id: number; name: string; phone: string; email: string; country?: string; subscribedAt: string; unsubscribed: boolean; unsubscribedAt?: string | null; unsubscribeReason?: string | null };
 type BroadcastEvent =
   | { type: "start"; total: number; delayMs: number }
   | { type: "sent"; current: number; total: number; email: string; name: string }
@@ -664,7 +664,7 @@ export default function AdminSubscribers() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {["#", "Name", "Phone", "Email", "Country", "Subscribed"].map((h) => (
+                  {["#", "Name", "Phone", "Email", "Country", "Subscribed", "Status"].map((h) => (
                     <th key={h} className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{h}</th>
                   ))}
                   <th className="px-5 py-3.5" />
@@ -672,7 +672,9 @@ export default function AdminSubscribers() {
               </thead>
               <tbody>
                 {subs.map((s, i) => (
-                  <tr key={s.id} className={cn("border-b border-border/60 last:border-0 transition-colors", newSubFlash === s.id ? "bg-green-50 animate-pulse" : "hover:bg-muted/20")}>
+                  <tr key={s.id} className={cn("border-b border-border/60 last:border-0 transition-colors",
+                    newSubFlash === s.id ? "bg-green-50 animate-pulse" :
+                    s.unsubscribed ? "bg-muted/30 opacity-60" : "hover:bg-muted/20")}>
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{i + 1}</td>
                     <td className="px-5 py-3.5 font-medium text-foreground">
                       {s.name}
@@ -683,6 +685,20 @@ export default function AdminSubscribers() {
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.country || <span className="opacity-30">—</span>}</td>
                     <td className="px-5 py-3.5 text-muted-foreground text-xs whitespace-nowrap">
                       {new Date(s.subscribedAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {s.unsubscribed ? (
+                        <span
+                          title={s.unsubscribeReason ? `Reason: ${s.unsubscribeReason}` : "Unsubscribed"}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 cursor-default"
+                        >
+                          Unsubscribed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
+                          Active
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <button onClick={() => deleteSub(s.id, s.name)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
