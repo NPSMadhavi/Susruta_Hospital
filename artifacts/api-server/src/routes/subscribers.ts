@@ -83,9 +83,12 @@ router.delete("/:id", requireAdmin, async (req, res) => {
   res.status(204).send();
 });
 
-// ── Admin: Broadcast to all subscribers ──────────────────────
+// ── Admin: Broadcast (streaming NDJSON) ──────────────────────
+// Streams one JSON line per email sent so the frontend can show real-time progress.
+// Sends emails sequentially with a configurable delay between each to avoid
+// triggering spam rate limits.
 router.post("/broadcast", requireAdmin, async (req, res) => {
-  const { subject, bodyHtml } = req.body;
+  const { subject, bodyHtml, delayMs = 2000 } = req.body;
   if (!subject?.trim() || !bodyHtml?.trim()) {
     res.status(400).json({ error: "missing_fields", message: "Subject and message body are required." });
     return;
@@ -97,21 +100,43 @@ router.post("/broadcast", requireAdmin, async (req, res) => {
     return;
   }
 
+  // Clamp delay: 500ms–5000ms
+  const delay = Math.min(5000, Math.max(500, Number(delayMs) || 2000));
+
+  // Switch to streaming NDJSON response
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Transfer-Encoding", "chunked");
+  res.flushHeaders();
+
+  const send = (obj: object) => res.write(JSON.stringify(obj) + "\n");
+
+  send({ type: "start", total: subs.length, delayMs: delay });
+
   let sent = 0;
   let failed = 0;
-  const errors: string[] = [];
 
-  for (const s of subs) {
+  for (let i = 0; i < subs.length; i++) {
+    const s = subs[i];
     try {
       await sendBroadcastEmail({ to: s.email, name: s.name, subject, bodyHtml });
       sent++;
+      send({ type: "sent", current: i + 1, total: subs.length, email: s.email, name: s.name });
     } catch (err: any) {
       failed++;
-      errors.push(`${s.email}: ${err.message}`);
+      send({ type: "error", current: i + 1, total: subs.length, email: s.email, name: s.name, message: err.message });
+    }
+
+    // Delay between emails (keeps-alive the stream with a heartbeat tick too)
+    if (i < subs.length - 1) {
+      await new Promise((r) => setTimeout(r, delay));
+      send({ type: "tick" }); // keeps connection alive through proxies
     }
   }
 
-  res.json({ sent, failed, total: subs.length, errors: errors.slice(0, 10) });
+  send({ type: "done", sent, failed, total: subs.length });
+  res.end();
 });
 
 // ── Admin: Import from Excel ─────────────────────────────────

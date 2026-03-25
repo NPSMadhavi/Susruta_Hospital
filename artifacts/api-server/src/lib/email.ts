@@ -191,6 +191,22 @@ export async function sendSubscriptionConfirmation(opts: { to: string; name: str
   });
 }
 
+// ── Inline email styles for broadcast HTML ────────────────────
+function inlineEmailStyles(html: string): string {
+  return html
+    .replace(/<h1(?=[> ])/g, '<h1 style="color:#1a3d2b;font-size:22px;font-weight:bold;margin:0 0 14px;line-height:1.3;"')
+    .replace(/<h2(?=[> ])/g, '<h2 style="color:#1a3d2b;font-size:18px;font-weight:bold;margin:0 0 12px;line-height:1.3;"')
+    .replace(/<h3(?=[> ])/g, '<h3 style="color:#2d6a4f;font-size:15px;font-weight:bold;margin:0 0 10px;"')
+    .replace(/<p(?=[> ])/g, '<p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 14px;"')
+    .replace(/<ul(?=[> ])/g, '<ul style="color:#555;font-size:15px;line-height:1.7;margin:0 0 14px;padding-left:22px;"')
+    .replace(/<ol(?=[> ])/g, '<ol style="color:#555;font-size:15px;line-height:1.7;margin:0 0 14px;padding-left:22px;"')
+    .replace(/<li(?=[> ])/g, '<li style="margin-bottom:6px;"')
+    .replace(/<blockquote(?=[> ])/g, '<blockquote style="border-left:4px solid #2d6a4f;margin:0 0 16px 0;padding:14px 18px;background:#f0f7f4;border-radius:0 8px 8px 0;font-style:italic;"')
+    .replace(/<hr(?=[> /])/g, '<hr style="border:none;border-top:1px solid #e8e8e8;margin:22px 0;"')
+    .replace(/<strong(?=[> ])/g, '<strong style="color:#333;"')
+    .replace(/<a href=/g, '<a style="color:#2d6a4f;text-decoration:underline;" href=');
+}
+
 // ── Broadcast to subscriber ───────────────────────────────────
 export async function sendBroadcastEmail(opts: {
   to: string;
@@ -202,24 +218,36 @@ export async function sendBroadcastEmail(opts: {
   const cfg = await getSmtpConfig();
   if (!cfg) throw new Error("SMTP not configured. Please set up email settings first.");
 
+  const styledBody = inlineEmailStyles(bodyHtml);
+
   const body = `
-    <tr><td style="padding:36px 36px 24px;">
-      <p style="color:#444;font-size:15px;margin:0 0 20px;">Namaste, <strong>${name}</strong> 🙏</p>
-      <div style="color:#555;font-size:15px;line-height:1.7;">${bodyHtml}</div>
-      <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0 20px;">
-      <p style="color:#aaa;font-size:11px;margin:0;">
-        You are receiving this because you subscribed for updates from Susruta Hospital.
+    <tr><td style="padding:36px 36px 28px;">
+      <p style="color:#444;font-size:15px;margin:0 0 22px;">Namaste, <strong>${name}</strong> 🙏</p>
+      <div>${styledBody}</div>
+      <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0 18px;">
+      <p style="color:#bbb;font-size:11px;margin:0;line-height:1.6;">
+        You are receiving this because you subscribed for updates from Susruta Hospital.<br>
+        To unsubscribe, reply to this email with the subject <em>Unsubscribe</em>.
       </p>
     </td></tr>`;
 
   const html = emailWrapper(body);
   const from = senderStr(cfg.fromName, cfg.subscriberFrom);
+  const msgId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@susrutahospital.com>`;
+
   await buildTransport(cfg).sendMail({
     from,
     replyTo: cfg.subscriberFrom,
     to,
     subject,
     html,
+    headers: {
+      "List-Unsubscribe": `<mailto:${cfg.subscriberFrom}?subject=Unsubscribe>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      "Precedence": "bulk",
+      "X-Mailer": "Susruta Hospital Newsletter v1.0",
+      "Message-ID": msgId,
+    },
   });
 }
 
