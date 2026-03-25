@@ -358,6 +358,67 @@ export default function AdminSettings() {
           </div>
         </SectionCard>
 
+        {/* DNS / Deliverability Checklist */}
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2.5 px-6 py-4 border-b border-amber-200 bg-amber-100/60">
+            <Shield size={16} className="text-amber-700" />
+            <h2 className="font-bold text-base text-amber-900">Email Deliverability — DNS Checklist</h2>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-amber-800 leading-relaxed">
+              To prevent emails from going to spam, your domain's DNS must have these records configured. Ask your domain registrar or hosting provider to add them.
+            </p>
+            <div className="space-y-3">
+              {[
+                {
+                  name: "SPF",
+                  status: "Required",
+                  desc: "Tells receiving servers that your SMTP provider is authorised to send email for your domain.",
+                  example: 'TXT record on susrutahospital.com:\n"v=spf1 include:mail.yourhostname.com ~all"',
+                },
+                {
+                  name: "DKIM",
+                  status: "Required",
+                  desc: "Cryptographically signs outgoing mail. Get the DKIM key from your SMTP provider's dashboard and add it as a TXT record.",
+                  example: "Usually looks like:\nmail._domainkey.susrutahospital.com → TXT → (key from SMTP provider)",
+                },
+                {
+                  name: "DMARC",
+                  status: "Recommended",
+                  desc: 'Tells receivers what to do if SPF/DKIM fail. Add this TXT record to protect your domain from spoofing.',
+                  example: 'TXT record _dmarc.susrutahospital.com:\n"v=DMARC1; p=none; rua=mailto:admin@susrutahospital.com"',
+                },
+                {
+                  name: "PTR / Reverse DNS",
+                  status: "Recommended",
+                  desc: "The IP address of your SMTP server should resolve back to your sending domain. Ask your SMTP provider if this is set.",
+                  example: "Typically configured by your SMTP/hosting provider, not in DNS panel.",
+                },
+              ].map((r) => (
+                <div key={r.name} className="bg-white rounded-xl border border-amber-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
+                        r.status === "Required" ? "bg-red-100 text-red-700 border border-red-200" : "bg-amber-100 text-amber-700 border border-amber-200")}>
+                        {r.status}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm text-foreground mb-1">{r.name}</p>
+                      <p className="text-sm text-muted-foreground mb-2 leading-relaxed">{r.desc}</p>
+                      <pre className="text-[11px] bg-muted/60 rounded-lg px-3 py-2 text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">{r.example}</pre>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-amber-700 flex items-start gap-1.5 pt-1">
+              <Shield size={12} className="flex-shrink-0 mt-0.5" />
+              Gmail and Yahoo now require SPF + DKIM + a working List-Unsubscribe link for any bulk sender. These are already set in the email code — you just need the DNS records in place.
+            </p>
+          </div>
+        </div>
+
         {/* Save Button */}
         <div className="flex items-center gap-3">
           <button
