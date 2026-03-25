@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminToastContainer } from "@/components/admin/AdminToast";
+import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
@@ -44,79 +46,6 @@ function apiFetch(path: string, opts: RequestInit = {}) {
     .then((r) => r.json());
 }
 
-// ── Notification permission + sound ───────────────────────────
-function useNotifications() {
-  const [permission, setPermission] = useState<NotificationPermission>(
-    typeof Notification !== "undefined" ? Notification.permission : "default"
-  );
-  // Use a ref so notify() always reads the latest permission without stale closures
-  const permRef = useRef(permission);
-  useEffect(() => { permRef.current = permission; }, [permission]);
-
-  // Single shared AudioContext — created on first user gesture, reused for all beeps
-  const audioCtxRef = useRef<AudioContext | null>(null);
-
-  function getAudioCtx(): AudioContext | null {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return null;
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
-      return audioCtxRef.current;
-    } catch { return null; }
-  }
-
-  // Warm up the AudioContext on first click anywhere on the page (satisfies browser autoplay policy)
-  useEffect(() => {
-    const warmUp = () => { getAudioCtx()?.resume().catch(() => {}); };
-    document.addEventListener("click", warmUp, { once: true });
-    return () => document.removeEventListener("click", warmUp);
-  }, []);
-
-  // Generate a pleasant two-tone chime via Web Audio API
-  function playSound() {
-    try {
-      const ctx = getAudioCtx();
-      if (!ctx) return;
-      ctx.resume().then(() => {
-        [[880, 0, 0.15], [1100, 0.18, 0.18]].forEach(([freq, start, dur]) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = "sine";
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0, ctx.currentTime + start);
-          gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-          osc.start(ctx.currentTime + start);
-          osc.stop(ctx.currentTime + start + dur + 0.05);
-        });
-      });
-    } catch {}
-  }
-
-  async function requestPermission() {
-    if (typeof Notification === "undefined") return;
-    // Warm up AudioContext on this user click
-    getAudioCtx()?.resume().catch(() => {});
-    const perm = await Notification.requestPermission();
-    setPermission(perm);
-    permRef.current = perm;
-    return perm;
-  }
-
-  // Always uses permRef so it works correctly inside SSE callbacks
-  function notify(title: string, body: string) {
-    playSound();
-    if (permRef.current === "granted") {
-      try {
-        new Notification(title, { body, icon: "/favicon.png" });
-      } catch {}
-    }
-  }
-
-  return { permission, requestPermission, notify };
-}
 
 // ── Pay Modal ─────────────────────────────────────────────────
 function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; onPaid: (a: Appt) => void }) {
@@ -242,7 +171,7 @@ export default function AdminAppointments() {
   const [payModal, setPayModal] = useState<Appt | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<Appt | null>(null);
   const [followUpModal, setFollowUpModal] = useState<Appt | null>(null);
-  const { permission, requestPermission, notify } = useNotifications();
+  const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
   const notifyRef = useRef(notify);
   useEffect(() => { notifyRef.current = notify; }, [notify]);
   const queryClient = useQueryClient();
@@ -467,6 +396,7 @@ export default function AdminAppointments() {
           })
         )}
       </div>
+      <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
     </AdminLayout>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminToastContainer } from "@/components/admin/AdminToast";
+import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import {
   Users, Upload, Download, Trash2, RefreshCw, AlertCircle,
   CheckCircle2, FileSpreadsheet, Send, X, Loader2, Mail, Bell,
@@ -25,66 +27,6 @@ function apiFetch(path: string, opts: RequestInit = {}) {
   );
 }
 
-// ── Notification hook ────────────────────────────────────────
-function useNotifications() {
-  const [permission, setPermission] = useState<NotificationPermission>(
-    typeof Notification !== "undefined" ? Notification.permission : "default"
-  );
-  const permRef = useRef(permission);
-  useEffect(() => { permRef.current = permission; }, [permission]);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-
-  function getAudioCtx(): AudioContext | null {
-    try {
-      const AC = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AC) return null;
-      if (!audioCtxRef.current) audioCtxRef.current = new AC();
-      return audioCtxRef.current;
-    } catch { return null; }
-  }
-
-  useEffect(() => {
-    const warmUp = () => { getAudioCtx()?.resume().catch(() => {}); };
-    document.addEventListener("click", warmUp, { once: true });
-    return () => document.removeEventListener("click", warmUp);
-  }, []);
-
-  function playSound() {
-    try {
-      const ctx = getAudioCtx();
-      if (!ctx) return;
-      ctx.resume().then(() => {
-        [[660, 0, 0.12], [880, 0.15, 0.12], [1100, 0.30, 0.18]].forEach(([freq, start, dur]) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = "sine"; osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0, ctx.currentTime + start);
-          gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-          osc.start(ctx.currentTime + start);
-          osc.stop(ctx.currentTime + start + dur + 0.05);
-        });
-      });
-    } catch {}
-  }
-
-  async function requestPermission() {
-    if (typeof Notification === "undefined") return;
-    getAudioCtx()?.resume().catch(() => {});
-    const perm = await Notification.requestPermission();
-    setPermission(perm); permRef.current = perm;
-  }
-
-  function notify(title: string, body: string) {
-    playSound();
-    if (permRef.current === "granted") {
-      try { new Notification(title, { body, icon: "/favicon.png" }); } catch {}
-    }
-  }
-
-  return { permission, requestPermission, notify };
-}
 
 // ── Rich Text Toolbar Button ──────────────────────────────────
 function ToolBtn({ title, onClick, active, children }: {
@@ -502,7 +444,7 @@ export default function AdminSubscribers() {
   const [showCompose, setShowCompose] = useState(false);
   const [newSubFlash, setNewSubFlash] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { permission, requestPermission, notify } = useNotifications();
+  const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
 
   async function fetchSubs() {
     setLoading(true);
@@ -712,6 +654,7 @@ export default function AdminSubscribers() {
           </div>
         </div>
       )}
+      <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
     </AdminLayout>
   );
 }
