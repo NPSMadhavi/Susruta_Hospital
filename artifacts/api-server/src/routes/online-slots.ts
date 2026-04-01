@@ -38,6 +38,13 @@ router.post("/sessions", requireAdmin, async (req, res) => {
 
   const { date, startTime, endTime, intervalMinutes } = parsed.data;
 
+  // Prevent duplicate sessions for the same date
+  const existing = await db.select().from(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.date, date));
+  if (existing.length > 0) {
+    res.status(409).json({ error: "duplicate", message: `A session already exists for ${date}. Delete it first before creating a new one.` });
+    return;
+  }
+
   const slots = generateSlots(startTime, endTime, intervalMinutes);
   if (slots.length === 0) {
     res.status(400).json({ error: "no_slots", message: "The selected time range and interval produce no slots." });
