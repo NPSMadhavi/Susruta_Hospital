@@ -8,3 +8,7 @@ export * from "./testimonials";
 export * from "./site_settings";
 export * from "./admin_sessions";
 export * from "./subscribers";
+export * from "./online_slots";
+export * from "./online_appointments";
+export * from "./prescriptions";
+export * from "./doctor_sessions";

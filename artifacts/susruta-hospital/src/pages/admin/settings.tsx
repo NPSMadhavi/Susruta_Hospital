@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical } from "lucide-react";
+import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical, Stethoscope, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -27,6 +27,7 @@ type Settings = {
   smtpFromEmail: string;
   smtpSubscriberFrom: string;
   smtpConfigured: boolean;
+  doctorPortalConfigured: boolean;
 };
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
@@ -91,6 +92,8 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [passChanged, setPassChanged] = useState(false);
+  const [doctorPassword, setDoctorPassword] = useState("");
+  const [showDoctorPass, setShowDoctorPass] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -122,8 +125,8 @@ export default function AdminSettings() {
     setSaveResult(null);
     try {
       const payload: any = { ...form };
-      // If password field still shows masked value and wasn't changed, omit it
       if (!passChanged) delete payload.smtpPass;
+      if (doctorPassword.trim()) payload.doctorPassword = doctorPassword;
       const res = await apiFetch("/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -133,6 +136,7 @@ export default function AdminSettings() {
       if (!res.ok) throw new Error(data.message || "Failed to save settings.");
       setForm(data);
       setPassChanged(false);
+      setDoctorPassword("");
       setSaveResult({ ok: true, msg: "Settings saved successfully." });
     } catch (err: any) {
       setSaveResult({ ok: false, msg: err.message });
@@ -355,6 +359,52 @@ export default function AdminSettings() {
                 {testResult.msg}
               </div>
             )}
+          </div>
+        </SectionCard>
+
+        {/* ── Doctor Portal ── */}
+        <SectionCard title="Doctor Portal Access" icon={Stethoscope}>
+          <div className={cn(
+            "flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium",
+            form.doctorPortalConfigured
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-amber-50 text-amber-700 border border-amber-200"
+          )}>
+            {form.doctorPortalConfigured
+              ? <><CheckCircle2 size={15} /> Doctor portal is configured — the doctor can log in at /doctor</>
+              : <><AlertCircle size={15} /> Doctor portal password not yet set — doctor cannot log in until configured</>}
+          </div>
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3 leading-relaxed">
+            Set a shared password for Dr. P. Murali Krishna to access the doctor portal at{" "}
+            <strong>/doctor</strong>. The doctor can view patient documents, issue prescriptions, and write private notes.
+            The password is stored as a secure hash — leave this field blank to keep the current password unchanged.
+          </div>
+          <div>
+            <label className={labelCls}>
+              {form.doctorPortalConfigured ? "Change Doctor Portal Password" : "Set Doctor Portal Password"}
+            </label>
+            <div className="relative">
+              <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type={showDoctorPass ? "text" : "password"}
+                value={doctorPassword}
+                onChange={e => setDoctorPassword(e.target.value)}
+                placeholder={form.doctorPortalConfigured ? "Leave blank to keep current password" : "Set a new password"}
+                autoComplete="new-password"
+                className={cn(inputCls, "pl-9 pr-10")}
+              />
+              <button type="button" onClick={() => setShowDoctorPass(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showDoctorPass ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">Share this password with Dr. Murali Krishna. It cannot be recovered — only reset.</p>
+          </div>
+          <div className="pt-1">
+            <a href="/doctor" target="_blank" rel="noopener noreferrer"
+              className="text-sm text-primary font-semibold hover:underline flex items-center gap-1.5">
+              <Stethoscope size={13} /> Open Doctor Portal →
+            </a>
           </div>
         </SectionCard>
 

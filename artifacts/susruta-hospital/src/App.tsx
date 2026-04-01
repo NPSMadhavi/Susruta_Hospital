@@ -16,11 +16,17 @@ import AdminAvailability from "./pages/admin/availability";
 import AdminTestimonials from "./pages/admin/testimonials";
 import AdminSettings from "./pages/admin/settings";
 import AdminSubscribers from "./pages/admin/subscribers";
+import AdminOnlineSlots from "./pages/admin/online-slots";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
 import PatientDashboard from "./pages/portal/dashboard";
 import PortalBook from "./pages/portal/book";
+import OnlineBook from "./pages/portal/online-book";
+
+// Doctor Portal Pages
+import DoctorLogin from "./pages/doctor/login";
+import DoctorAppointments from "./pages/doctor/appointments";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +48,11 @@ function Router() {
       <Route path="/portal" component={PortalLogin} />
       <Route path="/portal/dashboard" component={PatientDashboard} />
       <Route path="/portal/book" component={PortalBook} />
+      <Route path="/portal/online-book" component={OnlineBook} />
+
+      {/* Doctor Portal Routes */}
+      <Route path="/doctor" component={DoctorLogin} />
+      <Route path="/doctor/appointments" component={DoctorAppointments} />
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
@@ -50,6 +61,7 @@ function Router() {
       <Route path="/admin/availability" component={AdminAvailability} />
       <Route path="/admin/testimonials" component={AdminTestimonials} />
       <Route path="/admin/subscribers" component={AdminSubscribers} />
+      <Route path="/admin/online-slots" component={AdminOnlineSlots} />
       <Route path="/admin/settings" component={AdminSettings} />
 
       <Route component={NotFound} />

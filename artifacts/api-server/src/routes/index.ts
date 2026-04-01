@@ -6,6 +6,10 @@ import testimonialsRouter from "./testimonials";
 import adminRouter from "./admin";
 import patientRouter from "./patient";
 import subscribersRouter from "./subscribers";
+import doctorRouter from "./doctor";
+import onlineSlotsRouter from "./online-slots";
+import onlineAppointmentsRouter from "./online-appointments";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -16,5 +20,9 @@ router.use("/testimonials", testimonialsRouter);
 router.use("/admin", adminRouter);
 router.use("/patient", patientRouter);
 router.use("/subscribers", subscribersRouter);
+router.use("/doctor", doctorRouter);
+router.use("/online-slots", onlineSlotsRouter);
+router.use("/online-appointments", onlineAppointmentsRouter);
+router.use(storageRouter);
 
 export default router;

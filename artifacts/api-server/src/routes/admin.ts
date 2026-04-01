@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, siteSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
 import { testSmtpConnection, type SmtpConfig } from "../lib/email";
 
@@ -97,6 +98,7 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     smtpFromEmail: s.smtpFromEmail,
     smtpSubscriberFrom: s.smtpSubscriberFrom,
     smtpConfigured: !!(s.smtpHost && s.smtpUser && s.smtpPass),
+    doctorPortalConfigured: !!s.doctorPasswordHash,
   };
 }
 
@@ -109,10 +111,13 @@ router.patch("/settings", requireAdmin, async (req, res) => {
   const updates: Record<string, unknown> = {};
   for (const key of SETTINGS_FIELDS) {
     if (req.body[key] !== undefined) {
-      // If admin sends "••••••••" back (masked), skip it — keep existing pass
       if (key === "smtpPass" && req.body[key] === "••••••••") continue;
       updates[key] = req.body[key];
     }
+  }
+  // Handle doctor password separately — hash before storing
+  if (req.body.doctorPassword && req.body.doctorPassword.trim()) {
+    updates.doctorPasswordHash = await bcrypt.hash(req.body.doctorPassword, 12);
   }
   updates.updatedAt = new Date();
 

@@ -2,7 +2,7 @@ import React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +29,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/availability", icon: <Clock size={20}/>, label: "Availability" },
     { href: "/admin/testimonials", icon: <MessageSquare size={20}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={20}/>, label: "Subscribers" },
+    { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
     { href: "/admin/settings", icon: <Settings size={20}/>, label: "Settings" },
   ];
 

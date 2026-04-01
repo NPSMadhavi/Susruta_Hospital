@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete bilingual (English/Telugu) Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, and newsletter subscription management.
+A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, and an **Online Consultation System** with weekly Sunday slot booking, doctor portal with prescription notepad, and patient document uploads.
 
 ## Stack
 
@@ -48,11 +48,16 @@ artifacts-monorepo/
 │           │   │   ├── availability.tsx
 │           │   │   ├── testimonials.tsx
 │           │   │   ├── subscribers.tsx   # Newsletter subscriber mgmt
-│           │   │   └── settings.tsx
+│           │   │   ├── online-slots.tsx  # Online consultation slot manager
+│           │   │   └── settings.tsx      # + Doctor Portal password section
+│           │   ├── doctor/
+│           │   │   ├── login.tsx         # Doctor portal login (shared password)
+│           │   │   └── appointments.tsx  # Patient docs + prescription notepad + private notes
 │           │   └── portal/
 │           │       ├── login.tsx         # Patient login/register
-│           │       ├── dashboard.tsx     # Appointment tracking dashboard
-│           │       └── book.tsx          # Calendar appointment booking
+│           │       ├── dashboard.tsx     # Appointment tracking + online consultations
+│           │       ├── book.tsx          # Calendar appointment booking
+│           │       └── online-book.tsx   # 3-step online consultation booking wizard
 │           ├── components/
 │           │   ├── layout/PublicLayout.tsx
 │           │   ├── admin/AdminLayout.tsx
@@ -74,8 +79,13 @@ artifacts-monorepo/
 │       ├── open_months.ts
 │       ├── testimonials.ts
 │       ├── subscribers.ts     # Newsletter subscribers
-│       ├── site_settings.ts
-│       └── admin_sessions.ts
+│       ├── site_settings.ts              # + doctorPasswordHash field
+│       ├── admin_sessions.ts
+│       ├── online_slot_sessions.ts       # Session (date + time range)
+│       ├── online_slots.ts              # Individual bookable slots
+│       ├── online_appointments.ts       # Patient slot bookings + doc uploads
+│       ├── prescriptions.ts             # Doctor prescriptions + private notes
+│       └── doctor_sessions.ts           # Doctor portal sessions
 ```
 
 ## Features
@@ -101,7 +111,31 @@ artifacts-monorepo/
 - **Availability** — Open/close months, block specific dates
 - **Testimonials** — Add, edit, publish/unpublish, delete
 - **Subscribers** — List, delete, CSV export, Excel/CSV bulk import
-- **Settings** — Toggle testimonials, enable/disable booking, contact info
+- **Online Slots** (`/admin/online-slots`) — Create Sunday consultation sessions (date + start/end time + 15/30 min interval), live slot preview, session list with expand/collapse showing individual slot bookings
+- **Settings** — Toggle testimonials, enable/disable booking, contact info, SMTP config, DNS deliverability checklist, **Doctor Portal password setup**
+
+### Doctor Portal (`/doctor`)
+- **Login** — Shared password set by admin in Settings; stored as bcrypt hash; cookie valid 7 days
+- **Appointments** (`/doctor/appointments`) — Full list of booked online consultations; filter by All/Pending/Completed
+- Each appointment expands to show:
+  - Patient info (name, email, phone)
+  - Downloadable patient documents
+  - Prescription notepad (medicine name + dosage, +add more rows, delete rows)
+  - Private notes textarea (doctor-only, not visible to patient)
+  - Save prescription → marks appointment Completed
+  - Save notes independently
+
+### Online Consultation System
+- **Patient booking** (`/portal/online-book`) — 3-step wizard: Select Slot → Upload Documents → Confirm
+  - Slots grouped by date (Sundays); each slot card shows time range
+  - Document upload: files go to GCS via presigned URL (request-url → PUT); minimum 1 required
+  - Reason for consultation (optional textarea)
+  - Booking marks slot as taken, creates appointment with `confirmed` status
+- **Patient dashboard** — Shows Online Consultations section with each booking card (expandable):
+  - Status badge (confirmed/completed/cancelled)
+  - Prescription shown when available (medicines + instructions)
+  - List of uploaded documents (downloadable links)
+- **Prescriptions** — `medicines[]` (array of { medicine, instructions }) visible to patient; `doctorNotes` private
 
 ### Language Support
 - English default; Telugu translations exist but language selector hidden pending translation quality review

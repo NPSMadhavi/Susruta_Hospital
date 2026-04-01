@@ -20,6 +20,8 @@ export const siteSettingsTable = pgTable("site_settings", {
   smtpFromName: varchar("smtp_from_name", { length: 255 }).notNull().default("Susruta Hospital"),
   smtpFromEmail: varchar("smtp_from_email", { length: 255 }).notNull().default("noreply@susrutahospital.com"),
   smtpSubscriberFrom: varchar("smtp_subscriber_from", { length: 255 }).notNull().default("updates@susrutahospital.com"),
+  // Doctor portal password (hashed with bcrypt)
+  doctorPasswordHash: varchar("doctor_password_hash", { length: 255 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

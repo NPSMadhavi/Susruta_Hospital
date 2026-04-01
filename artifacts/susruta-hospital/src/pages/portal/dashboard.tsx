@@ -3,10 +3,116 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Calendar, Clock, CheckCircle2, XCircle, AlertCircle, LogOut,
-  Plus, Leaf, ChevronRight, Bell, RefreshCw, User
+  Plus, Leaf, ChevronRight, Bell, RefreshCw, User, Video, Pill, FileText, ChevronDown, ChevronUp
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import logoImg from "@assets/logo_1773840200056.png";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type MedicineRow = { medicine: string; instructions: string };
+type OnlineAppt = {
+  id: number; status: string; reason?: string; createdAt: string;
+  documents: { name: string; objectPath: string; contentType: string; size: number }[];
+  slot: { id: number; date: string; startTime: string; endTime: string };
+  prescription: { medicines: MedicineRow[]; updatedAt: string } | null;
+};
+
+function fmtTimeO(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
+  const [open, setOpen] = useState(false);
+  const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+  const statusColor: Record<string, string> = {
+    confirmed: "bg-blue-100 text-blue-700 border-blue-200",
+    completed: "bg-green-100 text-green-700 border-green-200",
+    cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+  const sc = statusColor[appt.status] ?? statusColor["confirmed"];
+
+  return (
+    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-4 p-4 text-left hover:bg-muted/20 transition-colors">
+        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+          <Video size={18} className="text-blue-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-sm text-foreground">{fmtD(appt.slot.date)}</p>
+            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${sc}`}>
+              {appt.status}
+            </span>
+            {appt.prescription && (
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
+                <Pill size={9} /> Prescription Ready
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <Clock size={10} className="inline mr-1" />{fmtTimeO(appt.slot.startTime)} – {fmtTimeO(appt.slot.endTime)}
+            {" · "}{appt.documents.length} doc(s) uploaded
+          </p>
+        </div>
+        {open ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-5 pb-4 pt-3 space-y-4">
+          {appt.reason && (
+            <p className="text-sm text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">
+              <span className="font-medium text-foreground">Reason:</span> {appt.reason}
+            </p>
+          )}
+          {appt.prescription ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Pill size={11} /> Prescription from Dr. Murali Krishna
+              </p>
+              <div className="space-y-1.5">
+                {appt.prescription.medicines.map((m, i) => (
+                  <div key={i} className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
+                    <div className="w-5 h-5 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{m.medicine}</p>
+                      <p className="text-xs text-green-700">{m.instructions}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Issued {new Date(appt.prescription.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+            </div>
+          ) : appt.status === "confirmed" ? (
+            <div className="text-sm text-muted-foreground bg-muted/30 rounded-xl px-4 py-3 flex items-center gap-2">
+              <Clock size={13} /> Prescription will appear here after your consultation.
+            </div>
+          ) : null}
+
+          {appt.documents.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <FileText size={11} /> Uploaded Documents
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {appt.documents.map((d, i) => (
+                  <a key={i} href={`${BASE}/api/storage/objects/${d.objectPath}`} target="_blank" rel="noopener noreferrer"
+                    className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5 font-medium hover:bg-blue-100 transition-colors flex items-center gap-1.5">
+                    <FileText size={11} /> {d.name}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Patient = { id: number; name: string; email: string; phone?: string };
 type Appt = {
@@ -104,6 +210,7 @@ export default function PatientDashboard() {
   const [, navigate] = useLocation();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appts, setAppts] = useState<Appt[]>([]);
+  const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"upcoming" | "past" | "missed">("upcoming");
   const [choosingReschedule, setChoosingReschedule] = useState<number | null>(null);
@@ -114,14 +221,23 @@ export default function PatientDashboard() {
     async function load(initial = false) {
       try {
         if (initial) {
-          const [me, myAppts] = await Promise.all([patientApi.me(), patientApi.getAppointments()]);
+          const [me, myAppts, myOnlineAppts] = await Promise.all([
+            patientApi.me(),
+            patientApi.getAppointments(),
+            fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.json()).catch(() => []),
+          ]);
           if (cancelled) return;
           setPatient(me);
           setAppts(myAppts);
+          setOnlineAppts(myOnlineAppts);
         } else {
-          const myAppts = await patientApi.getAppointments();
+          const [myAppts, myOnlineAppts] = await Promise.all([
+            patientApi.getAppointments(),
+            fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.json()).catch(() => []),
+          ]);
           if (cancelled) return;
           setAppts(myAppts);
+          setOnlineAppts(myOnlineAppts);
         }
       } catch {
         if (initial) navigate("/portal");
@@ -198,10 +314,16 @@ export default function PatientDashboard() {
             <h1 className="text-xl font-serif font-bold">Welcome back, {patient?.name?.split(" ")[0]}!</h1>
             <p className="text-white/60 text-sm mt-1">Manage your Ayurvedic care journey</p>
           </div>
-          <button onClick={() => navigate("/portal/book")}
-            className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
-            <Plus size={15} /> Book
-          </button>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => navigate("/portal/book")}
+              className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
+              <Plus size={15} /> Book
+            </button>
+            <button onClick={() => navigate("/portal/online-book")}
+              className="flex-shrink-0 bg-white/20 border border-white/30 text-white rounded-2xl px-4 py-2 text-xs font-bold hover:bg-white/30 transition-colors flex items-center gap-1.5">
+              <Video size={12} /> Online
+            </button>
+          </div>
         </motion.div>
 
         {/* Stats */}
@@ -316,6 +438,37 @@ export default function PatientDashboard() {
             })
           )}
         </div>
+        {/* ── Online Consultations Section ── */}
+        {onlineAppts.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-base text-foreground flex items-center gap-2">
+                <Video size={16} className="text-blue-600" /> Online Consultations
+              </h2>
+              <button onClick={() => navigate("/portal/online-book")}
+                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1">
+                <Plus size={12} /> Book New
+              </button>
+            </div>
+            {onlineAppts.map(appt => (
+              <OnlineConsultationCard key={appt.id} appt={appt} />
+            ))}
+          </motion.div>
+        )}
+
+        {onlineAppts.length === 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-blue-50 border border-blue-200 rounded-2xl p-5 flex items-center justify-between">
+            <div>
+              <p className="font-bold text-blue-900 text-sm flex items-center gap-2"><Video size={15} /> Online Consultation</p>
+              <p className="text-xs text-blue-700 mt-1">Consult with Dr. Murali Krishna from home — Sundays only</p>
+            </div>
+            <button onClick={() => navigate("/portal/online-book")}
+              className="shrink-0 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-1.5">
+              <Plus size={12} /> Book
+            </button>
+          </motion.div>
+        )}
       </div>
 
     </div>
