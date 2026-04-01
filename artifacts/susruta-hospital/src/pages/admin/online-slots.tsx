@@ -26,16 +26,22 @@ function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 function fmtTime(t: string) {
-  const [h, m] = t.split(":").map(Number);
+  if (!t || !t.includes(":")) return t;
+  const parts = t.split(":");
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (isNaN(h) || isNaN(m)) return t;
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 function generatePreview(startTime: string, endTime: string, interval: number): SlotPreview[] {
   if (!startTime || !endTime || !interval) return [];
-  const slots: SlotPreview[] = [];
+  if (!startTime.includes(":") || !endTime.includes(":")) return [];
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return [];
+  const slots: SlotPreview[] = [];
   let current = sh * 60 + sm;
   const end = eh * 60 + em;
   while (current + interval <= end) {
@@ -107,14 +113,18 @@ export default function AdminOnlineSlots() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await r.json();
-      if (!r.ok) { setErr(data.message || "Failed to create session."); return; }
-      addToast(`Created ${data.slots.length} slots for ${fmtDate(form.date)}`, "success");
+      let data: Record<string, unknown> = {};
+      try { data = await r.json(); } catch { /* non-JSON body */ }
+      if (!r.ok) {
+        setErr((data?.message as string) || `Server error (${r.status}). Please try again.`);
+        return;
+      }
+      addToast(`Created ${(data.slots as unknown[])?.length ?? 0} slots for ${fmtDate(form.date)}`, "success");
       setForm(f => ({ ...f, date: "" }));
       setShowPreview(false);
       await load();
     } catch {
-      setErr("Network error. Please try again.");
+      setErr("Network error. Please check your connection and try again.");
     } finally {
       setCreating(false);
     }
