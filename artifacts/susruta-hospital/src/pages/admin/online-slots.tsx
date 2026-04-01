@@ -57,7 +57,7 @@ const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm f
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
-  const { toasts, addToast } = useAdminNotifications();
+  const { notify, toasts, dismissToast } = useAdminNotifications();
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +82,7 @@ export default function AdminOnlineSlots() {
       const data = await r.json();
       if (r.ok && Array.isArray(data)) setSessions(data);
     } catch {
-      addToast("Failed to load sessions", "error");
+      notify("Error", "Failed to load sessions — please refresh.");
     } finally {
       setLoading(false);
     }
@@ -119,12 +119,13 @@ export default function AdminOnlineSlots() {
         setErr((data?.message as string) || `Server error (${r.status}). Please try again.`);
         return;
       }
-      addToast(`Created ${(data.slots as unknown[])?.length ?? 0} slots for ${fmtDate(form.date)}`, "success");
+      notify("Session Created", `Created ${(data.slots as unknown[])?.length ?? 0} slots for ${fmtDate(form.date)}`);
       setForm(f => ({ ...f, date: "" }));
       setShowPreview(false);
       await load();
-    } catch {
-      setErr("Network error. Please check your connection and try again.");
+    } catch (err) {
+      console.error("[online-slots] createSession error:", err);
+      setErr(err instanceof Error ? `Error: ${err.message}` : "Network error. Please check your connection and try again.");
     } finally {
       setCreating(false);
     }
@@ -136,9 +137,9 @@ export default function AdminOnlineSlots() {
     try {
       await apiFetch(`/sessions/${id}`, { method: "DELETE" });
       setSessions(s => s.filter(x => x.id !== id));
-      addToast("Session deleted", "info");
+      notify("Deleted", "Session and all its slots have been removed.");
     } catch {
-      addToast("Failed to delete session", "error");
+      notify("Error", "Failed to delete session. Please try again.");
     } finally {
       setDeleting(null);
     }
@@ -146,7 +147,7 @@ export default function AdminOnlineSlots() {
 
   return (
     <AdminLayout>
-      <AdminToastContainer toasts={toasts} />
+      <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div>
           <h1 className="text-2xl font-serif font-bold text-foreground flex items-center gap-2">

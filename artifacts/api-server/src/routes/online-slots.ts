@@ -27,7 +27,9 @@ const CreateSessionBody = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  intervalMinutes: z.union([z.literal(15), z.literal(30)]),
+  intervalMinutes: z.coerce.number().refine((v) => v === 15 || v === 30, {
+    message: "intervalMinutes must be 15 or 30",
+  }),
 });
 
 router.post("/sessions", requireAdmin, async (req, res) => {
