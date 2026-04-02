@@ -66,13 +66,16 @@ export default function OnlineBook() {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }),
+          body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
         });
-        if (!r.ok) throw new Error("Failed to get upload URL");
-        const { uploadUrl, objectPath } = await r.json();
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error((errData as any)?.message || "Failed to get upload URL");
+        }
+        const { uploadURL, objectPath } = await r.json();
 
         // Upload directly to GCS
-        const uploadRes = await fetch(uploadUrl, {
+        const uploadRes = await fetch(uploadURL, {
           method: "PUT",
           headers: { "Content-Type": file.type },
           body: file,
