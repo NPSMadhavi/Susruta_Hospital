@@ -264,12 +264,12 @@ function OnlineDetailPanel({
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50">
       {/* Patient header */}
-      <div className="bg-white border-b border-border px-6 py-4 shrink-0">
+      <div className="bg-white border-b border-border px-6 py-4 shrink-0 relative">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
             <User size={20} className="text-blue-600" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-bold text-foreground">{appt.patient.name}</h2>
               <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Online</span>
@@ -287,19 +287,19 @@ function OnlineDetailPanel({
               <Calendar size={10} /> {fmtDate(appt.date)} <Clock size={10} className="ml-1" /> {appt.timeLabel}
             </p>
           </div>
-          {appt.meetingLink && (
-            <a
-              href={appt.meetingLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold transition-colors shadow-sm"
-            >
-              <Video size={14} className="pointer-events-none" />
-              <span className="pointer-events-none">Join Meeting</span>
-              <ExternalLink size={11} className="opacity-70 pointer-events-none" />
-            </a>
-          )}
         </div>
+        {appt.meetingLink && (
+          <a
+            href={appt.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold transition-colors shadow-sm whitespace-nowrap"
+          >
+            <Video size={14} className="pointer-events-none" />
+            <span className="pointer-events-none">Join Meeting</span>
+            <ExternalLink size={11} className="opacity-70 pointer-events-none" />
+          </a>
+        )}
         {appt.reason && (
           <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
             <p className="text-xs font-semibold text-amber-800 mb-0.5">Reason for consultation</p>
