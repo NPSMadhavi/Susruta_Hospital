@@ -546,7 +546,8 @@ function MedOrderCard({ order, onApprove, onPaymentDone, qrUrl }: {
   onPaymentDone: (id: number) => void;
   qrUrl: string | null;
 }) {
-  const [open, setOpen] = useState(false);
+  const needsAction = order.status === "payment_requested" || order.status === "partial_approval_needed";
+  const [open, setOpen] = useState(needsAction);
   const [loading, setLoading] = useState(false);
   const meta = ORDER_STATUS_META[order.status] ?? ORDER_STATUS_META["submitted"];
   const fmtD = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
