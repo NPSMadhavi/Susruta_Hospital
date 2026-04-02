@@ -312,52 +312,118 @@ export default function PharmacyOrders() {
                   <Pill size={11} /> Medicines ({selected.items.length})
                 </h3>
 
-                {/* If submitted: show availability checkboxes */}
-                {selected.status === "submitted" ? (
-                  <div className="space-y-2">
-                    {selected.items.map(item => (
-                      <div key={item.id}
-                        className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors
-                          ${availMap[item.id] !== false ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold truncate">{item.medicineName}</p>
-                          {item.instructions && <p className="text-xs text-muted-foreground">{item.instructions}</p>}
-                          <p className="text-xs text-muted-foreground">Qty: {item.qty}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button onClick={() => setAvailMap(m => ({ ...m, [item.id]: true }))}
-                            className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold border transition-colors
-                              ${availMap[item.id] !== false ? "bg-green-600 text-white border-green-600" : "bg-white text-green-700 border-green-300 hover:bg-green-50"}`}>
-                            ✓ Available
-                          </button>
-                          <button onClick={() => setAvailMap(m => ({ ...m, [item.id]: false }))}
-                            className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold border transition-colors
-                              ${availMap[item.id] === false ? "bg-red-600 text-white border-red-600" : "bg-white text-red-700 border-red-300 hover:bg-red-50"}`}>
-                            ✗ Unavailable
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {selected.items.map(item => (
-                      <div key={item.id}
-                        className={`flex items-center gap-3 rounded-xl px-4 py-3 border
-                          ${item.available === false ? "bg-red-50 border-red-200" : item.available === true ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold truncate">{item.medicineName}</p>
-                          {item.instructions && <p className="text-xs text-muted-foreground">{item.instructions}</p>}
-                          <p className="text-xs text-muted-foreground">Qty: {item.qty}</p>
-                        </div>
-                        {item.available === false && (
-                          <span className="text-[11px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">Unavailable</span>
-                        )}
-                        {item.available === true && (
-                          <span className="text-[11px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full border border-green-200">Available</span>
-                        )}
-                      </div>
-                    ))}
+                {/* If submitted: table with checkboxes */}
+                {selected.status === "submitted" ? (() => {
+                  const allAvail = selected.items.every(it => availMap[it.id] !== false);
+                  const someAvail = selected.items.some(it => availMap[it.id] !== false);
+                  return (
+                    <div className="overflow-x-auto rounded-xl border border-border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-border">
+                            <th className="px-3 py-2.5 text-left w-10">
+                              <input
+                                type="checkbox"
+                                checked={allAvail}
+                                ref={el => { if (el) el.indeterminate = !allAvail && someAvail; }}
+                                onChange={e => {
+                                  const val = e.target.checked;
+                                  setAvailMap(m => Object.fromEntries(selected.items.map(it => [it.id, val])));
+                                }}
+                                className="w-4 h-4 accent-primary cursor-pointer"
+                                title="Select All"
+                              />
+                            </th>
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Medicine</th>
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Instructions</th>
+                            <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-12">Qty</th>
+                            <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {selected.items.map(item => {
+                            const avail = availMap[item.id] !== false;
+                            return (
+                              <tr key={item.id}
+                                onClick={() => setAvailMap(m => ({ ...m, [item.id]: !avail }))}
+                                className={`cursor-pointer transition-colors hover:bg-gray-50 ${avail ? "" : "bg-red-50/60"}`}>
+                                <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={avail}
+                                    onChange={e => setAvailMap(m => ({ ...m, [item.id]: e.target.checked }))}
+                                    className="w-4 h-4 accent-primary cursor-pointer"
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <p className={`font-semibold leading-tight ${avail ? "text-foreground" : "text-muted-foreground line-through"}`}>
+                                    {item.medicineName}
+                                  </p>
+                                  {item.instructions && (
+                                    <p className="text-xs text-muted-foreground mt-0.5 sm:hidden">{item.instructions}</p>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell">
+                                  {item.instructions || "—"}
+                                </td>
+                                <td className="px-3 py-3 text-center font-bold text-sm">{item.qty}</td>
+                                <td className="px-3 py-3 text-center">
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    avail
+                                      ? "bg-green-100 text-green-700 border-green-200"
+                                      : "bg-red-100 text-red-700 border-red-200"
+                                  }`}>
+                                    {avail ? "✓ Available" : "✗ Not Available"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })() : (
+                  <div className="overflow-x-auto rounded-xl border border-border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-border">
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Medicine</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Instructions</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-12">Qty</th>
+                          <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {selected.items.map(item => (
+                          <tr key={item.id} className={item.available === false ? "bg-red-50/60" : ""}>
+                            <td className="px-3 py-3">
+                              <p className={`font-semibold leading-tight ${item.available === false ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                {item.medicineName}
+                              </p>
+                              {item.instructions && (
+                                <p className="text-xs text-muted-foreground mt-0.5 sm:hidden">{item.instructions}</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell">
+                              {item.instructions || "—"}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold">{item.qty}</td>
+                            <td className="px-3 py-3 text-center">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                item.available === false
+                                  ? "bg-red-100 text-red-700 border-red-200"
+                                  : item.available === true
+                                    ? "bg-green-100 text-green-700 border-green-200"
+                                    : "bg-gray-100 text-gray-500 border-gray-200"
+                              }`}>
+                                {item.available === false ? "✗ Not Available" : item.available === true ? "✓ Available" : "Pending"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
