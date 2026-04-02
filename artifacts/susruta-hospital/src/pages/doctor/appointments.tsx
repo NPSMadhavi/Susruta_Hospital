@@ -281,24 +281,24 @@ function OnlineDetailPanel({
                   <Pill size={8} /> Rx Saved
                 </span>
               )}
-              {appt.meetingLink && (
-                <a
-                  href={appt.meetingLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors shrink-0"
-                >
-                  <Video size={11} />
-                  Join Meeting
-                  <ExternalLink size={9} className="opacity-70" />
-                </a>
-              )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">{appt.patient.email}{appt.patient.phone && ` · ${appt.patient.phone}`}</p>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
               <Calendar size={10} /> {fmtDate(appt.date)} <Clock size={10} className="ml-1" /> {appt.timeLabel}
             </p>
           </div>
+          {appt.meetingLink && (
+            <a
+              href={appt.meetingLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold transition-colors shadow-sm"
+            >
+              <Video size={14} className="pointer-events-none" />
+              <span className="pointer-events-none">Join Meeting</span>
+              <ExternalLink size={11} className="opacity-70 pointer-events-none" />
+            </a>
+          )}
         </div>
         {appt.reason && (
           <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
