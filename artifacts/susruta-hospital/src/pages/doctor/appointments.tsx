@@ -176,7 +176,7 @@ function AppointmentCard({ appt, onUpdated }: { appt: Appointment; onUpdated: (a
                   <div className="space-y-2">
                     {appt.documents.map((doc, i) => (
                       <a key={i}
-                        href={`${BASE}/api/storage/objects/${doc.objectPath}`}
+                        href={`${BASE}/api/storage${doc.objectPath}`}
                         target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 hover:bg-blue-100 transition-colors group"
                       >

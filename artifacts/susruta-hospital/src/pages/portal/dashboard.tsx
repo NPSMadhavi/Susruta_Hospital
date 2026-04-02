@@ -100,7 +100,7 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
               </p>
               <div className="flex flex-wrap gap-2">
                 {appt.documents.map((d, i) => (
-                  <a key={i} href={`${BASE}/api/storage/objects/${d.objectPath}`} target="_blank" rel="noopener noreferrer"
+                  <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
                     className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5 font-medium hover:bg-blue-100 transition-colors flex items-center gap-1.5">
                     <FileText size={11} /> {d.name}
                   </a>
