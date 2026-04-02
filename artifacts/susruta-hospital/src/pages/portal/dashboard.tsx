@@ -13,6 +13,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type MedicineRow = { medicine: string; instructions: string };
 type OnlineAppt = {
   id: number; status: string; reason?: string; createdAt: string;
+  meetingLink: string | null;
   documents: { name: string; objectPath: string; contentType: string; size: number }[];
   slot: { id: number; date: string; startTime: string; endTime: string };
   prescription: { medicines: MedicineRow[]; updatedAt: string } | null;
@@ -29,9 +30,16 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
   const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
   const statusColor: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
     confirmed: "bg-blue-100 text-blue-700 border-blue-200",
     completed: "bg-green-100 text-green-700 border-green-200",
     cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+  const statusLabel: Record<string, string> = {
+    pending: "Awaiting Approval",
+    confirmed: "Confirmed",
+    completed: "Completed",
+    cancelled: "Cancelled",
   };
   const sc = statusColor[appt.status] ?? statusColor["confirmed"];
 
@@ -45,19 +53,27 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold text-sm text-foreground">{fmtD(appt.slot.date)}</p>
+            <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Online</span>
             <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${sc}`}>
-              {appt.status}
+              {statusLabel[appt.status] ?? appt.status}
             </span>
             {appt.prescription && (
               <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
-                <Pill size={9} /> Prescription Ready
+                <Pill size={9} /> Rx Ready
               </span>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             <Clock size={10} className="inline mr-1" />{fmtTimeO(appt.slot.startTime)} – {fmtTimeO(appt.slot.endTime)}
-            {" · "}{appt.documents.length} doc(s) uploaded
+            {appt.documents.length > 0 && ` · ${appt.documents.length} doc(s)`}
           </p>
+          {appt.meetingLink && appt.status === "confirmed" && (
+            <a href={appt.meetingLink} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 mt-1.5 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+              <Video size={10} /> Join Meeting
+            </a>
+          )}
         </div>
         {open ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
       </button>
@@ -281,6 +297,11 @@ export default function PatientDashboard() {
   const followUps = appts.filter((a) => a.followUpDate && !a.followUpConfirmed && isPast(a));
   const shown = { upcoming, past, missed }[tab];
 
+  // Online appointments merged into tabs
+  const onlineUpcoming = onlineAppts.filter((a) => ["pending", "confirmed"].includes(a.status));
+  const onlinePast = onlineAppts.filter((a) => a.status === "completed");
+  const shownOnline = tab === "upcoming" ? onlineUpcoming : tab === "past" ? onlinePast : [];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50/40 via-white to-white">
       {/* Header */}
@@ -319,18 +340,14 @@ export default function PatientDashboard() {
               className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
               <Plus size={15} /> Book
             </button>
-            <button onClick={() => navigate("/portal/online-book")}
-              className="flex-shrink-0 bg-white/20 border border-white/30 text-white rounded-2xl px-4 py-2 text-xs font-bold hover:bg-white/30 transition-colors flex items-center gap-1.5">
-              <Video size={12} /> Online
-            </button>
           </div>
         </motion.div>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: "Upcoming", count: upcoming.length, color: "text-blue-600", bg: "bg-blue-50" },
-            { label: "Completed", count: past.length, color: "text-green-600", bg: "bg-green-50" },
+            { label: "Upcoming", count: upcoming.length + onlineUpcoming.length, color: "text-blue-600", bg: "bg-blue-50" },
+            { label: "Completed", count: past.length + onlinePast.length, color: "text-green-600", bg: "bg-green-50" },
             { label: "Missed", count: missed.length, color: "text-red-500", bg: "bg-red-50" },
           ].map((s) => (
             <div key={s.label} className={`${s.bg} rounded-2xl p-4 text-center`}>
@@ -374,7 +391,7 @@ export default function PatientDashboard() {
 
         {/* Appointment cards */}
         <div className="space-y-3">
-          {shown.length === 0 ? (
+          {shown.length === 0 && shownOnline.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Calendar size={36} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">No {tab} appointments</p>
@@ -386,7 +403,8 @@ export default function PatientDashboard() {
               )}
             </div>
           ) : (
-            shown.map((a) => {
+            <>
+            {shown.map((a) => {
               const meta = STATUS_META[a.status] ?? STATUS_META["pending"];
               const dates: string[] = a.rescheduleDates ? JSON.parse(a.rescheduleDates) : [];
               return (
@@ -435,40 +453,15 @@ export default function PatientDashboard() {
                   )}
                 </motion.div>
               );
-            })
+            })}
+            {shownOnline.map((appt) => (
+              <motion.div key={`online-${appt.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                <OnlineConsultationCard appt={appt} />
+              </motion.div>
+            ))}
+            </>
           )}
         </div>
-        {/* ── Online Consultations Section ── */}
-        {onlineAppts.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-base text-foreground flex items-center gap-2">
-                <Video size={16} className="text-blue-600" /> Online Consultations
-              </h2>
-              <button onClick={() => navigate("/portal/online-book")}
-                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1">
-                <Plus size={12} /> Book New
-              </button>
-            </div>
-            {onlineAppts.map(appt => (
-              <OnlineConsultationCard key={appt.id} appt={appt} />
-            ))}
-          </motion.div>
-        )}
-
-        {onlineAppts.length === 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-blue-50 border border-blue-200 rounded-2xl p-5 flex items-center justify-between">
-            <div>
-              <p className="font-bold text-blue-900 text-sm flex items-center gap-2"><Video size={15} /> Online Consultation</p>
-              <p className="text-xs text-blue-700 mt-1">Consult with Dr. Murali Krishna from home — Sundays only</p>
-            </div>
-            <button onClick={() => navigate("/portal/online-book")}
-              className="shrink-0 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-1.5">
-              <Plus size={12} /> Book
-            </button>
-          </motion.div>
-        )}
       </div>
 
     </div>

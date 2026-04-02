@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle } from "lucide-react";
+import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
+
 import {
   useListOpenMonths,
   useGetAvailability,
   useGetSlots,
 } from "@workspace/api-client-react";
+
 import { getDaysInMonth, startOfMonth, getDay, format, parseISO } from "date-fns";
 import logoImg from "@assets/logo_1773840200056.png";
+
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type Patient = { id: number; name: string; email: string; phone?: string };
 
@@ -82,6 +86,8 @@ export default function PortalBook() {
   const [, navigate] = useLocation();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apptType, setApptType] = useState<"offline" | "online" | null>(null);
+  const [hasOnlineSlots, setHasOnlineSlots] = useState(false);
 
   const [monthIdx, setMonthIdx] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -101,7 +107,16 @@ export default function PortalBook() {
 
   useEffect(() => {
     patientApi.me()
-      .then((p) => { setPatient(p); setLoading(false); })
+      .then(async (p) => {
+        setPatient(p);
+        // Check if there are available online slots
+        try {
+          const r = await fetch(`${BASE_URL}/api/online-slots/available`, { credentials: "include" });
+          const slots = await r.json();
+          setHasOnlineSlots(Array.isArray(slots) && slots.length > 0);
+        } catch { setHasOnlineSlots(false); }
+        setLoading(false);
+      })
       .catch(() => navigate("/portal?next=/portal/book"));
   }, []);
 
@@ -170,17 +185,92 @@ export default function PortalBook() {
     );
   }
 
+  // ── Type selector ───────────────────────────────────────────
+  if (apptType === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col">
+        <div className="bg-white border-b border-border px-4 py-3 flex items-center gap-3">
+          <button onClick={() => navigate("/portal/dashboard")} className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
+            <ArrowLeft size={18} />
+          </button>
+          <img src={logoImg} alt="Susruta Hospital" className="h-8 object-contain" />
+          <div>
+            <p className="text-sm font-bold text-foreground leading-tight">Book Appointment</p>
+            <p className="text-xs text-muted-foreground">Dr. P. Murali Krishna</p>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-10">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-4">
+            <div className="text-center mb-8">
+              <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Leaf size={28} className="text-primary" />
+              </div>
+              <h2 className="text-xl font-serif font-bold text-foreground">How would you like to consult?</h2>
+              <p className="text-muted-foreground text-sm mt-2">Choose your preferred appointment type</p>
+            </div>
+
+            {/* In-Person */}
+            <button
+              onClick={() => setApptType("offline")}
+              className="w-full bg-white border-2 border-border hover:border-primary/40 hover:bg-primary/5 rounded-2xl p-5 text-left transition-all group shadow-sm"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-green-200 transition-colors">
+                  <MapPin size={22} className="text-green-700" />
+                </div>
+                <div>
+                  <p className="font-bold text-foreground text-base">In-Person Visit</p>
+                  <p className="text-muted-foreground text-sm mt-1 leading-relaxed">Visit the clinic in Tirupati. Book a time slot and get hands-on Ayurvedic consultation.</p>
+                  <p className="text-xs text-green-700 font-medium mt-2">119, Ramulavari North Mada Street</p>
+                </div>
+              </div>
+            </button>
+
+            {/* Online Consultation */}
+            <button
+              onClick={() => hasOnlineSlots ? navigate("/portal/online-book") : undefined}
+              disabled={!hasOnlineSlots}
+              className={[
+                "w-full border-2 rounded-2xl p-5 text-left transition-all group shadow-sm",
+                hasOnlineSlots
+                  ? "bg-white border-border hover:border-blue-400 hover:bg-blue-50 cursor-pointer"
+                  : "bg-gray-50 border-dashed border-gray-200 cursor-not-allowed opacity-60",
+              ].join(" ")}
+            >
+              <div className="flex items-start gap-4">
+                <div className={["w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                  hasOnlineSlots ? "bg-blue-100 group-hover:bg-blue-200" : "bg-gray-100"].join(" ")}>
+                  <Video size={22} className={hasOnlineSlots ? "text-blue-700" : "text-gray-400"} />
+                </div>
+                <div>
+                  <p className="font-bold text-foreground text-base flex items-center gap-2">
+                    Online Consultation
+                    {!hasOnlineSlots && <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Not Available</span>}
+                  </p>
+                  <p className="text-muted-foreground text-sm mt-1 leading-relaxed">Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.</p>
+                  {hasOnlineSlots
+                    ? <p className="text-xs text-blue-700 font-medium mt-2">Slots available — upload medical reports required</p>
+                    : <p className="text-xs text-gray-400 font-medium mt-2">No slots currently open. Check back soon.</p>}
+                </div>
+              </div>
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top bar */}
       <div className="bg-white border-b border-border px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => navigate("/portal/dashboard")}
+        <button onClick={() => setApptType(null)}
           className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
           <ArrowLeft size={18} />
         </button>
         <img src={logoImg} alt="Susruta Hospital" className="h-8 object-contain" />
         <div>
-          <p className="text-sm font-bold text-foreground leading-tight">Book Appointment</p>
+          <p className="text-sm font-bold text-foreground leading-tight">In-Person Appointment</p>
           <p className="text-xs text-muted-foreground">Dr. P. Murali Krishna</p>
         </div>
       </div>

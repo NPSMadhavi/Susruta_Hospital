@@ -4,6 +4,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
 import { verifyPatientSession } from "../lib/patient-auth";
+import { sendAppointmentAckEmail } from "../lib/email";
 
 const router = Router();
 
@@ -93,6 +94,18 @@ router.post("/", async (req, res) => {
 
   const serialized = serializeAppt(appointment);
   notifyNewAppointment(serialized);
+
+  // Send acknowledgement email if patient provided email (fire and forget)
+  if (data.patientEmail) {
+    sendAppointmentAckEmail({
+      to: data.patientEmail,
+      patientName: data.patientName,
+      type: "offline",
+      date: data.date,
+      timeSlot: data.timeSlot,
+      reason: data.reason ?? undefined,
+    }).catch((err) => console.error("[email] offline ack failed:", err));
+  }
 
   res.status(201).json(serialized);
 });

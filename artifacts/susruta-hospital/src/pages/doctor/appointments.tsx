@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Stethoscope, LogOut, ChevronDown, ChevronUp, FileText, Plus, Trash2,
   Save, CheckCircle2, AlertCircle, Loader2, User, Calendar, Clock,
-  Download, StickyNote, Pill, RefreshCw
+  Download, StickyNote, Pill, RefreshCw, Video, UserCheck
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -48,10 +48,30 @@ function fmtBytes(b: number) {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+type OfflinePatient = { id: number | null; name: string; email: string | null; phone: string | null };
+type OfflineAppt = {
+  id: number; type: "offline"; status: string; reason: string | null;
+  documents: any[]; meetingLink: null; createdAt: string;
+  date: string; timeLabel: string; patient: OfflinePatient; prescription: null;
+  notes: string | null;
+};
+type OnlineAppt = {
+  id: number; type: "online"; status: string; reason: string | null;
+  documents: Document[]; meetingLink: string | null; createdAt: string;
+  date: string; timeLabel: string; slotId: number; patient: Patient;
+  prescription: Prescription | null;
+};
+
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700 border-blue-200",
+  arrived: "bg-teal-100 text-teal-700 border-teal-200",
+  reschedule_accepted: "bg-purple-100 text-purple-700 border-purple-200",
   completed: "bg-green-100 text-green-700 border-green-200",
   cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+};
+const STATUS_LABELS: Record<string, string> = {
+  confirmed: "Confirmed", arrived: "Arrived", reschedule_accepted: "Rescheduled",
+  completed: "Completed", cancelled: "Cancelled",
 };
 
 function AppointmentCard({ appt, onUpdated }: { appt: Appointment; onUpdated: (a: Appointment) => void }) {
@@ -272,16 +292,78 @@ function AppointmentCard({ appt, onUpdated }: { appt: Appointment; onUpdated: (a
   );
 }
 
+// ── Offline Appointment Card ──────────────────────────────────
+function OfflineApptCard({ appt, onDone }: { appt: OfflineAppt; onDone: (id: number) => void }) {
+  const [marking, setMarking] = useState(false);
+  const sc = STATUS_COLORS[appt.status] ?? STATUS_COLORS["confirmed"];
+
+  async function markDone() {
+    setMarking(true);
+    try {
+      await doctorFetch(`/offline-appointments/${appt.id}/done`, { method: "PATCH" });
+      onDone(appt.id);
+    } catch { /* ignore */ }
+    finally { setMarking(false); }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-border shadow-sm p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <User size={20} className="text-primary" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-foreground">{appt.patient.name}</p>
+              <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">In-Person</span>
+              <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
+                {STATUS_LABELS[appt.status] ?? appt.status}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-3">
+              <span className="flex items-center gap-1"><Calendar size={11} /> {fmtDate(appt.date)}</span>
+              <span className="flex items-center gap-1"><Clock size={11} /> {appt.timeLabel}</span>
+            </p>
+            {appt.patient.phone && (
+              <p className="text-xs text-muted-foreground">{appt.patient.phone}</p>
+            )}
+          </div>
+        </div>
+        {["confirmed", "arrived", "reschedule_accepted"].includes(appt.status) && (
+          <button onClick={markDone} disabled={marking}
+            className="shrink-0 flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-green-700 transition-colors disabled:opacity-60">
+            {marking ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Mark Done
+          </button>
+        )}
+      </div>
+      {appt.reason && (
+        <p className="text-sm text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">
+          <span className="font-medium text-foreground">Reason:</span> {appt.reason}
+        </p>
+      )}
+      {appt.notes && (
+        <p className="text-sm text-primary/80 bg-primary/5 rounded-xl px-3 py-2">
+          <span className="font-medium">Notes:</span> {appt.notes}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function DoctorAppointments() {
   const [, navigate] = useLocation();
-  const [appts, setAppts] = useState<Appointment[]>([]);
+  const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
+  const [offlineAppts, setOfflineAppts] = useState<OfflineAppt[]>([]);
+  const [mainTab, setMainTab] = useState<"online" | "offline">("online");
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "confirmed" | "completed">("all");
 
   const load = useCallback(async () => {
     try {
-      const data = await doctorFetch("/appointments");
-      setAppts(data);
+      const data = await doctorFetch("/all-appointments");
+      setOnlineAppts(data.online ?? []);
+      setOfflineAppts(data.offline ?? []);
     } catch (err: any) {
       if (err?.error === "unauthorized") navigate("/doctor");
     } finally {
@@ -297,12 +379,16 @@ export default function DoctorAppointments() {
   }
 
   function updateAppt(updated: Appointment) {
-    setAppts(prev => prev.map(a => a.id === updated.id ? updated : a));
+    setOnlineAppts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
   }
 
-  const shown = filter === "all" ? appts : appts.filter(a => a.status === filter);
-  const confirmedCount = appts.filter(a => a.status === "confirmed").length;
-  const completedCount = appts.filter(a => a.status === "completed").length;
+  function markOfflineDone(id: number) {
+    setOfflineAppts(prev => prev.map(a => a.id === id ? { ...a, status: "completed" } : a));
+  }
+
+  const shownOnline = filter === "all" ? onlineAppts : onlineAppts.filter(a => a.status === filter);
+  const confirmedCount = onlineAppts.filter(a => a.status === "confirmed").length + offlineAppts.filter(a => ["confirmed","arrived"].includes(a.status)).length;
+  const completedCount = onlineAppts.filter(a => a.status === "completed").length + offlineAppts.filter(a => a.status === "completed").length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50/40 via-white to-white">
@@ -340,7 +426,7 @@ export default function DoctorAppointments() {
               <Stethoscope size={13} /> Doctor Portal
             </p>
             <h1 className="text-xl font-serif font-bold">Welcome, Dr. Murali Krishna</h1>
-            <p className="text-white/60 text-sm mt-1">Manage online consultation appointments</p>
+            <p className="text-white/60 text-sm mt-1">Manage In-Person & Online appointments</p>
           </div>
           <div className="grid grid-cols-2 gap-3 shrink-0">
             <div className="text-center bg-white/10 rounded-2xl p-3 border border-white/10">
@@ -354,23 +440,24 @@ export default function DoctorAppointments() {
           </div>
         </motion.div>
 
-        {/* Filter tabs */}
+        {/* Main type tabs */}
         <div className="bg-muted/50 rounded-2xl p-1 flex">
-          {([["all", "All Appointments"], ["confirmed", "Pending Consult"], ["completed", "Completed"]] as const).map(([val, label]) => (
-            <button key={val} onClick={() => setFilter(val)}
-              className={cn(
-                "flex-1 py-2 text-sm font-semibold rounded-xl transition-all",
-                filter === val ? "bg-white shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
-              )}>
-              {label}
-              {val !== "all" && (
-                <span className={cn("ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                  val === "confirmed" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700")}>
-                  {val === "confirmed" ? confirmedCount : completedCount}
-                </span>
-              )}
-            </button>
-          ))}
+          <button onClick={() => setMainTab("online")}
+            className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+              mainTab === "online" ? "bg-white shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground")}>
+            <Video size={14} /> Online
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              {onlineAppts.length}
+            </span>
+          </button>
+          <button onClick={() => setMainTab("offline")}
+            className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+              mainTab === "offline" ? "bg-white shadow-sm text-orange-700" : "text-muted-foreground hover:text-foreground")}>
+            <UserCheck size={14} /> In-Person
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">
+              {offlineAppts.length}
+            </span>
+          </button>
         </div>
 
         {/* Appointments */}
@@ -378,17 +465,46 @@ export default function DoctorAppointments() {
           <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
             <Loader2 size={18} className="animate-spin" /> Loading appointments…
           </div>
-        ) : shown.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-border">
-            <Stethoscope size={40} className="mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-muted-foreground text-sm">No {filter !== "all" ? filter : ""} appointments yet.</p>
-          </div>
+        ) : mainTab === "online" ? (
+          <>
+            {/* Online sub-filter */}
+            <div className="bg-muted/30 rounded-xl p-1 flex">
+              {([["all", "All"], ["confirmed", "Pending"], ["completed", "Done"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setFilter(val)}
+                  className={cn("flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all",
+                    filter === val ? "bg-white shadow-sm text-primary" : "text-muted-foreground hover:text-foreground")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {shownOnline.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-2xl border border-border">
+                <Video size={40} className="mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground text-sm">No online appointments yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {shownOnline.map(appt => (
+                  <AppointmentCard key={appt.id} appt={appt as unknown as Appointment} onUpdated={updateAppt} />
+                ))}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="space-y-3">
-            {shown.map(appt => (
-              <AppointmentCard key={appt.id} appt={appt} onUpdated={updateAppt} />
-            ))}
-          </div>
+          <>
+            {offlineAppts.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-2xl border border-border">
+                <UserCheck size={40} className="mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground text-sm">No in-person appointments yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {offlineAppts.map(appt => (
+                  <OfflineApptCard key={appt.id} appt={appt} onDone={markOfflineDone} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

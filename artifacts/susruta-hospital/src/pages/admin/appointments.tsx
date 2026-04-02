@@ -5,7 +5,8 @@ import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
-  Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X
+  Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
+  Video, Link2, Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -162,6 +163,84 @@ function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => vo
   );
 }
 
+// ── Online Appointment Type ───────────────────────────────────
+type OnlineAppt = {
+  id: number; patientName: string; patientEmail: string; reason: string | null;
+  status: string; meetingLink: string | null; createdAt: string;
+  slot: { id: number; date: string; startTime: string; endTime: string };
+};
+
+function fmtOnlineSlot(a: OnlineAppt) {
+  const d = new Date(a.slot.date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  function ft(t: string) {
+    const [h, m] = t.split(":").map(Number);
+    return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+  return `${d} · ${ft(a.slot.startTime)}–${ft(a.slot.endTime)}`;
+}
+
+const ONLINE_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  confirmed: "bg-blue-100 text-blue-800 border-blue-300",
+  completed: "bg-green-100 text-green-800 border-green-300",
+  cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+};
+const ONLINE_STATUS_LABELS: Record<string, string> = {
+  pending: "Awaiting Approval", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled",
+};
+
+// ── Online Approve Modal ───────────────────────────────────────
+function OnlineApproveModal({ appt, onClose, onApproved }: { appt: OnlineAppt; onClose: () => void; onApproved: (a: OnlineAppt) => void }) {
+  const [meetingLink, setMeetingLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function approve() {
+    if (!meetingLink.trim()) { setError("Please enter a meeting link."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const updated = await apiFetch(`/online-appointments/admin/${appt.id}/approve`, {
+        method: "PATCH", body: JSON.stringify({ meetingLink: meetingLink.trim() }),
+      });
+      onApproved(updated);
+      onClose();
+    } catch (e: any) {
+      setError(e?.error || "Failed to approve.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-serif font-bold text-lg">Approve Online Consultation</h3>
+          <button onClick={onClose} className="p-1.5 rounded-xl text-muted-foreground hover:bg-muted"><X size={16} /></button>
+        </div>
+        <p className="text-muted-foreground text-sm mb-1">{appt.patientName}</p>
+        <p className="text-xs text-muted-foreground mb-5">{fmtOnlineSlot(appt)}</p>
+        {appt.reason && <p className="text-sm bg-muted/40 rounded-xl px-3 py-2 mb-4">"{appt.reason}"</p>}
+        <div className="mb-4">
+          <label className="text-xs font-semibold text-muted-foreground mb-1.5 block flex items-center gap-1"><Link2 size={11} /> Meeting Link (Google Meet / Zoom / etc.)</label>
+          <input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)}
+            placeholder="https://meet.google.com/..."
+            className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 border border-border rounded-xl text-sm font-semibold text-muted-foreground">Cancel</button>
+          <button onClick={approve} disabled={loading}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Approve
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────
 export default function AdminAppointments() {
   const [appts, setAppts] = useState<Appt[]>([]);
@@ -175,6 +254,39 @@ export default function AdminAppointments() {
   const notifyRef = useRef(notify);
   useEffect(() => { notifyRef.current = notify; }, [notify]);
   const queryClient = useQueryClient();
+
+  // Online appointments
+  const [mainTab, setMainTab] = useState<"inperson" | "online">("inperson");
+  const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
+  const [onlineFilter, setOnlineFilter] = useState("all");
+  const [onlineLoading, setOnlineLoading] = useState(false);
+  const [approveModal, setApproveModal] = useState<OnlineAppt | null>(null);
+
+  async function fetchOnlineAppts() {
+    setOnlineLoading(true);
+    try {
+      const data = await apiFetch("/online-appointments/admin");
+      setOnlineAppts(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
+    finally { setOnlineLoading(false); }
+  }
+
+  useEffect(() => {
+    if (mainTab === "online") fetchOnlineAppts();
+  }, [mainTab]);
+
+  function mutateOnline(updated: OnlineAppt) {
+    setOnlineAppts(prev => prev.map(a => a.id === updated.id ? updated : a));
+  }
+
+  async function cancelOnline(id: number) {
+    if (!confirm("Cancel this online consultation?")) return;
+    const updated = await apiFetch(`/online-appointments/admin/${id}/cancel`, { method: "PATCH" });
+    mutateOnline(updated);
+  }
+
+  const onlinePendingCount = onlineAppts.filter(a => a.status === "pending").length;
+  const shownOnline = onlineFilter === "all" ? onlineAppts : onlineAppts.filter(a => a.status === onlineFilter);
 
   async function fetchAppts() {
     setLoading(true);
@@ -234,29 +346,134 @@ export default function AdminAppointments() {
       {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={(a) => { mutate(a); }} />}
 
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Appointments</h1>
-          {pendingCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 mt-1 text-sm text-yellow-700 font-medium bg-yellow-100 px-3 py-0.5 rounded-full border border-yellow-200">
-              <Clock size={13} /> {pendingCount} pending approval
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {pendingCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-yellow-700 font-medium bg-yellow-100 px-3 py-0.5 rounded-full border border-yellow-200">
+                <Clock size={13} /> {pendingCount} in-person pending
+              </span>
+            )}
+            {onlinePendingCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-blue-700 font-medium bg-blue-100 px-3 py-0.5 rounded-full border border-blue-200">
+                <Video size={13} /> {onlinePendingCount} online pending
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Browser notification toggle */}
           <button onClick={requestPermission}
             className={cn("flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors",
               permission === "granted" ? "bg-green-50 text-green-700 border-green-200" : "bg-muted text-muted-foreground border-border hover:border-primary/40")}>
             {permission === "granted" ? <Bell size={14} /> : <BellOff size={14} />}
             {permission === "granted" ? "Notifications On" : "Enable Notifications"}
           </button>
-          <button onClick={fetchAppts} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted">
+          <button onClick={mainTab === "inperson" ? fetchAppts : fetchOnlineAppts} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted">
             <RefreshCw size={15} />
           </button>
         </div>
       </div>
 
+      {/* Main type tabs */}
+      <div className="flex gap-2 mb-6 bg-muted/50 rounded-2xl p-1">
+        <button onClick={() => setMainTab("inperson")}
+          className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+            mainTab === "inperson" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+          <UserCheck size={14} /> In-Person
+        </button>
+        <button onClick={() => setMainTab("online")}
+          className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+            mainTab === "online" ? "bg-white shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground")}>
+          <Video size={14} /> Online Consultations
+          {onlinePendingCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">{onlinePendingCount}</span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Online tab content ─────────────────────────────────── */}
+      {mainTab === "online" && (
+        <>
+          {approveModal && (
+            <OnlineApproveModal appt={approveModal} onClose={() => setApproveModal(null)}
+              onApproved={(a) => { mutateOnline(a); setApproveModal(null); }} />
+          )}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {["all", "pending", "confirmed", "completed", "cancelled"].map((s) => (
+              <button key={s} onClick={() => setOnlineFilter(s)}
+                className={cn("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border capitalize",
+                  onlineFilter === s ? "bg-foreground text-white border-foreground" : "bg-white border-border text-muted-foreground hover:border-primary/40")}>
+                {ONLINE_STATUS_LABELS[s] || s}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-3">
+            {onlineLoading ? (
+              <div className="py-16 text-center text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={16} className="animate-spin" /> Loading online appointments…
+              </div>
+            ) : shownOnline.length === 0 ? (
+              <div className="py-16 text-center bg-white rounded-2xl border border-border">
+                <Video size={40} className="mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground text-sm">No online consultation appointments</p>
+              </div>
+            ) : shownOnline.map((a) => (
+              <div key={a.id} className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden",
+                a.status === "pending" ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border")}>
+                <div className="p-4 flex flex-wrap items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                    <Video size={16} className="text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <span className="font-bold text-foreground">{a.patientName}</span>
+                      <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", ONLINE_STATUS_COLORS[a.status] ?? ONLINE_STATUS_COLORS.pending)}>
+                        {ONLINE_STATUS_LABELS[a.status] ?? a.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{fmtOnlineSlot(a)} · {a.patientEmail}</p>
+                    {a.reason && <p className="text-xs text-muted-foreground mt-0.5 italic">"{a.reason}"</p>}
+                    {a.meetingLink && (
+                      <a href={a.meetingLink} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline mt-0.5">
+                        <Link2 size={10} /> {a.meetingLink}
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {a.status === "pending" && (
+                      <>
+                        <button onClick={() => setApproveModal(a)}
+                          className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-700 transition-colors">
+                          <CheckCircle2 size={13} /> Approve
+                        </button>
+                        <button onClick={() => cancelOnline(a.id)}
+                          className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
+                          <XCircle size={13} /> Decline
+                        </button>
+                      </>
+                    )}
+                    {a.status === "confirmed" && (
+                      <button onClick={() => cancelOnline(a.id)}
+                        className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
+                        Cancel
+                      </button>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(a.createdAt).toLocaleDateString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── In-Person tab content ───────────────────────────────── */}
+      {mainTab === "inperson" && (
+      <div className="space-y-6">
       {/* Today summary */}
       {todayAppts.length > 0 && (
         <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 mb-6">
@@ -396,6 +613,9 @@ export default function AdminAppointments() {
           })
         )}
       </div>
+      </div>
+      )}
+
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
     </AdminLayout>
   );

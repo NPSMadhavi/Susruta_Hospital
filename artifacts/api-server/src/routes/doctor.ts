@@ -10,8 +10,9 @@ import {
   onlineSlotSessionsTable,
   patientsTable,
   prescriptionsTable,
+  appointmentsTable,
 } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import type { MedicineRow } from "@workspace/db";
 
@@ -186,6 +187,102 @@ router.put("/appointments/:id/notes", requireDoctor, async (req, res) => {
       .returning();
     res.json(created);
   }
+});
+
+// ── GET /api/doctor/all-appointments — Both types ────────────
+// Returns online (confirmed) + offline (active) appointments with type field
+router.get("/all-appointments", requireDoctor, async (_req, res) => {
+  // Online: only confirmed (admin-approved) appointments
+  const onlineRows = await db
+    .select({
+      appt: onlineAppointmentsTable,
+      slot: onlineSlotsTable,
+      patient: patientsTable,
+      prescription: prescriptionsTable,
+    })
+    .from(onlineAppointmentsTable)
+    .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
+    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
+    .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+    .where(inArray(onlineAppointmentsTable.status, ["confirmed", "completed"]))
+    .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime);
+
+  // Offline: confirmed / arrived / reschedule_accepted / completed (active appointments)
+  const offlineRows = await db
+    .select()
+    .from(appointmentsTable)
+    .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
+    .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt));
+
+  const online = onlineRows.map((r) => ({
+    id: r.appt.id,
+    type: "online" as const,
+    status: r.appt.status,
+    reason: r.appt.reason ?? null,
+    documents: r.appt.documents,
+    meetingLink: r.appt.meetingLink ?? null,
+    createdAt: r.appt.createdAt.toISOString(),
+    date: r.slot.date,
+    timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
+    slotId: r.slot.id,
+    patient: {
+      id: r.patient.id,
+      name: r.patient.name,
+      email: r.patient.email,
+      phone: r.patient.phone ?? null,
+    },
+    prescription: r.prescription ? {
+      id: r.prescription.id,
+      medicines: r.prescription.medicines,
+      doctorNotes: r.prescription.doctorNotes ?? null,
+      updatedAt: r.prescription.updatedAt.toISOString(),
+    } : null,
+  }));
+
+  const offline = offlineRows.map((r) => ({
+    id: r.id,
+    type: "offline" as const,
+    status: r.status,
+    reason: r.reason ?? null,
+    documents: [] as any[],
+    meetingLink: null,
+    createdAt: r.createdAt?.toISOString() ?? "",
+    date: r.date,
+    timeLabel: r.timeSlot,
+    patient: {
+      id: null,
+      name: r.patientName,
+      email: r.patientEmail ?? null,
+      phone: r.patientPhone,
+    },
+    prescription: null,
+    notes: r.notes ?? null,
+  }));
+
+  res.json({ online, offline });
+});
+
+function fmtTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return t;
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+// ── PATCH /api/doctor/offline-appointments/:id/done ───────────
+router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  const [appt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  const [updated] = await db
+    .update(appointmentsTable)
+    .set({ status: "completed" })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+
+  res.json({ ...updated, createdAt: updated.createdAt?.toISOString() });
 });
 
 export default router;

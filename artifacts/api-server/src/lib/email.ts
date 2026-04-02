@@ -375,6 +375,201 @@ export async function sendBroadcastEmail(opts: {
   });
 }
 
+// ── Appointment booking acknowledgement ──────────────────────
+export async function sendAppointmentAckEmail(opts: {
+  to: string;
+  patientName: string;
+  type: "offline" | "online";
+  date: string;
+  timeSlot?: string;
+  slotStartTime?: string;
+  slotEndTime?: string;
+  reason?: string;
+}) {
+  const { to, patientName, type, date, timeSlot, slotStartTime, slotEndTime, reason } = opts;
+
+  const cfg = await getSmtpConfig();
+  if (!cfg) {
+    console.log(`[email] Appointment ack -> ${to} — SMTP not configured`);
+    return;
+  }
+
+  const fmtDate = (d: string) =>
+    new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  function fmtTime(t: string) {
+    const [h, m] = t.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+  }
+
+  const typeLabel = type === "online" ? "Online Consultation" : "In-Person Visit";
+  const timeStr = type === "online" && slotStartTime && slotEndTime
+    ? `${fmtTime(slotStartTime)} – ${fmtTime(slotEndTime)}`
+    : timeSlot ?? "";
+  const subject = `Appointment Request Received — Susruta Hospital`;
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${patientName}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        We have received your <strong>${typeLabel}</strong> appointment request. Our team will review and confirm it shortly.
+      </p>
+      <div style="background:#f0f7f4;border-radius:12px;padding:20px 24px;margin:0 0 24px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Appointment Type</p>
+            <p style="color:#1a3d2b;font-size:14px;font-weight:bold;font-family:Arial,sans-serif;margin:2px 0 12px;">${typeLabel}</p>
+          </td></tr>
+          <tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Date</p>
+            <p style="color:#1a3d2b;font-size:14px;font-weight:bold;font-family:Arial,sans-serif;margin:2px 0 12px;">${fmtDate(date)}</p>
+          </td></tr>
+          ${timeStr ? `<tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Time</p>
+            <p style="color:#1a3d2b;font-size:14px;font-weight:bold;font-family:Arial,sans-serif;margin:2px 0 12px;">${timeStr}</p>
+          </td></tr>` : ""}
+          ${reason ? `<tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Reason</p>
+            <p style="color:#444;font-size:14px;font-family:Arial,sans-serif;margin:2px 0 0;">${reason}</p>
+          </td></tr>` : ""}
+        </table>
+      </div>
+      ${type === "online"
+        ? `<div style="background:#fffbea;border:1px solid #f0d080;border-radius:10px;padding:14px 18px;margin:0 0 20px;">
+            <p style="color:#7a5800;font-size:13px;font-family:Arial,sans-serif;margin:0;line-height:1.6;">
+              <strong>Next step:</strong> Once our admin approves your request, you will receive a separate email with the meeting link for your video consultation.
+            </p>
+          </div>`
+        : `<p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+            You will receive a confirmation once your appointment is approved. For queries, call <strong>+91 9492068180</strong>.
+          </p>`}
+      <p style="color:#999;font-size:12px;font-family:Arial,sans-serif;margin:0;">
+        Dr. P. Murali Krishna — Susruta Hospital, Tirupati
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${patientName}`,
+    "",
+    `We have received your ${typeLabel} appointment request.`,
+    "",
+    `Date: ${fmtDate(date)}`,
+    timeStr ? `Time: ${timeStr}` : "",
+    reason ? `Reason: ${reason}` : "",
+    "",
+    type === "online"
+      ? "Once our admin approves your request, you will receive a separate email with the meeting link."
+      : "You will receive a confirmation once your appointment is approved. For queries, call +91 9492068180.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].filter(Boolean).join("\n");
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+  });
+}
+
+// ── Online consultation approval with meeting link ────────────
+export async function sendOnlineMeetingLinkEmail(opts: {
+  to: string;
+  patientName: string;
+  slotDate: string;
+  startTime: string;
+  endTime: string;
+  meetingLink: string;
+}) {
+  const { to, patientName, slotDate, startTime, endTime, meetingLink } = opts;
+
+  const cfg = await getSmtpConfig();
+  if (!cfg) {
+    console.log(`[email] Meeting link -> ${to} — SMTP not configured`);
+    return;
+  }
+
+  const fmtDate = (d: string) =>
+    new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  function fmtTime(t: string) {
+    const [h, m] = t.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+  }
+
+  const subject = `Your Online Consultation is Confirmed — Susruta Hospital`;
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${patientName}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        Your online consultation with <strong>Dr. P. Murali Krishna</strong> has been <strong style="color:#1a7a4a;">confirmed</strong>. Please join using the link below at the scheduled time.
+      </p>
+      <div style="background:#f0f7f4;border-radius:12px;padding:20px 24px;margin:0 0 24px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Date</p>
+            <p style="color:#1a3d2b;font-size:14px;font-weight:bold;font-family:Arial,sans-serif;margin:2px 0 12px;">${fmtDate(slotDate)}</p>
+          </td></tr>
+          <tr><td style="padding:4px 0;">
+            <p style="color:#666;font-size:12px;font-family:Arial,sans-serif;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Time</p>
+            <p style="color:#1a3d2b;font-size:14px;font-weight:bold;font-family:Arial,sans-serif;margin:2px 0 0;">${fmtTime(startTime)} – ${fmtTime(endTime)}</p>
+          </td></tr>
+        </table>
+      </div>
+      <div style="text-align:center;margin:0 0 20px;">
+        <a href="${meetingLink}" target="_blank" style="display:inline-block;background:#1a7a4a;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;">
+          Join Video Consultation
+        </a>
+      </div>
+      <p style="color:#777;font-size:13px;line-height:1.6;margin:0 0 12px;font-family:Arial,sans-serif;">
+        If the button above does not work, copy and paste this link into your browser:
+      </p>
+      <p style="margin:0 0 20px;">
+        <a href="${meetingLink}" style="color:#1a7a4a;font-size:13px;word-break:break-all;font-family:Arial,sans-serif;">${meetingLink}</a>
+      </p>
+      <div style="background:#fff8f0;border:1px solid #f0c080;border-radius:10px;padding:14px 18px;margin:0 0 20px;">
+        <p style="color:#7a4800;font-size:13px;font-family:Arial,sans-serif;margin:0;line-height:1.6;">
+          <strong>Tips:</strong> Please join 2–3 minutes early. Keep your uploaded reports or documents handy. Ensure a stable internet connection and a quiet space.
+        </p>
+      </div>
+      <p style="color:#999;font-size:12px;font-family:Arial,sans-serif;margin:0;">
+        Dr. P. Murali Krishna — Susruta Hospital, Tirupati · +91 9492068180
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${patientName}`,
+    "",
+    "Your online consultation with Dr. P. Murali Krishna has been CONFIRMED.",
+    "",
+    `Date: ${fmtDate(slotDate)}`,
+    `Time: ${fmtTime(startTime)} – ${fmtTime(endTime)}`,
+    "",
+    "Join your video consultation using this link:",
+    meetingLink,
+    "",
+    "Tips: Join 2–3 minutes early. Keep your documents handy. Ensure stable internet.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+  });
+}
+
 // ── SMTP connection test ──────────────────────────────────────
 export async function testSmtpConnection(cfg: SmtpConfig, testTo: string): Promise<void> {
   const transport = buildTransport(cfg);

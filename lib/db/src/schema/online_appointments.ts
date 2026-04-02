@@ -11,6 +11,7 @@ export const onlineAppointmentsTable = pgTable("online_appointments", {
   reason: text("reason"),
   // Array of { name, objectPath, contentType, size }
   documents: json("documents").$type<DocumentFile[]>().notNull().default([]),
+  meetingLink: text("meeting_link"),
   // pending | confirmed | completed | cancelled
   status: varchar("status", { length: 30 }).notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
