@@ -71,12 +71,14 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
             <a href={appt.meetingLink} target="_blank" rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1.5 mt-2 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-              <Video size={11} /> Join Doctor Meeting
+              <Video size={11} className="pointer-events-none" />
+              <span className="pointer-events-none">Join Doctor Meeting</span>
             </a>
           ) : (
             <span className="inline-flex items-center gap-1.5 mt-2 bg-gray-100 text-gray-400 text-xs font-bold px-3 py-1.5 rounded-lg cursor-not-allowed border border-gray-200">
-              <Video size={11} /> Join Doctor Meeting
-              <span className="text-[9px] font-normal ml-0.5">
+              <Video size={11} className="pointer-events-none" />
+              <span className="pointer-events-none">Join Doctor Meeting</span>
+              <span className="text-[9px] font-normal ml-0.5 pointer-events-none">
                 {appt.status === "pending" ? "(Awaiting approval)" : "(Link pending)"}
               </span>
             </span>
@@ -344,7 +346,8 @@ export default function PatientDashboard() {
           </div>
           <button onClick={() => navigate("/portal/book")}
             className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-5 py-3 text-base font-bold hover:bg-green-50 active:scale-95 transition-all flex items-center gap-2 shadow-xl">
-            <Plus size={18} /> Book Appointment
+            <Plus size={18} className="pointer-events-none" />
+            <span className="pointer-events-none">Book Appointment</span>
           </button>
         </motion.div>
 
@@ -403,7 +406,8 @@ export default function PatientDashboard() {
               {tab === "upcoming" && (
                 <button onClick={() => navigate("/portal/book")}
                   className="mt-5 inline-flex items-center gap-2 bg-[#1a3d2b] text-white rounded-2xl px-5 py-2.5 text-sm font-bold hover:bg-[#1a3d2b]/90 transition-colors shadow-md">
-                  <Plus size={15} /> Book an Appointment
+                  <Plus size={15} className="pointer-events-none" />
+                  <span className="pointer-events-none">Book an Appointment</span>
                 </button>
               )}
             </div>
