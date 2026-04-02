@@ -170,28 +170,28 @@ function ListCard({
         <User size={14} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-          <span className="text-sm font-bold text-foreground truncate">{name}</span>
+        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+          <span className="text-base font-bold text-foreground truncate">{name}</span>
           {docCount > 0 && (
-            <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-0.5">
-              <FileText size={8} /> {docCount}
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-0.5">
+              <FileText size={9} /> {docCount} doc{docCount !== 1 && "s"}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={cn("text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border", typeBadgeColor)}>
+        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+          <span className={cn("text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", typeBadgeColor)}>
             {typeBadge}
           </span>
-          <span className={cn("text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border", sc)}>
+          <span className={cn("text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
             {STATUS_LABELS[statusKey] ?? statusKey}
           </span>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-          <Calendar size={9} /> {date}
-          <Clock size={9} className="ml-1" /> {time}
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Calendar size={11} /> {date}
+          <Clock size={11} className="ml-1" /> {time}
         </p>
         {(reason || notes) && (
-          <p className="text-[10px] text-muted-foreground mt-0.5 truncate italic opacity-70">
+          <p className="text-xs text-muted-foreground mt-0.5 truncate italic opacity-70">
             {notes ?? reason}
           </p>
         )}

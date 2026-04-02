@@ -67,12 +67,19 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
             <Clock size={10} className="inline mr-1" />{fmtTimeO(appt.slot.startTime)} – {fmtTimeO(appt.slot.endTime)}
             {appt.documents.length > 0 && ` · ${appt.documents.length} doc(s)`}
           </p>
-          {appt.meetingLink && appt.status === "confirmed" && (
+          {appt.meetingLink && appt.status === "confirmed" ? (
             <a href={appt.meetingLink} target="_blank" rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 mt-1.5 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
-              <Video size={10} /> Join Meeting
+              className="inline-flex items-center gap-1.5 mt-2 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+              <Video size={11} /> Join Doctor Meeting
             </a>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 mt-2 bg-gray-100 text-gray-400 text-xs font-bold px-3 py-1.5 rounded-lg cursor-not-allowed border border-gray-200">
+              <Video size={11} /> Join Doctor Meeting
+              <span className="text-[9px] font-normal ml-0.5">
+                {appt.status === "pending" ? "(Awaiting approval)" : "(Link pending)"}
+              </span>
+            </span>
           )}
         </div>
         {open ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
@@ -335,12 +342,10 @@ export default function PatientDashboard() {
             <h1 className="text-xl font-serif font-bold">Welcome back, {patient?.name?.split(" ")[0]}!</h1>
             <p className="text-white/60 text-sm mt-1">Manage your Ayurvedic care journey</p>
           </div>
-          <div className="flex flex-col gap-2">
-            <button onClick={() => navigate("/portal/book")}
-              className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-4 py-2.5 text-sm font-bold hover:bg-green-50 transition-colors flex items-center gap-1.5 shadow-lg">
-              <Plus size={15} /> Book
-            </button>
-          </div>
+          <button onClick={() => navigate("/portal/book")}
+            className="flex-shrink-0 bg-white text-[#1a3d2b] rounded-2xl px-5 py-3 text-base font-bold hover:bg-green-50 active:scale-95 transition-all flex items-center gap-2 shadow-xl">
+            <Plus size={18} /> Book Appointment
+          </button>
         </motion.div>
 
         {/* Stats */}

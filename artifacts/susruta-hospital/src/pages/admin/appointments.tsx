@@ -272,6 +272,10 @@ export default function AdminAppointments() {
   }
 
   useEffect(() => {
+    fetchOnlineAppts();
+  }, []);
+
+  useEffect(() => {
     if (mainTab === "online") fetchOnlineAppts();
   }, [mainTab]);
 
@@ -387,7 +391,10 @@ export default function AdminAppointments() {
             mainTab === "online" ? "bg-white shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground")}>
           <Video size={14} /> Online Consultations
           {onlinePendingCount > 0 && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">{onlinePendingCount}</span>
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              {onlinePendingCount} new
+            </span>
           )}
         </button>
       </div>
