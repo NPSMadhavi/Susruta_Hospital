@@ -456,67 +456,97 @@ export default function AdminSettings() {
           {/* PhonePe QR Upload */}
           <div>
             <label className={labelCls}><QrCode size={13} className="inline mr-1" /> PhonePe QR Code Image</label>
-            <div className="text-xs text-muted-foreground mb-2">
+            <div className="text-xs text-muted-foreground mb-3">
               Upload the PhonePe UPI QR code image. Patients will see this when they need to pay for medicine orders.
             </div>
-            {form.phonepeQrObjectPath && (
-              <div className="mb-3 flex items-center gap-3">
-                <img
-                  src={`${BASE}/api/storage${form.phonepeQrObjectPath}`}
-                  alt="Current PhonePe QR"
-                  className="w-28 h-28 object-contain border border-border rounded-xl bg-white p-1"
-                />
-                <div>
-                  <p className="text-xs text-green-700 font-medium flex items-center gap-1.5"><CheckCircle2 size={12} /> QR code uploaded</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Upload a new image to replace it</p>
-                </div>
+            <div className="flex items-start gap-4">
+              {/* Preview */}
+              <div className={cn(
+                "w-32 h-32 rounded-xl border-2 flex items-center justify-center bg-gray-50 shrink-0 overflow-hidden",
+                form.phonepeQrObjectPath ? "border-green-300" : "border-dashed border-border"
+              )}>
+                {form.phonepeQrObjectPath ? (
+                  <img
+                    src={`${BASE}/api/storage${form.phonepeQrObjectPath}`}
+                    alt="PhonePe QR"
+                    className="w-full h-full object-contain p-1"
+                  />
+                ) : (
+                  <div className="text-center text-muted-foreground px-2">
+                    <QrCode size={28} className="mx-auto mb-1 opacity-30" />
+                    <p className="text-[10px]">No QR uploaded</p>
+                  </div>
+                )}
               </div>
-            )}
-            <label className={cn(
-              "flex items-center gap-2.5 cursor-pointer border-2 border-dashed border-primary/30 rounded-xl px-4 py-3 hover:bg-primary/5 transition-colors text-sm text-primary font-medium",
-              qrUploading && "opacity-60 cursor-not-allowed"
-            )}>
-              {qrUploading
-                ? <><Loader2 size={15} className="animate-spin" /> Uploading…</>
-                : <><Upload size={15} /> {form.phonepeQrObjectPath ? "Replace QR Code Image" : "Upload QR Code Image"}</>
-              }
-              <input
-                type="file"
-                accept="image/*"
-                disabled={qrUploading}
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setQrUploading(true);
-                  try {
-                    const fd = new FormData();
-                    fd.append("file", file);
-                    fd.append("visibility", "public");
-                    const res = await fetch(`${BASE}/api/storage/objects`, {
-                      method: "POST", credentials: "include", body: fd,
-                    });
-                    if (!res.ok) throw new Error("Upload failed");
-                    const { objectPath } = await res.json();
-                    // Save to settings
-                    const r2 = await apiFetch("/settings", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ phonepeQrObjectPath: objectPath }),
-                    });
-                    const updated = await r2.json();
-                    setForm(updated);
-                    setSaveResult({ ok: true, msg: "PhonePe QR code uploaded successfully." });
-                    setTimeout(() => setSaveResult(null), 4000);
-                  } catch (err: any) {
-                    setSaveResult({ ok: false, msg: err.message || "Upload failed" });
-                  } finally {
-                    setQrUploading(false);
-                    e.target.value = "";
+              {/* Upload button + status */}
+              <div className="flex-1 space-y-2">
+                <label className={cn(
+                  "flex items-center gap-2.5 cursor-pointer border-2 border-dashed border-primary/30 rounded-xl px-4 py-3 hover:bg-primary/5 transition-colors text-sm text-primary font-medium",
+                  qrUploading && "opacity-60 cursor-not-allowed pointer-events-none"
+                )}>
+                  {qrUploading
+                    ? <><Loader2 size={15} className="animate-spin" /> Uploading…</>
+                    : <><Upload size={15} /> {form.phonepeQrObjectPath ? "Replace QR Code" : "Upload QR Code"}</>
                   }
-                }}
-              />
-            </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={qrUploading}
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setQrUploading(true);
+                      setSaveResult(null);
+                      try {
+                        // Step 1: Get pre-signed upload URL
+                        const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+                          method: "POST",
+                          credentials: "include",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
+                        });
+                        if (!urlRes.ok) {
+                          const errData = await urlRes.json().catch(() => ({}));
+                          throw new Error((errData as any)?.message || "Failed to get upload URL");
+                        }
+                        const { uploadURL, objectPath } = await urlRes.json();
+
+                        // Step 2: Upload directly to storage
+                        const uploadRes = await fetch(uploadURL, {
+                          method: "PUT",
+                          headers: { "Content-Type": file.type },
+                          body: file,
+                        });
+                        if (!uploadRes.ok) throw new Error("File upload failed");
+
+                        // Step 3: Save path to settings
+                        const saveRes = await apiFetch("/settings", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ phonepeQrObjectPath: objectPath }),
+                        });
+                        if (!saveRes.ok) throw new Error("Failed to save QR path");
+                        const updated = await saveRes.json();
+                        setForm(updated);
+                        setSaveResult({ ok: true, msg: "QR code uploaded successfully!" });
+                        setTimeout(() => setSaveResult(null), 5000);
+                      } catch (err: any) {
+                        setSaveResult({ ok: false, msg: err.message || "Upload failed. Please try again." });
+                      } finally {
+                        setQrUploading(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                </label>
+                {form.phonepeQrObjectPath && (
+                  <p className="text-xs text-green-700 flex items-center gap-1.5">
+                    <CheckCircle2 size={12} /> QR code is active — patients can now scan to pay
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="pt-1">
