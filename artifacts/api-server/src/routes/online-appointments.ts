@@ -99,27 +99,8 @@ router.get("/mine", requirePatient, async (req: any, res) => {
   })));
 });
 
-// ── DELETE /api/online-appointments/:id — Patient cancels ─────
-router.delete("/:id", requirePatient, async (req: any, res) => {
-  const patient = req.patient;
-  const id = parseInt(req.params.id);
-
-  const [appt] = await db.select().from(onlineAppointmentsTable)
-    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
-
-  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
-  if (appt.status === "confirmed") {
-    res.status(400).json({ error: "cannot_cancel", message: "Confirmed appointments cannot be cancelled here. Please call us." });
-    return;
-  }
-
-  await db.update(onlineSlotsTable).set({ isBooked: false }).where(eq(onlineSlotsTable.id, appt.slotId));
-  await db.update(onlineAppointmentsTable).set({ status: "cancelled" }).where(eq(onlineAppointmentsTable.id, id));
-
-  res.json({ ok: true });
-});
-
 // ── GET /api/online-appointments/admin — Admin: list all ──────
+// NOTE: Must be before /:id so "admin" is not treated as a wildcard id
 router.get("/admin", requireAdmin, async (_req, res) => {
   const rows = await db
     .select({
@@ -155,6 +136,7 @@ router.get("/admin", requireAdmin, async (_req, res) => {
 });
 
 // ── PATCH /api/online-appointments/admin/:id/approve ──────────
+// NOTE: Must be before /:id wildcard
 const ApproveBody = z.object({
   meetingLink: z.string().min(1, "Meeting link is required"),
 });
@@ -198,6 +180,7 @@ router.patch("/admin/:id/approve", requireAdmin, async (req, res) => {
 });
 
 // ── PATCH /api/online-appointments/admin/:id/cancel ───────────
+// NOTE: Must be before /:id wildcard
 router.patch("/admin/:id/cancel", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
 
@@ -212,6 +195,27 @@ router.patch("/admin/:id/cancel", requireAdmin, async (req, res) => {
     .returning();
 
   res.json(updated);
+});
+
+// ── DELETE /api/online-appointments/:id — Patient cancels ─────
+// NOTE: Wildcard — must be LAST
+router.delete("/:id", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id);
+
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
+
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  if (appt.status === "confirmed") {
+    res.status(400).json({ error: "cannot_cancel", message: "Confirmed appointments cannot be cancelled here. Please call us." });
+    return;
+  }
+
+  await db.update(onlineSlotsTable).set({ isBooked: false }).where(eq(onlineSlotsTable.id, appt.slotId));
+  await db.update(onlineAppointmentsTable).set({ status: "cancelled" }).where(eq(onlineAppointmentsTable.id, id));
+
+  res.json({ ok: true });
 });
 
 export default router;
