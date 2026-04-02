@@ -281,6 +281,18 @@ function OnlineDetailPanel({
                   <Pill size={8} /> Rx Saved
                 </span>
               )}
+              {appt.meetingLink && (
+                <a
+                  href={appt.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors shrink-0"
+                >
+                  <Video size={11} />
+                  Join Meeting
+                  <ExternalLink size={9} className="opacity-70" />
+                </a>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">{appt.patient.email}{appt.patient.phone && ` · ${appt.patient.phone}`}</p>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
@@ -294,25 +306,6 @@ function OnlineDetailPanel({
             <p className="text-sm text-amber-900">{appt.reason}</p>
           </div>
         )}
-
-        {/* Join Meeting button — shown when admin has set a meeting link */}
-        {appt.meetingLink ? (
-          <a
-            href={appt.meetingLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold transition-colors shadow-sm"
-          >
-            <Video size={15} />
-            Join Patient Meeting
-            <ExternalLink size={12} className="opacity-70" />
-          </a>
-        ) : appt.status === "confirmed" ? (
-          <div className="mt-3 flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-muted border border-border text-muted-foreground text-sm">
-            <Video size={14} className="shrink-0" />
-            <span>Meeting link not set by admin yet</span>
-          </div>
-        ) : null}
       </div>
 
       {/* Scrollable content */}
