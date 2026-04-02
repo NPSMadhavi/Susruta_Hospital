@@ -570,17 +570,6 @@ export default function DoctorAppointments() {
           <p className="text-[10px] text-green-300 font-medium">Doctor Portal</p>
           <p className="text-sm font-bold">Dr. P. Murali Krishna</p>
         </div>
-        {/* Stats */}
-        <div className="flex items-center gap-3 ml-4">
-          <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-3 py-1.5">
-            <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-            <span className="text-xs font-bold text-white">{confirmedCount} Pending</span>
-          </div>
-          <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-3 py-1.5">
-            <CheckCircle2 size={11} className="text-green-400" />
-            <span className="text-xs font-bold text-white">{completedCount} Done</span>
-          </div>
-        </div>
         <div className="flex items-center gap-2 ml-auto">
           <button onClick={load} disabled={loading}
             className="p-2 rounded-xl text-white/60 hover:bg-white/10 hover:text-white transition-colors">
@@ -597,7 +586,7 @@ export default function DoctorAppointments() {
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── Left Panel ─────────────────────────────────────── */}
-        <div className="w-72 flex flex-col border-r border-border bg-white shrink-0 overflow-hidden">
+        <div className="w-[380px] flex flex-col border-r border-border bg-white shrink-0 overflow-hidden">
           {/* Type tabs */}
           <div className="grid grid-cols-2 border-b border-border shrink-0">
             <button onClick={() => { setMainTab("online"); setActiveDoc(null); }}

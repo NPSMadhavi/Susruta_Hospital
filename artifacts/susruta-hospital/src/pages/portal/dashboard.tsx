@@ -397,8 +397,8 @@ export default function PatientDashboard() {
               <p className="text-sm">No {tab} appointments</p>
               {tab === "upcoming" && (
                 <button onClick={() => navigate("/portal/book")}
-                  className="mt-4 text-sm text-primary font-semibold hover:underline flex items-center gap-1 mx-auto">
-                  <Plus size={14} /> Book your first appointment
+                  className="mt-5 inline-flex items-center gap-2 bg-[#1a3d2b] text-white rounded-2xl px-5 py-2.5 text-sm font-bold hover:bg-[#1a3d2b]/90 transition-colors shadow-md">
+                  <Plus size={15} /> Book an Appointment
                 </button>
               )}
             </div>
