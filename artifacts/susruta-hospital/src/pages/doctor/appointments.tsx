@@ -159,44 +159,44 @@ function ListCard({
   return (
     <button onClick={onClick}
       className={cn(
-        "w-full text-left px-3 py-3 border-b border-border/60 transition-all hover:bg-muted/40 flex items-start gap-3 group",
-        isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
+        "w-full text-left px-4 py-4 border-b border-border/60 transition-all hover:bg-muted/40 flex items-start gap-4 group",
+        isSelected ? "bg-primary/5 border-l-[3px] border-l-primary" : "border-l-[3px] border-l-transparent"
       )}
     >
       <div className={cn(
-        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+        "w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors",
         isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
       )}>
-        <User size={14} />
+        <User size={18} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap mb-1">
-          <span className="text-base font-bold text-foreground truncate">{name}</span>
+        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+          <span className="text-[17px] font-bold text-foreground truncate leading-tight">{name}</span>
           {docCount > 0 && (
-            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-0.5">
-              <FileText size={9} /> {docCount} doc{docCount !== 1 && "s"}
+            <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+              <FileText size={10} /> {docCount} doc{docCount !== 1 && "s"}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap mb-1">
-          <span className={cn("text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", typeBadgeColor)}>
+        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+          <span className={cn("text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", typeBadgeColor)}>
             {typeBadge}
           </span>
-          <span className={cn("text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
+          <span className={cn("text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
             {STATUS_LABELS[statusKey] ?? statusKey}
           </span>
         </div>
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Calendar size={11} /> {date}
-          <Clock size={11} className="ml-1" /> {time}
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Calendar size={13} /> {date}
+          <Clock size={13} className="ml-1" /> {time}
         </p>
         {(reason || notes) && (
-          <p className="text-xs text-muted-foreground mt-0.5 truncate italic opacity-70">
+          <p className="text-sm text-muted-foreground mt-1 truncate italic opacity-70">
             {notes ?? reason}
           </p>
         )}
       </div>
-      <ChevronRight size={12} className={cn("shrink-0 mt-2 transition-colors", isSelected ? "text-primary" : "text-muted-foreground/40")} />
+      <ChevronRight size={15} className={cn("shrink-0 mt-3 transition-colors", isSelected ? "text-primary" : "text-muted-foreground/40")} />
     </button>
   );
 }
@@ -564,20 +564,20 @@ export default function DoctorAppointments() {
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="bg-[#1a3d2b] text-white px-4 py-2 flex items-center gap-4 shrink-0 shadow-lg z-40">
-        <img src={logoImg} alt="Susruta Hospital" className="h-8 w-auto object-contain brightness-200" />
+      <header className="bg-[#1a3d2b] text-white px-5 py-3 flex items-center gap-4 shrink-0 shadow-lg z-40">
+        <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto object-contain brightness-200" />
         <div className="hidden sm:block">
-          <p className="text-[10px] text-green-300 font-medium">Doctor Portal</p>
-          <p className="text-sm font-bold">Dr. P. Murali Krishna</p>
+          <p className="text-xs text-green-300 font-medium tracking-wide">Doctor Portal</p>
+          <p className="text-base font-bold leading-tight">Dr. P. Murali Krishna</p>
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <button onClick={load} disabled={loading}
             className="p-2 rounded-xl text-white/60 hover:bg-white/10 hover:text-white transition-colors">
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
           <button onClick={logout}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10 rounded-xl transition-colors font-medium">
-            <LogOut size={14} /> Logout
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 rounded-xl transition-colors">
+            <LogOut size={15} /> Logout
           </button>
         </div>
       </header>
@@ -586,23 +586,23 @@ export default function DoctorAppointments() {
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── Left Panel ─────────────────────────────────────── */}
-        <div className="w-[380px] flex flex-col border-r border-border bg-white shrink-0 overflow-hidden">
+        <div className="w-[clamp(280px,30vw,440px)] flex flex-col border-r border-border bg-white shrink-0 overflow-hidden">
           {/* Type tabs */}
           <div className="grid grid-cols-2 border-b border-border shrink-0">
             <button onClick={() => { setMainTab("online"); setActiveDoc(null); }}
-              className={cn("flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2",
+              className={cn("flex items-center justify-center gap-2 py-3.5 text-sm font-bold transition-all border-b-2",
                 mainTab === "online" ? "border-blue-600 text-blue-700 bg-blue-50" : "border-transparent text-muted-foreground hover:bg-muted/50")}>
-              <Video size={12} /> Online
-              <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded-full",
+              <Video size={15} /> Online
+              <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full",
                 mainTab === "online" ? "bg-blue-200 text-blue-800" : "bg-muted text-muted-foreground")}>
                 {onlineAppts.length}
               </span>
             </button>
             <button onClick={() => { setMainTab("offline"); setActiveDoc(null); }}
-              className={cn("flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2",
+              className={cn("flex items-center justify-center gap-2 py-3.5 text-sm font-bold transition-all border-b-2",
                 mainTab === "offline" ? "border-orange-500 text-orange-700 bg-orange-50" : "border-transparent text-muted-foreground hover:bg-muted/50")}>
-              <UserCheck size={12} /> In-Person
-              <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded-full",
+              <UserCheck size={15} /> In-Person
+              <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full",
                 mainTab === "offline" ? "bg-orange-200 text-orange-800" : "bg-muted text-muted-foreground")}>
                 {offlineAppts.length}
               </span>
@@ -614,7 +614,7 @@ export default function DoctorAppointments() {
             <div className="grid grid-cols-3 bg-muted/30 border-b border-border shrink-0">
               {([["all", "All"], ["confirmed", "Pending"], ["completed", "Done"]] as const).map(([val, label]) => (
                 <button key={val} onClick={() => setFilter(val)}
-                  className={cn("py-1.5 text-[10px] font-semibold transition-colors",
+                  className={cn("py-2.5 text-sm font-semibold transition-colors",
                     filter === val ? "bg-white text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   {label}
                 </button>
@@ -625,15 +625,15 @@ export default function DoctorAppointments() {
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs">Loading…</span>
+              <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+                <Loader2 size={20} className="animate-spin" />
+                <span className="text-base">Loading…</span>
               </div>
             ) : mainTab === "online" ? (
               shownOnline.length === 0 ? (
-                <div className="text-center py-12">
-                  <Video size={28} className="mx-auto mb-2 text-muted-foreground/25" />
-                  <p className="text-xs text-muted-foreground">No appointments</p>
+                <div className="text-center py-16">
+                  <Video size={36} className="mx-auto mb-3 text-muted-foreground/25" />
+                  <p className="text-base text-muted-foreground">No appointments</p>
                 </div>
               ) : shownOnline.map(a => (
                 <ListCard key={a.id}
@@ -648,8 +648,8 @@ export default function DoctorAppointments() {
             ) : (
               offlineAppts.length === 0 ? (
                 <div className="text-center py-12">
-                  <UserCheck size={28} className="mx-auto mb-2 text-muted-foreground/25" />
-                  <p className="text-xs text-muted-foreground">No appointments</p>
+                  <UserCheck size={36} className="mx-auto mb-3 text-muted-foreground/25" />
+                  <p className="text-base text-muted-foreground">No appointments</p>
                 </div>
               ) : offlineAppts.map(a => (
                 <ListCard key={a.id}
