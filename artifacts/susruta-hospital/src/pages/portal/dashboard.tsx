@@ -693,15 +693,32 @@ export default function PatientDashboard() {
   const [orderModal, setOrderModal] = useState<{ prefill: CartRow[]; appointmentId?: number } | null>(null);
 
   function openOrderModal(appt?: OnlineAppt) {
-    if (appt?.prescription) {
-      const prefill = appt.prescription.medicines.map(m => ({
-        medicineName: m.medicine,
-        instructions: m.instructions,
-        qty: 1,
-      }));
-      setOrderModal({ prefill, appointmentId: appt.id });
+    if (appt) {
+      // Called from a specific consultation card
+      if (appt.prescription?.medicines?.length) {
+        const prefill = appt.prescription.medicines.map(m => ({
+          medicineName: m.medicine,
+          instructions: m.instructions,
+          qty: 1,
+        }));
+        setOrderModal({ prefill, appointmentId: appt.id });
+      } else {
+        setOrderModal({ prefill: [], appointmentId: appt.id });
+      }
     } else {
-      setOrderModal({ prefill: [] });
+      // Called from the generic "Order Medicines" button — auto-pick the latest prescription
+      const withRx = onlineAppts.filter(a => a.prescription?.medicines?.length);
+      if (withRx.length > 0) {
+        const latest = withRx[0];
+        const prefill = latest.prescription!.medicines.map(m => ({
+          medicineName: m.medicine,
+          instructions: m.instructions,
+          qty: 1,
+        }));
+        setOrderModal({ prefill, appointmentId: latest.id });
+      } else {
+        setOrderModal({ prefill: [] });
+      }
     }
   }
 
