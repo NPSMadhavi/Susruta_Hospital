@@ -260,8 +260,15 @@ function MedicineOrderModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const fromPrescription = prefill.length > 0;
+
   const [step, setStep] = useState(1);
-  const [cart, setCart] = useState<CartRow[]>(prefill.length > 0 ? prefill : [{ medicineName: "", instructions: "", qty: 1 }]);
+  const [rxItems, setRxItems] = useState<Array<CartRow & { selected: boolean }>>(
+    prefill.map(r => ({ ...r, selected: true }))
+  );
+  const [extraItems, setExtraItems] = useState<CartRow[]>(
+    fromPrescription ? [] : [{ medicineName: "", instructions: "", qty: 1 }]
+  );
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState(patientPhone ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -275,13 +282,21 @@ function MedicineOrderModal({
       }).catch(() => {});
   }, []);
 
-  function addRow() { setCart(c => [...c, { medicineName: "", instructions: "", qty: 1 }]); }
-  function removeRow(i: number) { setCart(c => c.filter((_, j) => j !== i)); }
-  function updateRow(i: number, field: keyof CartRow, value: string | number) {
-    setCart(c => c.map((r, j) => j === i ? { ...r, [field]: value } : r));
+  function toggleRx(i: number) { setRxItems(c => c.map((r, j) => j === i ? { ...r, selected: !r.selected } : r)); }
+  function setRxQty(i: number, qty: number) { setRxItems(c => c.map((r, j) => j === i ? { ...r, qty } : r)); }
+
+  function addExtra() { setExtraItems(c => [...c, { medicineName: "", instructions: "", qty: 1 }]); }
+  function removeExtra(i: number) { setExtraItems(c => c.filter((_, j) => j !== i)); }
+  function updateExtra(i: number, field: keyof CartRow, value: string | number) {
+    setExtraItems(c => c.map((r, j) => j === i ? { ...r, [field]: value } : r));
   }
 
-  const validCart = cart.filter(r => r.medicineName.trim().length > 0);
+  const selectedRx = rxItems.filter(r => r.selected);
+  const validExtras = extraItems.filter(r => r.medicineName.trim().length > 0);
+  const validCart: CartRow[] = [
+    ...selectedRx.map(r => ({ medicineName: r.medicineName, instructions: r.instructions, qty: r.qty })),
+    ...validExtras,
+  ];
 
   async function submit() {
     setSubmitting(true);
@@ -333,48 +348,104 @@ function MedicineOrderModal({
         <div className="flex-1 overflow-y-auto">
           {/* Step 1: Medicine selection */}
           {step === 1 && (
-            <div className="px-6 py-5 space-y-3">
-              <p className="text-xs text-muted-foreground">Add medicines from your prescription or enter custom medicines.</p>
-              <div className="space-y-2">
-                {cart.map((row, i) => (
-                  <div key={i} className="bg-gray-50 rounded-xl p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</div>
+            <div className="px-6 py-5 space-y-4">
+
+              {/* Prescription medicines (pre-selected cards) */}
+              {fromPrescription && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Pill size={13} className="text-primary" />
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wide">From Dr. Murali Krishna's Prescription</p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground -mt-1">All medicines are pre-selected. Uncheck any you don't need.</p>
+                  {rxItems.map((row, i) => (
+                    <div key={i}
+                      onClick={() => toggleRx(i)}
+                      className={`rounded-xl border-2 p-3 cursor-pointer transition-all select-none
+                        ${row.selected
+                          ? "border-primary/50 bg-primary/5 shadow-sm"
+                          : "border-border bg-gray-50 opacity-50"}`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors
+                          ${row.selected ? "bg-primary border-primary" : "border-gray-400 bg-white"}`}>
+                          {row.selected && <CheckCircle2 size={10} className="text-white" strokeWidth={3} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold leading-tight ${row.selected ? "text-foreground" : "text-muted-foreground"}`}>
+                            {row.medicineName}
+                          </p>
+                          {row.instructions && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{row.instructions}</p>
+                          )}
+                        </div>
+                        {row.selected && (
+                          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setRxQty(i, Math.max(1, row.qty - 1))}
+                              className="w-6 h-6 rounded-lg border border-border bg-white flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                              <Minus size={11} />
+                            </button>
+                            <span className="text-sm font-bold w-5 text-center">{row.qty}</span>
+                            <button onClick={() => setRxQty(i, Math.min(99, row.qty + 1))}
+                              className="w-6 h-6 rounded-lg border border-border bg-white flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                              <Plus size={11} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Manual/extra medicine entries */}
+              {(extraItems.length > 0 || !fromPrescription) && (
+                <div className="space-y-2">
+                  {fromPrescription && extraItems.length > 0 && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">Additional Medicines</p>
+                  )}
+                  {extraItems.map((row, i) => (
+                    <div key={i} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                          {(fromPrescription ? rxItems.length : 0) + i + 1}
+                        </div>
+                        <input
+                          type="text"
+                          value={row.medicineName}
+                          onChange={e => updateExtra(i, "medicineName", e.target.value)}
+                          placeholder="Medicine name"
+                          className="flex-1 text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => updateExtra(i, "qty", Math.max(1, row.qty - 1))}
+                            className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <Minus size={12} />
+                          </button>
+                          <span className="text-sm font-bold w-6 text-center">{row.qty}</span>
+                          <button onClick={() => updateExtra(i, "qty", Math.min(99, row.qty + 1))}
+                            className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <Plus size={12} />
+                          </button>
+                        </div>
+                        {(extraItems.length > 1 || fromPrescription) && (
+                          <button onClick={() => removeExtra(i)} className="p-1 text-red-400 hover:text-red-600 transition-colors"><X size={14} /></button>
+                        )}
+                      </div>
                       <input
                         type="text"
-                        value={row.medicineName}
-                        onChange={e => updateRow(i, "medicineName", e.target.value)}
-                        placeholder="Medicine name"
-                        className="flex-1 text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        value={row.instructions}
+                        onChange={e => updateExtra(i, "instructions", e.target.value)}
+                        placeholder="Dosage / instructions (optional)"
+                        className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => updateRow(i, "qty", Math.max(1, row.qty - 1))}
-                          className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-                          <Minus size={12} />
-                        </button>
-                        <span className="text-sm font-bold w-6 text-center">{row.qty}</span>
-                        <button onClick={() => updateRow(i, "qty", Math.min(99, row.qty + 1))}
-                          className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-                          <Plus size={12} />
-                        </button>
-                      </div>
-                      {cart.length > 1 && (
-                        <button onClick={() => removeRow(i)} className="p-1 text-red-400 hover:text-red-600 transition-colors"><X size={14} /></button>
-                      )}
                     </div>
-                    <input
-                      type="text"
-                      value={row.instructions}
-                      onChange={e => updateRow(i, "instructions", e.target.value)}
-                      placeholder="Dosage / instructions (optional)"
-                      className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </div>
-                ))}
-              </div>
-              <button onClick={addRow}
+                  ))}
+                </div>
+              )}
+
+              <button onClick={addExtra}
                 className="w-full border-2 border-dashed border-primary/30 text-primary text-sm font-semibold py-2.5 rounded-xl hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5">
-                <Plus size={14} /> Add Another Medicine
+                <Plus size={14} /> {fromPrescription ? "Add Extra Medicine" : "Add Another Medicine"}
               </button>
             </div>
           )}
