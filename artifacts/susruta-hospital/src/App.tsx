@@ -28,6 +28,10 @@ import OnlineBook from "./pages/portal/online-book";
 import DoctorLogin from "./pages/doctor/login";
 import DoctorAppointments from "./pages/doctor/appointments";
 
+// Pharmacy Portal Pages
+import PharmacyLogin from "./pages/pharmacy/login";
+import PharmacyOrders from "./pages/pharmacy/orders";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -53,6 +57,10 @@ function Router() {
       {/* Doctor Portal Routes */}
       <Route path="/doctor" component={DoctorLogin} />
       <Route path="/doctor/appointments" component={DoctorAppointments} />
+
+      {/* Pharmacy Portal Routes */}
+      <Route path="/pharmacy" component={PharmacyLogin} />
+      <Route path="/pharmacy/orders" component={PharmacyOrders} />
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />

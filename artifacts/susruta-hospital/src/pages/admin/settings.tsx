@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical, Stethoscope, Lock } from "lucide-react";
+import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical, Stethoscope, Lock, Pill, Upload, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -28,6 +28,8 @@ type Settings = {
   smtpSubscriberFrom: string;
   smtpConfigured: boolean;
   doctorPortalConfigured: boolean;
+  pharmacyPortalConfigured: boolean;
+  phonepeQrObjectPath: string | null;
 };
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
@@ -94,6 +96,9 @@ export default function AdminSettings() {
   const [passChanged, setPassChanged] = useState(false);
   const [doctorPassword, setDoctorPassword] = useState("");
   const [showDoctorPass, setShowDoctorPass] = useState(false);
+  const [pharmacyPassword, setPharmacyPassword] = useState("");
+  const [showPharmacyPass, setShowPharmacyPass] = useState(false);
+  const [qrUploading, setQrUploading] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -127,6 +132,7 @@ export default function AdminSettings() {
       const payload: any = { ...form };
       if (!passChanged) delete payload.smtpPass;
       if (doctorPassword.trim()) payload.doctorPassword = doctorPassword;
+      if (pharmacyPassword.trim()) payload.pharmacyPassword = pharmacyPassword;
       const res = await apiFetch("/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -137,6 +143,7 @@ export default function AdminSettings() {
       setForm(data);
       setPassChanged(false);
       setDoctorPassword("");
+      setPharmacyPassword("");
       setSaveResult({ ok: true, msg: "Settings saved successfully." });
     } catch (err: any) {
       setSaveResult({ ok: false, msg: err.message });
@@ -404,6 +411,118 @@ export default function AdminSettings() {
             <a href="/doctor" target="_blank" rel="noopener noreferrer"
               className="text-sm text-primary font-semibold hover:underline flex items-center gap-1.5">
               <Stethoscope size={13} /> Open Doctor Portal →
+            </a>
+          </div>
+        </SectionCard>
+
+        {/* ── Pharmacy Portal ── */}
+        <SectionCard title="Pharmacy Portal Access & PhonePe QR" icon={Pill}>
+          <div className={cn(
+            "flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium",
+            form.pharmacyPortalConfigured
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-amber-50 text-amber-700 border border-amber-200"
+          )}>
+            {form.pharmacyPortalConfigured
+              ? <><CheckCircle2 size={15} /> Pharmacy portal is configured — pharmacist can log in at /pharmacy</>
+              : <><AlertCircle size={15} /> Pharmacy portal password not yet set — pharmacist cannot log in until configured</>}
+          </div>
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3 leading-relaxed">
+            Set a shared password for the pharmacy staff to access the pharmacy portal at <strong>/pharmacy</strong>.
+            They can review medicine orders, verify availability, confirm payments, and update shipping.
+          </div>
+          <div>
+            <label className={labelCls}>
+              {form.pharmacyPortalConfigured ? "Change Pharmacy Portal Password" : "Set Pharmacy Portal Password"}
+            </label>
+            <div className="relative">
+              <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type={showPharmacyPass ? "text" : "password"}
+                value={pharmacyPassword}
+                onChange={e => setPharmacyPassword(e.target.value)}
+                placeholder={form.pharmacyPortalConfigured ? "Leave blank to keep current password" : "Set a new password"}
+                autoComplete="new-password"
+                className={cn(inputCls, "pl-9 pr-10")}
+              />
+              <button type="button" onClick={() => setShowPharmacyPass(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPharmacyPass ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">Share this password with pharmacy staff only. It cannot be recovered — only reset.</p>
+          </div>
+
+          {/* PhonePe QR Upload */}
+          <div>
+            <label className={labelCls}><QrCode size={13} className="inline mr-1" /> PhonePe QR Code Image</label>
+            <div className="text-xs text-muted-foreground mb-2">
+              Upload the PhonePe UPI QR code image. Patients will see this when they need to pay for medicine orders.
+            </div>
+            {form.phonepeQrObjectPath && (
+              <div className="mb-3 flex items-center gap-3">
+                <img
+                  src={`${BASE}/api/storage${form.phonepeQrObjectPath}`}
+                  alt="Current PhonePe QR"
+                  className="w-28 h-28 object-contain border border-border rounded-xl bg-white p-1"
+                />
+                <div>
+                  <p className="text-xs text-green-700 font-medium flex items-center gap-1.5"><CheckCircle2 size={12} /> QR code uploaded</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Upload a new image to replace it</p>
+                </div>
+              </div>
+            )}
+            <label className={cn(
+              "flex items-center gap-2.5 cursor-pointer border-2 border-dashed border-primary/30 rounded-xl px-4 py-3 hover:bg-primary/5 transition-colors text-sm text-primary font-medium",
+              qrUploading && "opacity-60 cursor-not-allowed"
+            )}>
+              {qrUploading
+                ? <><Loader2 size={15} className="animate-spin" /> Uploading…</>
+                : <><Upload size={15} /> {form.phonepeQrObjectPath ? "Replace QR Code Image" : "Upload QR Code Image"}</>
+              }
+              <input
+                type="file"
+                accept="image/*"
+                disabled={qrUploading}
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setQrUploading(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    fd.append("visibility", "public");
+                    const res = await fetch(`${BASE}/api/storage/objects`, {
+                      method: "POST", credentials: "include", body: fd,
+                    });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const { objectPath } = await res.json();
+                    // Save to settings
+                    const r2 = await apiFetch("/settings", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ phonepeQrObjectPath: objectPath }),
+                    });
+                    const updated = await r2.json();
+                    setForm(updated);
+                    setSaveResult({ ok: true, msg: "PhonePe QR code uploaded successfully." });
+                    setTimeout(() => setSaveResult(null), 4000);
+                  } catch (err: any) {
+                    setSaveResult({ ok: false, msg: err.message || "Upload failed" });
+                  } finally {
+                    setQrUploading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="pt-1">
+            <a href="/pharmacy" target="_blank" rel="noopener noreferrer"
+              className="text-sm text-primary font-semibold hover:underline flex items-center gap-1.5">
+              <Pill size={13} /> Open Pharmacy Portal →
             </a>
           </div>
         </SectionCard>

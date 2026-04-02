@@ -22,6 +22,10 @@ export const siteSettingsTable = pgTable("site_settings", {
   smtpSubscriberFrom: varchar("smtp_subscriber_from", { length: 255 }).notNull().default("updates@susrutahospital.com"),
   // Doctor portal password (hashed with bcrypt)
   doctorPasswordHash: varchar("doctor_password_hash", { length: 255 }),
+  // Pharmacy portal password (hashed with bcrypt)
+  pharmacyPasswordHash: varchar("pharmacy_password_hash", { length: 255 }),
+  // PhonePe QR code (object storage path)
+  phonepeQrObjectPath: varchar("phonepe_qr_object_path", { length: 500 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

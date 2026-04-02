@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, and an **Online Consultation System** with weekly Sunday slot booking, doctor portal with prescription notepad, and patient document uploads.
+A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, an **Online Consultation System** with weekly Sunday slot booking, doctor portal with prescription notepad, and patient document uploads. Also includes a **Pharmacy/Medicine Ordering System** with a dedicated pharmacist portal, multi-step patient order flow, PhonePe QR payment, and shipping tracking.
 
 ## Stack
 
@@ -181,6 +181,27 @@ artifacts-monorepo/
 | GET | /api/subscribers | List (admin) |
 | DELETE | /api/subscribers/:id | Delete (admin) |
 | POST | /api/subscribers/import | Bulk import CSV/Excel (admin) |
+
+### Pharmacy Portal (Pharmacist Auth)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/pharmacy/login | Login with pharmacy password |
+| POST | /api/pharmacy/logout | Logout |
+| GET | /api/pharmacy/me | Check auth status |
+| GET | /api/pharmacy/sse | Real-time SSE notifications |
+| GET | /api/pharmacy/orders | List all medicine orders |
+| PATCH | /api/pharmacy/orders/:id/availability | Mark item availability + set status |
+| PATCH | /api/pharmacy/orders/:id/payment-confirmed | Mark payment received |
+| PATCH | /api/pharmacy/orders/:id/shipping | Add tracking number + ship |
+
+### Medicine Orders (Patient)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/medicine-orders | My medicine orders |
+| POST | /api/medicine-orders | Submit new order |
+| GET | /api/medicine-orders/:id | Order detail |
+| PATCH | /api/medicine-orders/:id/approve-partial | Approve partial availability |
+| PATCH | /api/medicine-orders/:id/payment-done | Mark PhonePe payment done |
 
 ## Important Implementation Notes
 

@@ -99,6 +99,8 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     smtpSubscriberFrom: s.smtpSubscriberFrom,
     smtpConfigured: !!(s.smtpHost && s.smtpUser && s.smtpPass),
     doctorPortalConfigured: !!s.doctorPasswordHash,
+    pharmacyPortalConfigured: !!s.pharmacyPasswordHash,
+    phonepeQrObjectPath: s.phonepeQrObjectPath ?? null,
   };
 }
 
@@ -118,6 +120,14 @@ router.patch("/settings", requireAdmin, async (req, res) => {
   // Handle doctor password separately — hash before storing
   if (req.body.doctorPassword && req.body.doctorPassword.trim()) {
     updates.doctorPasswordHash = await bcrypt.hash(req.body.doctorPassword, 12);
+  }
+  // Handle pharmacy password separately — hash before storing
+  if (req.body.pharmacyPassword && req.body.pharmacyPassword.trim()) {
+    updates.pharmacyPasswordHash = await bcrypt.hash(req.body.pharmacyPassword, 12);
+  }
+  // Handle PhonePe QR object path
+  if (req.body.phonepeQrObjectPath !== undefined) {
+    updates.phonepeQrObjectPath = req.body.phonepeQrObjectPath;
   }
   updates.updatedAt = new Date();
 

@@ -10,6 +10,8 @@ import doctorRouter from "./doctor";
 import onlineSlotsRouter from "./online-slots";
 import onlineAppointmentsRouter from "./online-appointments";
 import storageRouter from "./storage";
+import pharmacyRouter from "./pharmacy";
+import medicineOrdersRouter from "./medicine-orders";
 
 const router: IRouter = Router();
 
@@ -23,6 +25,8 @@ router.use("/subscribers", subscribersRouter);
 router.use("/doctor", doctorRouter);
 router.use("/online-slots", onlineSlotsRouter);
 router.use("/online-appointments", onlineAppointmentsRouter);
+router.use("/pharmacy", pharmacyRouter);
+router.use("/medicine-orders", medicineOrdersRouter);
 router.use(storageRouter);
 
 export default router;

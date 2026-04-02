@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar, Clock, CheckCircle2, XCircle, AlertCircle, LogOut,
-  Plus, Leaf, ChevronRight, Bell, RefreshCw, User, Video, Pill, FileText, ChevronDown, ChevronUp
+  Plus, Leaf, ChevronRight, Bell, RefreshCw, User, Video, Pill, FileText, ChevronDown, ChevronUp,
+  ShoppingCart, Package, Truck, MapPin, Phone, CreditCard, X, Minus, ArrowRight, ArrowLeft, AlertTriangle
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import logoImg from "@assets/logo_1773840200056.png";
@@ -19,13 +20,31 @@ type OnlineAppt = {
   prescription: { medicines: MedicineRow[]; updatedAt: string } | null;
 };
 
+type MedOrderItem = { id: number; medicineName: string; instructions: string | null; qty: number; available: boolean | null };
+type MedOrder = {
+  id: number; status: string; deliveryAddress: string; phone: string;
+  trackingNumber: string | null; pharmacistNotes: string | null;
+  appointmentId: number | null; createdAt: string; items: MedOrderItem[];
+};
+
+type CartRow = { medicineName: string; instructions: string; qty: number };
+
+const ORDER_STATUS_META: Record<string, { label: string; color: string; desc: string }> = {
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-700 border-blue-200", desc: "Your order has been received by the pharmacy." },
+  partial_approval_needed: { label: "Action Required", color: "bg-orange-100 text-orange-700 border-orange-200", desc: "Some medicines are unavailable. Please review and approve the updated order." },
+  payment_requested: { label: "Payment Requested", color: "bg-purple-100 text-purple-700 border-purple-200", desc: "Scan the PhonePe QR code to pay and click 'I've Paid'." },
+  payment_done: { label: "Payment Sent", color: "bg-amber-100 text-amber-700 border-amber-200", desc: "Your payment is being verified by the pharmacy." },
+  payment_confirmed: { label: "Payment Confirmed", color: "bg-teal-100 text-teal-700 border-teal-200", desc: "Payment confirmed! Your order is being packed." },
+  shipped: { label: "Shipped 🚚", color: "bg-green-100 text-green-700 border-green-200", desc: "Your order has been shipped." },
+};
+
 function fmtTimeO(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
+function OnlineConsultationCard({ appt, onOrderMedicines }: { appt: OnlineAppt; onOrderMedicines: (appt: OnlineAppt) => void }) {
   const [open, setOpen] = useState(false);
   const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
@@ -111,6 +130,12 @@ function OnlineConsultationCard({ appt }: { appt: OnlineAppt }) {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">Issued {new Date(appt.prescription.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+              <button
+                onClick={e => { e.stopPropagation(); onOrderMedicines(appt); }}
+                className="mt-3 inline-flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
+                <ShoppingCart size={11} className="pointer-events-none" />
+                <span className="pointer-events-none">Order Medicines from Prescription</span>
+              </button>
             </div>
           ) : appt.status === "confirmed" ? (
             <div className="text-sm text-muted-foreground bg-muted/30 rounded-xl px-4 py-3 flex items-center gap-2">
@@ -225,6 +250,359 @@ function fmt(date: string) {
   return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
+// ── Medicine Order Modal ───────────────────────────────────────
+function MedicineOrderModal({
+  prefill, appointmentId, patientPhone, onClose, onSuccess
+}: {
+  prefill: CartRow[];
+  appointmentId?: number;
+  patientPhone?: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [step, setStep] = useState(1);
+  const [cart, setCart] = useState<CartRow[]>(prefill.length > 0 ? prefill : [{ medicineName: "", instructions: "", qty: 1 }]);
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState(patientPhone ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/pharmacy/settings`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.phonepeQrObjectPath) setQrUrl(`${BASE}/api/storage${d.phonepeQrObjectPath}`);
+      }).catch(() => {});
+  }, []);
+
+  function addRow() { setCart(c => [...c, { medicineName: "", instructions: "", qty: 1 }]); }
+  function removeRow(i: number) { setCart(c => c.filter((_, j) => j !== i)); }
+  function updateRow(i: number, field: keyof CartRow, value: string | number) {
+    setCart(c => c.map((r, j) => j === i ? { ...r, [field]: value } : r));
+  }
+
+  const validCart = cart.filter(r => r.medicineName.trim().length > 0);
+
+  async function submit() {
+    setSubmitting(true);
+    try {
+      const body = {
+        appointmentId,
+        appointmentType: appointmentId ? "online" : "offline",
+        deliveryAddress: address.trim(),
+        phone: phone.trim(),
+        items: validCart.map(r => ({ medicineName: r.medicineName.trim(), instructions: r.instructions.trim() || undefined, qty: r.qty })),
+      };
+      const r = await fetch(`${BASE}/api/medicine-orders`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw await r.json();
+      onSuccess();
+    } catch (err: any) {
+      alert(err?.issues?.[0]?.message ?? err?.message ?? "Failed to place order. Please try again.");
+    } finally { setSubmitting(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="bg-[#1a3d2b] text-white px-6 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="font-bold text-base">Order Medicines</h2>
+            <p className="text-green-300 text-xs">Step {step} of 3</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"><X size={18} /></button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex border-b border-border shrink-0">
+          {["Select Medicines", "Delivery Info", "Review & Submit"].map((label, idx) => (
+            <div key={idx} className={`flex-1 py-2.5 text-center text-xs font-semibold transition-colors
+              ${step === idx + 1 ? "text-primary border-b-2 border-primary bg-primary/5"
+              : step > idx + 1 ? "text-green-600" : "text-muted-foreground"}`}>
+              {step > idx + 1 ? "✓ " : ""}{label}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Step 1: Medicine selection */}
+          {step === 1 && (
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-xs text-muted-foreground">Add medicines from your prescription or enter custom medicines.</p>
+              <div className="space-y-2">
+                {cart.map((row, i) => (
+                  <div key={i} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</div>
+                      <input
+                        type="text"
+                        value={row.medicineName}
+                        onChange={e => updateRow(i, "medicineName", e.target.value)}
+                        placeholder="Medicine name"
+                        className="flex-1 text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => updateRow(i, "qty", Math.max(1, row.qty - 1))}
+                          className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                          <Minus size={12} />
+                        </button>
+                        <span className="text-sm font-bold w-6 text-center">{row.qty}</span>
+                        <button onClick={() => updateRow(i, "qty", Math.min(99, row.qty + 1))}
+                          className="w-6 h-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                      {cart.length > 1 && (
+                        <button onClick={() => removeRow(i)} className="p-1 text-red-400 hover:text-red-600 transition-colors"><X size={14} /></button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={row.instructions}
+                      onChange={e => updateRow(i, "instructions", e.target.value)}
+                      placeholder="Dosage / instructions (optional)"
+                      className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button onClick={addRow}
+                className="w-full border-2 border-dashed border-primary/30 text-primary text-sm font-semibold py-2.5 rounded-xl hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5">
+                <Plus size={14} /> Add Another Medicine
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Delivery info */}
+          {step === 2 && (
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-foreground/80 mb-1.5 flex items-center gap-1.5">
+                  <MapPin size={13} /> Delivery Address
+                </label>
+                <textarea
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="Full address including street, city, pin code…"
+                  rows={4}
+                  className="w-full text-sm border border-border rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-foreground/80 mb-1.5 flex items-center gap-1.5">
+                  <Phone size={13} /> Contact Phone
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="+91 XXXXX XXXXX"
+                  className="w-full text-sm border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Review */}
+          {step === 3 && (
+            <div className="px-6 py-5 space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-green-800 mb-2">Medicines ({validCart.length})</p>
+                <div className="space-y-2">
+                  {validCart.map((r, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-green-700 w-5 text-right shrink-0">{r.qty}×</span>
+                      <div>
+                        <p className="text-sm font-bold text-foreground">{r.medicineName}</p>
+                        {r.instructions && <p className="text-xs text-muted-foreground">{r.instructions}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-border rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Delivery Details</p>
+                <p className="text-sm"><MapPin size={11} className="inline mr-1 text-muted-foreground" />{address}</p>
+                <p className="text-sm"><Phone size={11} className="inline mr-1 text-muted-foreground" />{phone}</p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800">
+                After submitting, the pharmacy will verify medicine availability. You will receive a PhonePe QR code to complete payment.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer navigation */}
+        <div className="px-6 py-4 border-t border-border flex gap-3 shrink-0">
+          {step > 1 && (
+            <button onClick={() => setStep(s => s - 1)}
+              className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-1.5">
+              <ArrowLeft size={14} /> Back
+            </button>
+          )}
+          {step < 3 ? (
+            <button
+              onClick={() => setStep(s => s + 1)}
+              disabled={step === 1 ? validCart.length === 0 : !address.trim() || phone.trim().length < 7}
+              className="flex-1 bg-primary text-white py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+              Next <ArrowRight size={14} />
+            </button>
+          ) : (
+            <button onClick={submit} disabled={submitting}
+              className="flex-1 bg-primary text-white py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+              {submitting
+                ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <><ShoppingCart size={15} /> Place Order</>
+              }
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Medicine Order Card ────────────────────────────────────────
+function MedOrderCard({ order, onApprove, onPaymentDone, qrUrl }: {
+  order: MedOrder;
+  onApprove: (id: number) => void;
+  onPaymentDone: (id: number) => void;
+  qrUrl: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const meta = ORDER_STATUS_META[order.status] ?? ORDER_STATUS_META["submitted"];
+  const fmtD = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const unavailable = order.items.filter(it => it.available === false);
+
+  async function handleApprove() {
+    setLoading(true);
+    try { await onApprove(order.id); }
+    finally { setLoading(false); }
+  }
+
+  async function handlePaymentDone() {
+    setLoading(true);
+    try { await onPaymentDone(order.id); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/20 transition-colors">
+        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <Package size={16} className="text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-sm text-foreground">Order #{order.id}</p>
+            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${meta.color}`}>
+              {meta.label}
+            </span>
+            {order.status === "partial_approval_needed" && (
+              <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200 animate-pulse">⚠ Action Needed</span>
+            )}
+            {order.status === "payment_requested" && (
+              <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 animate-pulse">Pay Now</span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{order.items.length} medicine(s) · {fmtD(order.createdAt)}</p>
+        </div>
+        {open ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+          <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">{meta.desc}</p>
+
+          {/* Medicine list */}
+          <div className="space-y-1.5">
+            {order.items.map(item => (
+              <div key={item.id} className={`flex items-start gap-2.5 rounded-xl px-3 py-2 border text-sm
+                ${item.available === false ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+                <span className="font-bold w-5 text-right text-muted-foreground shrink-0">{item.qty}×</span>
+                <div className="flex-1">
+                  <p className="font-bold text-foreground">{item.medicineName}</p>
+                  {item.instructions && <p className="text-xs text-muted-foreground">{item.instructions}</p>}
+                </div>
+                {item.available === false && (
+                  <span className="text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full shrink-0">Unavailable</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Notes from pharmacist */}
+          {order.pharmacistNotes && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
+              <strong>Pharmacist notes:</strong> {order.pharmacistNotes}
+            </div>
+          )}
+
+          {/* Delivery address */}
+          <div className="text-xs text-muted-foreground">
+            <MapPin size={10} className="inline mr-1" /> {order.deliveryAddress}
+          </div>
+
+          {/* Approve partial order */}
+          {order.status === "partial_approval_needed" && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-800 flex items-center gap-1.5">
+                <AlertTriangle size={12} /> {unavailable.length} medicine(s) unavailable
+              </p>
+              <p className="text-xs text-orange-700">
+                The pharmacy cannot fulfill the above medicines. Would you like to approve the order with the remaining available medicines?
+              </p>
+              <button onClick={handleApprove} disabled={loading}
+                className="w-full bg-orange-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-orange-700 transition-colors disabled:opacity-60">
+                {loading ? "Processing…" : "Approve Updated Order"}
+              </button>
+            </div>
+          )}
+
+          {/* PhonePe QR payment */}
+          {order.status === "payment_requested" && (
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-purple-800 flex items-center gap-1.5">
+                <CreditCard size={14} /> Pay via PhonePe QR
+              </p>
+              {qrUrl ? (
+                <div className="flex justify-center">
+                  <img src={qrUrl} alt="PhonePe QR Code" className="w-48 h-48 object-contain rounded-xl border border-purple-200 bg-white p-2" />
+                </div>
+              ) : (
+                <div className="text-center text-sm text-purple-700 bg-white rounded-xl py-6 border border-purple-200">
+                  QR code not yet configured. Please contact the pharmacy.
+                </div>
+              )}
+              <p className="text-xs text-center text-purple-700">Scan this QR code with PhonePe to pay, then click the button below.</p>
+              <button onClick={handlePaymentDone} disabled={loading}
+                className="w-full bg-purple-600 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-purple-700 transition-colors disabled:opacity-60">
+                {loading ? "Processing…" : "✓ I've Paid"}
+              </button>
+            </div>
+          )}
+
+          {/* Tracking */}
+          {order.status === "shipped" && order.trackingNumber && (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <p className="text-xs font-semibold text-green-800 flex items-center gap-1.5 mb-1"><Truck size={12} /> Tracking Number</p>
+              <p className="text-base font-bold font-mono text-green-900">{order.trackingNumber}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function isUpcoming(a: Appt) {
   return ["confirmed", "pending", "reschedule_proposed", "reschedule_accepted"].includes(a.status) && a.date >= new Date().toISOString().slice(0, 10);
 }
@@ -236,9 +614,38 @@ export default function PatientDashboard() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appts, setAppts] = useState<Appt[]>([]);
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
+  const [medicineOrders, setMedicineOrders] = useState<MedOrder[]>([]);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"upcoming" | "past" | "missed">("upcoming");
   const [choosingReschedule, setChoosingReschedule] = useState<number | null>(null);
+  const [orderModal, setOrderModal] = useState<{ prefill: CartRow[]; appointmentId?: number } | null>(null);
+
+  function openOrderModal(appt?: OnlineAppt) {
+    if (appt?.prescription) {
+      const prefill = appt.prescription.medicines.map(m => ({
+        medicineName: m.medicine,
+        instructions: m.instructions,
+        qty: 1,
+      }));
+      setOrderModal({ prefill, appointmentId: appt.id });
+    } else {
+      setOrderModal({ prefill: [] });
+    }
+  }
+
+  const fetchMedicineOrders = useCallback(async () => {
+    const data = await fetch(`${BASE}/api/medicine-orders/mine`, { credentials: "include" })
+      .then(r => r.json()).catch(() => []);
+    setMedicineOrders(data);
+  }, []);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/pharmacy/settings`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.phonepeQrObjectPath) setQrUrl(`${BASE}/api/storage${d.phonepeQrObjectPath}`); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +662,7 @@ export default function PatientDashboard() {
           setPatient(me);
           setAppts(myAppts);
           setOnlineAppts(myOnlineAppts);
+          fetchMedicineOrders();
         } else {
           const [myAppts, myOnlineAppts] = await Promise.all([
             patientApi.getAppointments(),
@@ -292,6 +700,16 @@ export default function PatientDashboard() {
     const updated = await patientApi.chooseReschedule(id, date);
     setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...updated } : a)));
     setChoosingReschedule(null);
+  }
+
+  async function handleApprovePartial(id: number) {
+    await fetch(`${BASE}/api/medicine-orders/${id}/approve-partial`, { method: "PATCH", credentials: "include" });
+    fetchMedicineOrders();
+  }
+
+  async function handlePaymentDone(id: number) {
+    await fetch(`${BASE}/api/medicine-orders/${id}/payment-done`, { method: "PATCH", credentials: "include" });
+    fetchMedicineOrders();
   }
 
   if (loading) return (
@@ -465,14 +883,63 @@ export default function PatientDashboard() {
             })}
             {shownOnline.map((appt) => (
               <motion.div key={`online-${appt.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <OnlineConsultationCard appt={appt} />
+                <OnlineConsultationCard appt={appt} onOrderMedicines={openOrderModal} />
               </motion.div>
             ))}
             </>
           )}
         </div>
+
+        {/* Medicine Orders Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-foreground flex items-center gap-2">
+              <Package size={18} className="text-primary" /> Medicine Orders
+              {medicineOrders.filter(o => o.status === "partial_approval_needed" || o.status === "payment_requested").length > 0 && (
+                <span className="w-5 h-5 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                  {medicineOrders.filter(o => o.status === "partial_approval_needed" || o.status === "payment_requested").length}
+                </span>
+              )}
+            </h2>
+            <button onClick={() => openOrderModal()}
+              className="inline-flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors">
+              <ShoppingCart size={12} /> Order Medicines
+            </button>
+          </div>
+          {medicineOrders.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground bg-white rounded-2xl border border-border">
+              <Package size={28} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No medicine orders yet</p>
+              <p className="text-xs mt-1">Order medicines prescribed by the doctor and get them delivered to you.</p>
+              <button onClick={() => openOrderModal()}
+                className="mt-4 inline-flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-primary/90 transition-colors">
+                <ShoppingCart size={12} /> Order Medicines
+              </button>
+            </div>
+          ) : (
+            medicineOrders.map(order => (
+              <MedOrderCard key={order.id} order={order} qrUrl={qrUrl}
+                onApprove={handleApprovePartial} onPaymentDone={handlePaymentDone} />
+            ))
+          )}
+        </div>
       </div>
 
+      {/* Medicine Order Modal */}
+      <AnimatePresence>
+        {orderModal && (
+          <MedicineOrderModal
+            prefill={orderModal.prefill}
+            appointmentId={orderModal.appointmentId}
+            patientPhone={patient?.phone}
+            onClose={() => setOrderModal(null)}
+            onSuccess={() => {
+              setOrderModal(null);
+              fetchMedicineOrders();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
