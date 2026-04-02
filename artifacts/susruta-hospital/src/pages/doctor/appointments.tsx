@@ -218,6 +218,8 @@ function OnlineDetailPanel({
   const [rxResult, setRxResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [notesResult, setNotesResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [rxOpen, setRxOpen] = useState(true);
+  // refs[i] = [medicineInput, instructionsInput] for row i
+  const rowRefs = useRef<Array<[HTMLInputElement | null, HTMLInputElement | null]>>([]);
 
   useEffect(() => {
     setMedicines(appt.prescription?.medicines?.length ? appt.prescription.medicines : [{ medicine: "", instructions: "" }]);
@@ -226,11 +228,37 @@ function OnlineDetailPanel({
     setNotesResult(null);
   }, [appt.id]);
 
-  function addRow() { setMedicines(m => [...m, { medicine: "", instructions: "" }]); }
+  function addRow() {
+    setMedicines(m => [...m, { medicine: "", instructions: "" }]);
+  }
+  function addRowAndFocus() {
+    setMedicines(m => {
+      const next = [...m, { medicine: "", instructions: "" }];
+      const nextIdx = next.length - 1;
+      setTimeout(() => rowRefs.current[nextIdx]?.[0]?.focus(), 0);
+      return next;
+    });
+  }
   function removeRow(i: number) { setMedicines(m => m.filter((_, idx) => idx !== i)); }
   function updateRow(i: number, k: keyof MedicineRow) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
       setMedicines(m => m.map((row, idx) => idx === i ? { ...row, [k]: e.target.value } : row));
+  }
+  function onMedicineKey(i: number) {
+    return (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") { e.preventDefault(); rowRefs.current[i]?.[1]?.focus(); }
+    };
+  }
+  function onInstructionsKey(i: number) {
+    return (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") { e.preventDefault(); addRowAndFocus(); }
+    };
+  }
+  function setRowRef(i: number, col: 0 | 1) {
+    return (el: HTMLInputElement | null) => {
+      if (!rowRefs.current[i]) rowRefs.current[i] = [null, null];
+      rowRefs.current[i][col] = el;
+    };
   }
 
   async function savePrescription() {
@@ -356,10 +384,22 @@ function OnlineDetailPanel({
             <div className="p-4 space-y-3">
               {medicines.map((row, i) => (
                 <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
-                  <input value={row.medicine} onChange={updateRow(i, "medicine")}
-                    placeholder={`Medicine ${i + 1}`} className={inputCls} />
-                  <input value={row.instructions} onChange={updateRow(i, "instructions")}
-                    placeholder="Dosage & instructions" className={inputCls} />
+                  <input
+                    ref={setRowRef(i, 0)}
+                    value={row.medicine}
+                    onChange={updateRow(i, "medicine")}
+                    onKeyDown={onMedicineKey(i)}
+                    placeholder={`Medicine ${i + 1}`}
+                    className={inputCls}
+                  />
+                  <input
+                    ref={setRowRef(i, 1)}
+                    value={row.instructions}
+                    onChange={updateRow(i, "instructions")}
+                    onKeyDown={onInstructionsKey(i)}
+                    placeholder="Dosage & instructions"
+                    className={inputCls}
+                  />
                   <button onClick={() => removeRow(i)} disabled={medicines.length === 1}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 mt-0.5">
                     <Trash2 size={14} />
