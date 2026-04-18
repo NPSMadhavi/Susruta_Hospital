@@ -301,6 +301,33 @@ router.put("/doctor/:id/prescription", requireDoctor, async (req, res) => {
   await upsertPrescriptionPhoto(id, parsed.data.photoObjectPath, parsed.data.notes, res);
 });
 
+// ── PATCH /api/online-appointments/doctor/:id/notes — save notes only ─
+router.patch("/doctor/:id/notes", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { notes } = req.body;
+  if (typeof notes !== "string") { res.status(400).json({ error: "notes must be a string" }); return; }
+
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  const [existing] = await db.select().from(prescriptionsTable).where(eq(prescriptionsTable.onlineAppointmentId, id));
+
+  if (existing) {
+    const [updated] = await db
+      .update(prescriptionsTable)
+      .set({ notes, updatedAt: new Date() })
+      .where(eq(prescriptionsTable.onlineAppointmentId, id))
+      .returning();
+    res.json({ photoObjectPath: updated.photoObjectPath, notes: updated.notes, updatedAt: updated.updatedAt.toISOString() });
+  } else {
+    const [created] = await db
+      .insert(prescriptionsTable)
+      .values({ onlineAppointmentId: id, photoObjectPath: null, notes })
+      .returning();
+    res.status(201).json({ photoObjectPath: created.photoObjectPath, notes: created.notes, updatedAt: created.updatedAt.toISOString() });
+  }
+});
+
 // ── DELETE /api/online-appointments/:id — Patient cancels ─────
 router.delete("/:id", requirePatient, async (req: any, res) => {
   const patient = req.patient;
