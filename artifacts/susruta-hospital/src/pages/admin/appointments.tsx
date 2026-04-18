@@ -515,7 +515,7 @@ export default function AdminAppointments() {
   useEffect(() => {
     if (mainTab !== "online") return;
     loadOnline();
-    onlineIntervalRef.current = setInterval(() => loadOnline(true), 20_000);
+    onlineIntervalRef.current = setInterval(() => loadOnline(true), 5_000);
     return () => { if (onlineIntervalRef.current) clearInterval(onlineIntervalRef.current); };
   }, [mainTab, loadOnline]);
 

@@ -89,7 +89,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
 // ── Join Popup ──────────────────────────────────────────────────
 function JoinPopup({ apptId, meetingLink, onClose }: { apptId: number; meetingLink: string; onClose: () => void }) {
   useEffect(() => {
-    const interval = setInterval(() => playChime(), 30_000);
+    const interval = setInterval(() => playChime(), 15_000);
     return () => {
       clearInterval(interval);
       // Stop any in-progress speech when popup is dismissed
