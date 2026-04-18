@@ -6,8 +6,20 @@ uri = "file://attached_assets/patient_portal_mockup.png"
 type = "image"
 title = "patient portal redesign mockup"
 
+[[generated]]
+id = "LycLBaHBnGJnmvqHSqdJW"
+uri = "file://attached_assets/patient_portal_desktop_mockup.png"
+type = "image"
+title = "patient portal desktop mockup"
+
 [[outputs]]
 id = "C85z4cwBSrvIYgQBvg2SU"
 uri = "file://attached_assets/patient_portal_mockup.png"
 type = "image"
 title = "Patient Portal — Proposed Redesign"
+
+[[outputs]]
+id = "xL0MY3VqdymgZRg-XSQ7o"
+uri = "file://attached_assets/patient_portal_desktop_mockup.png"
+type = "image"
+title = "Patient Portal — Desktop Design Concept"
