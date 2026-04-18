@@ -391,7 +391,14 @@ export default function PatientDashboard() {
   }
 
   function handlePatientJoined(apptId: number) {
+    // Stop all audio immediately
     stopChiming();
+    // Optimistically mark as joined locally — kills hasLiveAppt, hides all join buttons,
+    // and prevents any future chime from re-triggering for this session
+    setOnlineAppts(prev => prev.map(a =>
+      a.id === apptId ? { ...a, joinEnabled: false, patientJoinedAt: new Date().toISOString() } : a
+    ));
+    setJoinPopup(null);
     fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
       method: "POST", credentials: "include",
     }).catch(() => {});
