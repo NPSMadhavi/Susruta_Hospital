@@ -17,6 +17,7 @@ import AdminTestimonials from "./pages/admin/testimonials";
 import AdminSettings from "./pages/admin/settings";
 import AdminSubscribers from "./pages/admin/subscribers";
 import AdminOnlineSlots from "./pages/admin/online-slots";
+import AdminOnlineAppointments from "./pages/admin/online-appointments";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
@@ -28,9 +29,9 @@ import OnlineBook from "./pages/portal/online-book";
 import DoctorLogin from "./pages/doctor/login";
 import DoctorAppointments from "./pages/doctor/appointments";
 
-// Pharmacy Portal Pages
-import PharmacyLogin from "./pages/pharmacy/login";
-import PharmacyOrders from "./pages/pharmacy/orders";
+// Pharmacy Portal Pages (hidden — enable from code when needed)
+// import PharmacyLogin from "./pages/pharmacy/login";
+// import PharmacyOrders from "./pages/pharmacy/orders";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,9 +59,9 @@ function Router() {
       <Route path="/doctor" component={DoctorLogin} />
       <Route path="/doctor/appointments" component={DoctorAppointments} />
 
-      {/* Pharmacy Portal Routes */}
-      <Route path="/pharmacy" component={PharmacyLogin} />
-      <Route path="/pharmacy/orders" component={PharmacyOrders} />
+      {/* Pharmacy Portal Routes — hidden, enable from code when needed */}
+      {/* <Route path="/pharmacy" component={PharmacyLogin} /> */}
+      {/* <Route path="/pharmacy/orders" component={PharmacyOrders} /> */}
 
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/admin/testimonials" component={AdminTestimonials} />
       <Route path="/admin/subscribers" component={AdminSubscribers} />
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />
+      <Route path="/admin/online-appointments" component={AdminOnlineAppointments} />
       <Route path="/admin/settings" component={AdminSettings} />
 
       <Route component={NotFound} />

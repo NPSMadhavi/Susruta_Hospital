@@ -2,6 +2,7 @@ import { pgTable, serial, text, timestamp, varchar, boolean } from "drizzle-orm/
 
 export const patientsTable = pgTable("patients", {
   id: serial("id").primaryKey(),
+  patientCode: varchar("patient_code", { length: 4 }).unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   googleId: varchar("google_id", { length: 255 }).unique(),
   name: varchar("name", { length: 255 }).notNull(),

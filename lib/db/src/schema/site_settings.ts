@@ -26,6 +26,11 @@ export const siteSettingsTable = pgTable("site_settings", {
   pharmacyPasswordHash: varchar("pharmacy_password_hash", { length: 255 }),
   // PhonePe QR code (object storage path)
   phonepeQrObjectPath: varchar("phonepe_qr_object_path", { length: 500 }),
+  // Online consultation meeting link (global, all patients share)
+  meetingLink: text("meeting_link"),
+  // Patient ID counter: prefix letter + 3-digit number (e.g. A001)
+  patientIdPrefix: varchar("patient_id_prefix", { length: 1 }).notNull().default("A"),
+  patientIdCurrentNumber: integer("patient_id_current_number").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

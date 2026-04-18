@@ -1,6 +1,6 @@
-import { Router } from "express";
-import { db, patientsTable, appointmentsTable, loginTokensTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { Router, Response } from "express";
+import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable } from "@workspace/db";
+import { eq, and, desc, ne } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
   hashPassword, verifyPassword,
@@ -12,6 +12,57 @@ import { notifyNewAppointment } from "./appointments";
 
 const router = Router();
 
+// ── Patient SSE clients (keyed by patientId) ──────────────────
+type PatientSseClient = { patientId: number; res: Response };
+export const patientSseClients = new Set<PatientSseClient>();
+
+export function notifyPatientJoinEnabled(patientId: number, apptId: number, meetingLink: string) {
+  const payload = `event: join_enabled\ndata: ${JSON.stringify({ apptId, meetingLink })}\n\n`;
+  for (const client of patientSseClients) {
+    if (client.patientId === patientId) {
+      try { client.res.write(payload); } catch { patientSseClients.delete(client); }
+    }
+  }
+}
+
+export function notifyPatientSessionEnded(patientId: number, apptId: number, qrObjectPath: string | null) {
+  const payload = `event: session_ended\ndata: ${JSON.stringify({ apptId, qrObjectPath })}\n\n`;
+  for (const client of patientSseClients) {
+    if (client.patientId === patientId) {
+      try { client.res.write(payload); } catch { patientSseClients.delete(client); }
+    }
+  }
+}
+
+// ── Patient ID counter helper ─────────────────────────────────
+async function assignPatientCode(): Promise<string | null> {
+  try {
+    const [settings] = await db.select().from(siteSettingsTable);
+    if (!settings) return null;
+
+    let prefix = settings.patientIdPrefix || "A";
+    let num = (settings.patientIdCurrentNumber || 0) + 1;
+
+    // Overflow: if num > 999, increment prefix letter and reset
+    if (num > 999) {
+      const nextChar = String.fromCharCode(prefix.charCodeAt(0) + 1);
+      if (nextChar > "Z") return null; // Exhausted all codes
+      prefix = nextChar;
+      num = 1;
+    }
+
+    const code = `${prefix}${num.toString().padStart(3, "0")}`;
+
+    await db.update(siteSettingsTable)
+      .set({ patientIdPrefix: prefix, patientIdCurrentNumber: num, updatedAt: new Date() })
+      .where(eq(siteSettingsTable.id, settings.id));
+
+    return code;
+  } catch {
+    return null;
+  }
+}
+
 function cookieOpts() {
   return {
     httpOnly: true,
@@ -22,7 +73,16 @@ function cookieOpts() {
 }
 
 function serializePatient(p: any) {
-  return { id: p.id, name: p.name, email: p.email, phone: p.phone, avatarUrl: p.avatarUrl, emailVerified: p.emailVerified, createdAt: p.createdAt };
+  return {
+    id: p.id,
+    patientCode: p.patientCode ?? null,
+    name: p.name,
+    email: p.email,
+    phone: p.phone,
+    avatarUrl: p.avatarUrl,
+    emailVerified: p.emailVerified,
+    createdAt: p.createdAt,
+  };
 }
 
 function getFrontendUrl(req: any) {
@@ -54,8 +114,11 @@ router.post("/auth/register", async (req, res) => {
   }
 
   const passwordHash = await hashPassword(password);
+  const patientCode = await assignPatientCode();
+
   const [patient] = await db.insert(patientsTable).values({
     name, email, phone: phone ?? null, passwordHash, emailVerified: false,
+    patientCode: patientCode ?? undefined,
   }).returning();
 
   // Send verification email in the background (non-blocking)
@@ -137,6 +200,28 @@ router.post("/logout", async (req, res) => {
 // ── Me ─────────────────────────────────────────────────────────
 router.get("/me", requirePatient, (req, res) => {
   res.json(serializePatient((req as any).patient));
+});
+
+// ── SSE — real-time join notifications ────────────────────────
+router.get("/sse", requirePatient, (req: any, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write(": connected\n\n");
+
+  const client: PatientSseClient = { patientId: req.patient.id, res };
+  patientSseClients.add(client);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); }
+  }, 15000);
+
+  req.on("close", () => {
+    patientSseClients.delete(client);
+    clearInterval(heartbeat);
+  });
 });
 
 // ── My Appointments ───────────────────────────────────────────

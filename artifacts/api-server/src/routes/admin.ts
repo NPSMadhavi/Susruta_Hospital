@@ -101,6 +101,14 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     doctorPortalConfigured: !!s.doctorPasswordHash,
     pharmacyPortalConfigured: !!s.pharmacyPasswordHash,
     phonepeQrObjectPath: s.phonepeQrObjectPath ?? null,
+    // Online consultation settings
+    meetingLink: s.meetingLink ?? null,
+    patientIdPrefix: s.patientIdPrefix,
+    patientIdCurrentNumber: s.patientIdCurrentNumber,
+    // Computed: current patient ID display (last assigned)
+    currentPatientId: s.patientIdCurrentNumber > 0
+      ? `${s.patientIdPrefix}${s.patientIdCurrentNumber.toString().padStart(3, "0")}`
+      : null,
   };
 }
 
@@ -129,6 +137,20 @@ router.patch("/settings", requireAdmin, async (req, res) => {
   if (req.body.phonepeQrObjectPath !== undefined) {
     updates.phonepeQrObjectPath = req.body.phonepeQrObjectPath;
   }
+  // Meeting link
+  if (req.body.meetingLink !== undefined) {
+    updates.meetingLink = req.body.meetingLink || null;
+  }
+  // Patient ID counter — admin can manually set prefix and current number
+  if (req.body.patientIdPrefix !== undefined) {
+    const prefix = String(req.body.patientIdPrefix).toUpperCase().trim();
+    if (/^[A-Z]$/.test(prefix)) updates.patientIdPrefix = prefix;
+  }
+  if (req.body.patientIdCurrentNumber !== undefined) {
+    const num = parseInt(req.body.patientIdCurrentNumber);
+    if (!isNaN(num) && num >= 0 && num <= 999) updates.patientIdCurrentNumber = num;
+  }
+
   updates.updatedAt = new Date();
 
   const existing = await getOrCreateSettings();

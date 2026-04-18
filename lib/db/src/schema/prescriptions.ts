@@ -1,7 +1,5 @@
-import { pgTable, serial, integer, text, json, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
 import { onlineAppointmentsTable } from "./online_appointments";
-
-export type MedicineRow = { medicine: string; instructions: string };
 
 export const prescriptionsTable = pgTable("prescriptions", {
   id: serial("id").primaryKey(),
@@ -9,9 +7,10 @@ export const prescriptionsTable = pgTable("prescriptions", {
     .notNull()
     .unique()
     .references(() => onlineAppointmentsTable.id, { onDelete: "cascade" }),
-  medicines: json("medicines").$type<MedicineRow[]>().notNull().default([]),
-  // Doctor's private notes — NOT shown to patient
-  doctorNotes: text("doctor_notes"),
+  // Photo-based prescription (object storage path)
+  photoObjectPath: text("photo_object_path"),
+  // Optional notes visible to patient
+  notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, json, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, json, varchar, boolean } from "drizzle-orm/pg-core";
 import { onlineSlotsTable } from "./online_slots";
 import { patientsTable } from "./patients";
 
@@ -14,6 +14,9 @@ export const onlineAppointmentsTable = pgTable("online_appointments", {
   meetingLink: text("meeting_link"),
   // pending | confirmed | completed | cancelled
   status: varchar("status", { length: 30 }).notNull().default("pending"),
+  // Join meeting control — admin enables when doctor is ready
+  joinEnabled: boolean("join_enabled").notNull().default(false),
+  joinEnabledAt: timestamp("join_enabled_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

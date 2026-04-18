@@ -30,6 +30,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/testimonials", icon: <MessageSquare size={20}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={20}/>, label: "Subscribers" },
     { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
+    { href: "/admin/online-appointments", icon: <Video size={20}/>, label: "Consultations" },
     { href: "/admin/settings", icon: <Settings size={20}/>, label: "Settings" },
   ];
 

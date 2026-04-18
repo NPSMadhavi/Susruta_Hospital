@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical, Stethoscope, Lock, Pill, Upload, QrCode } from "lucide-react";
+import { Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Globe, Phone, Loader2, FlaskConical, Stethoscope, Lock, Pill, Upload, QrCode, Video, Hash, Link } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -30,6 +30,11 @@ type Settings = {
   doctorPortalConfigured: boolean;
   pharmacyPortalConfigured: boolean;
   phonepeQrObjectPath: string | null;
+  // Online consultation
+  meetingLink: string | null;
+  patientIdPrefix: string;
+  patientIdCurrentNumber: number;
+  currentPatientId: string | null;
 };
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
@@ -549,11 +554,77 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          <div className="pt-1">
-            <a href="/pharmacy" target="_blank" rel="noopener noreferrer"
-              className="text-sm text-primary font-semibold hover:underline flex items-center gap-1.5">
-              <Pill size={13} /> Open Pharmacy Portal →
-            </a>
+        </SectionCard>
+
+        {/* Online Consultation Settings */}
+        <SectionCard title="Online Consultation" icon={Video}>
+          {/* Meeting Link */}
+          <div>
+            <label className={labelCls}><Link size={13} className="inline mr-1" /> Google Meet / Zoom Link</label>
+            <div className="text-xs text-muted-foreground mb-2">
+              All patients share this single link. Update it daily if your meeting link changes.
+            </div>
+            <input
+              type="url"
+              placeholder="https://meet.google.com/xxx-xxxx-xxx"
+              value={(form as any).meetingLink ?? ""}
+              onChange={e => setForm(f => ({ ...f, meetingLink: e.target.value || null }))}
+              className={inputCls}
+            />
+            {(form as any).meetingLink && (
+              <p className="text-xs text-green-700 mt-1.5 flex items-center gap-1.5">
+                <CheckCircle2 size={11} /> Meeting link is active — patients will be redirected here when you enable join
+              </p>
+            )}
+          </div>
+
+          {/* Patient ID Counter */}
+          <div>
+            <label className={labelCls}><Hash size={13} className="inline mr-1" /> Patient ID Counter</label>
+            <div className="text-xs text-muted-foreground mb-3">
+              IDs are auto-assigned on registration (e.g. A001, A002…). Set the prefix and starting number here.
+              When number reaches 999, prefix automatically advances (A→B→C…).
+            </div>
+            {(form as any).currentPatientId && (
+              <div className="mb-3 bg-[#1a3d2b]/5 rounded-xl px-4 py-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Last assigned Patient ID</p>
+                <p className="text-3xl font-extrabold text-[#1a3d2b] tracking-widest">{(form as any).currentPatientId}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Next patient will get the following ID</p>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <div className="flex-none w-24">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Prefix (A–Z)</label>
+                <input
+                  type="text"
+                  maxLength={1}
+                  placeholder="A"
+                  value={(form as any).patientIdPrefix ?? "A"}
+                  onChange={e => {
+                    const v = e.target.value.toUpperCase().replace(/[^A-Z]/, "");
+                    setForm(f => ({ ...f, patientIdPrefix: v }));
+                  }}
+                  className={cn(inputCls, "text-center font-extrabold text-lg uppercase")}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Current Number (0–999)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  placeholder="0"
+                  value={(form as any).patientIdCurrentNumber ?? 0}
+                  onChange={e => setForm(f => ({ ...f, patientIdCurrentNumber: parseInt(e.target.value) || 0 }))}
+                  className={cn(inputCls, "font-bold")}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Next patient ID will be: <strong className="text-foreground font-extrabold">
+                {(form as any).patientIdPrefix ?? "A"}{(((form as any).patientIdCurrentNumber ?? 0) + 1).toString().padStart(3, "0")}
+              </strong>
+            </p>
           </div>
         </SectionCard>
 
