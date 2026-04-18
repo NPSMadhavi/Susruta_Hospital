@@ -371,13 +371,18 @@ export default function PatientDashboard() {
   const [showBooking, setShowBooking] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shouldChimeRef = useRef(false);
 
   function startChiming() {
-    if (chimeIntervalRef.current) return;
-    chimeIntervalRef.current = setInterval(() => playChime(), 15_000);
+    shouldChimeRef.current = true;
+    if (chimeIntervalRef.current) clearInterval(chimeIntervalRef.current);
+    chimeIntervalRef.current = setInterval(() => {
+      if (shouldChimeRef.current) playChime();
+    }, 15_000);
   }
 
   function stopChiming() {
+    shouldChimeRef.current = false;
     if (chimeIntervalRef.current) {
       clearInterval(chimeIntervalRef.current);
       chimeIntervalRef.current = null;
@@ -568,6 +573,7 @@ export default function PatientDashboard() {
                 <p className="text-emerald-100 text-sm mb-4">Dr. Murali Krishna is waiting for you right now.</p>
                 {joinMeetingLink && (
                   <a href={joinMeetingLink} target="_blank" rel="noopener noreferrer"
+                    onClick={() => { handlePatientJoined(liveAppt.id); setJoinPopup(null); }}
                     className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
                     <Video size={18} /> Join Now →
                   </a>
@@ -621,7 +627,12 @@ export default function PatientDashboard() {
                   appt={nextUpcoming.data}
                   type={nextUpcoming.type}
                   joinMeetingLink={joinMeetingLink}
-                  onJoin={() => {}}
+                  onJoin={() => {
+                    if (nextUpcoming.type === "online") {
+                      handlePatientJoined((nextUpcoming.data as any).id);
+                      setJoinPopup(null);
+                    }
+                  }}
                 />
               </div>
             )}
@@ -634,7 +645,13 @@ export default function PatientDashboard() {
                 </p>
                 <div className="space-y-3">
                   {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
-                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink} onJoin={() => {}} />
+                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
+                      onJoin={() => {
+                        if (item.type === "online") {
+                          handlePatientJoined((item.data as any).id);
+                          setJoinPopup(null);
+                        }
+                      }} />
                   ))}
                 </div>
               </div>
@@ -690,7 +707,13 @@ export default function PatientDashboard() {
                 </p>
                 <div className="space-y-3">
                   {pastAppts.map((item, i) => (
-                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink} onJoin={() => {}} />
+                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
+                      onJoin={() => {
+                        if (item.type === "online") {
+                          handlePatientJoined((item.data as any).id);
+                          setJoinPopup(null);
+                        }
+                      }} />
                   ))}
                 </div>
               </div>
