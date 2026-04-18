@@ -62,6 +62,19 @@ function playChime() {
       osc.start(ctx.currentTime + i * 0.28);
       osc.stop(ctx.currentTime + i * 0.28 + 1.8);
     });
+    // Speak "Please join the call" after the chime finishes (~1.5s)
+    setTimeout(() => {
+      try {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance("Please join the call");
+          utter.rate = 0.85;
+          utter.pitch = 1.05;
+          utter.volume = 1;
+          window.speechSynthesis.speak(utter);
+        }
+      } catch {}
+    }, 1500);
   } catch {}
 }
 

@@ -334,13 +334,15 @@ function MeetingLinkBar({ meetingLink, onSaved }: { meetingLink: string | null; 
 }
 
 // ── Online Appointment Card ──────────────────────────────────────
-function OnlineApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
+function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescriptionUploaded }: {
   appt: OnlineAppt; meetingLink: string | null;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
+  onRenotify: (id: number) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [renotifying, setRenotifying] = useState(false);
   const sc = ONLINE_STATUS_COLORS[appt.status] ?? ONLINE_STATUS_COLORS.confirmed;
   const noLink = !meetingLink && !appt.joinEnabled;
 
@@ -350,10 +352,16 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploade
     setToggling(false);
   }
 
+  async function handleRenotify() {
+    setRenotifying(true);
+    await onRenotify(appt.id);
+    setRenotifying(false);
+  }
+
   return (
     <div className={cn(
       "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
-      appt.joinEnabled ? "border-emerald-400 ring-2 ring-emerald-100" : "border-border"
+      appt.joinEnabled ? "border-amber-400 ring-2 ring-amber-100" : "border-border"
     )}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start gap-3">
@@ -370,7 +378,7 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploade
             <p className="font-bold text-base">{appt.patient.name}</p>
             <div className="flex flex-wrap gap-1.5 mt-1">
               {appt.joinEnabled
-                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">⏳ Not Joined Yet</span>
                 : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
               }
             </div>
@@ -380,22 +388,34 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploade
               {appt.patient.phone && <span>{appt.patient.phone}</span>}
             </div>
           </div>
-          {/* Enable/Disable Join button */}
-          <button
-            onClick={e => { e.stopPropagation(); toggleJoin(); }}
-            disabled={toggling || noLink}
-            title={noLink ? "Set a meeting link above first" : ""}
-            className={cn(
-              "shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
-              appt.joinEnabled
-                ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                : noLink
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-            )}>
-            {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
-            {appt.joinEnabled ? "End" : "Enable Join"}
-          </button>
+          {/* Action buttons */}
+          <div className="flex flex-col gap-2 shrink-0">
+            {appt.joinEnabled && (
+              <button
+                onClick={e => { e.stopPropagation(); handleRenotify(); }}
+                disabled={renotifying}
+                title="Re-send chime + voice alert to patient"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition-all">
+                {renotifying ? <Loader2 size={11} className="animate-spin" /> : <Bell size={11} />}
+                Re-notify
+              </button>
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); toggleJoin(); }}
+              disabled={toggling || noLink}
+              title={noLink ? "Set a meeting link above first" : ""}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
+                appt.joinEnabled
+                  ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                  : noLink
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+              )}>
+              {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+              {appt.joinEnabled ? "End Session" : "Enable Join"}
+            </button>
+          </div>
         </div>
 
         {appt.reason && (
@@ -505,6 +525,15 @@ export default function AdminAppointments() {
       ));
       if (enable) playChime();
     } catch { setOnlineErr("Action failed. Please try again."); }
+  }
+
+  async function renotify(id: number) {
+    try {
+      // Re-fires the SSE event to the patient — chime + voice will replay on their device
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/enable-join`, {
+        method: "POST", credentials: "include",
+      });
+    } catch { setOnlineErr("Re-notify failed. Please try again."); }
   }
 
   // ── Load in-person appointments ──
@@ -726,6 +755,7 @@ export default function AdminAppointments() {
                   <OnlineApptCard
                     key={appt.id} appt={appt} meetingLink={meetingLink}
                     onJoinToggle={toggleJoin}
+                    onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
                   />
                 ))}
@@ -743,6 +773,7 @@ export default function AdminAppointments() {
                   <OnlineApptCard
                     key={appt.id} appt={appt} meetingLink={meetingLink}
                     onJoinToggle={toggleJoin}
+                    onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
                   />
                 ))}
