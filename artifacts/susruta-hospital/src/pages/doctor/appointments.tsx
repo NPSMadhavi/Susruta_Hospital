@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   LogOut, FileText, CheckCircle2, AlertCircle,
   Loader2, User, Calendar, Clock, RefreshCw, Video,
-  Camera, Upload, X, Download, MapPin, Phone, Mail,
-  ImageIcon, ChevronDown, ChevronUp
+  Camera, Upload, X, Download, MapPin, Phone,
+  ImageIcon
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -39,10 +38,7 @@ type OfflineAppt = {
 };
 
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-}
-function fmtDateShort(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -52,6 +48,10 @@ const STATUS_STYLES: Record<string, string> = {
   pending:   "bg-amber-100 text-amber-700 border-amber-200",
   cancelled: "bg-gray-100 text-gray-400 border-gray-200",
 };
+
+function isImage(doc: DocFile) {
+  return doc.contentType.startsWith("image/");
+}
 
 // ── Prescription Upload ─────────────────────────────────────────
 function PrescriptionUpload({ apptId, prescription, onUploaded }: {
@@ -72,8 +72,7 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 
   async function confirmUpload() {
     if (!pendingFile) return;
-    setUploading(true);
-    setErr("");
+    setUploading(true); setErr("");
     try {
       const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
         method: "POST", credentials: "include",
@@ -102,18 +101,20 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 
   return (
     <div className="space-y-3">
-      {/* Existing prescription photo */}
+      {/* Existing photo */}
       {prescription?.photoObjectPath && !preview && (
         <div>
-          <div className="bg-gray-50 rounded-xl border border-border overflow-hidden">
-            <img src={`${BASE}/api/storage${prescription.photoObjectPath}`} alt="Prescription" className="w-full max-h-56 object-contain" />
-          </div>
+          <img
+            src={`${BASE}/api/storage${prescription.photoObjectPath}`}
+            alt="Prescription"
+            className="w-full rounded-xl border border-border object-contain max-h-60 bg-gray-50"
+          />
           <div className="flex items-center justify-between mt-2">
             <p className="text-[11px] text-muted-foreground">
               Uploaded {new Date(prescription.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
             </p>
             <a href={`${BASE}/api/storage${prescription.photoObjectPath}`} download target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-primary font-semibold hover:underline flex items-center gap-1">
+              className="text-[11px] text-[#1a3d2b] font-semibold hover:underline flex items-center gap-1">
               <Download size={10} /> Download
             </a>
           </div>
@@ -122,19 +123,17 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 
       {/* Preview before confirm */}
       {preview && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Preview — confirm before uploading</p>
-          <div className="bg-gray-50 rounded-xl border-2 border-[#1a3d2b]/30 overflow-hidden">
-            <img src={preview} alt="Preview" className="w-full max-h-64 object-contain" />
-          </div>
+          <img src={preview} alt="Preview" className="w-full rounded-xl border-2 border-[#1a3d2b]/30 object-contain max-h-64 bg-gray-50" />
           <div className="flex gap-2">
             <button onClick={confirmUpload} disabled={uploading}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
               {uploading ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><CheckCircle2 size={14} /> Confirm & Upload</>}
             </button>
             <button onClick={() => { setPreview(null); setPendingFile(null); if (fileRef.current) fileRef.current.value = ""; if (cameraRef.current) cameraRef.current.value = ""; }}
               disabled={uploading}
-              className="px-4 py-3 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 disabled:opacity-60 transition-colors">
+              className="px-4 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 disabled:opacity-60 transition-colors">
               <X size={14} />
             </button>
           </div>
@@ -143,14 +142,15 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 
       {err && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 flex items-center gap-1.5"><AlertCircle size={12} />{err}</p>}
 
+      {/* Upload buttons */}
       {!preview && (
         <div className="flex gap-2">
-          <label className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[#1a3d2b]/30 rounded-xl text-sm text-[#1a3d2b] font-semibold cursor-pointer hover:bg-[#1a3d2b]/5 transition-colors">
+          <label className="flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-[#1a3d2b]/30 rounded-xl text-sm text-[#1a3d2b] font-semibold cursor-pointer hover:bg-[#1a3d2b]/5 transition-colors">
             <Camera size={15} /> Take Photo
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </label>
-          <label className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-border rounded-xl text-sm text-muted-foreground font-semibold cursor-pointer hover:bg-muted/30 transition-colors">
+          <label className="flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-border rounded-xl text-sm text-muted-foreground font-semibold cursor-pointer hover:bg-muted/30 transition-colors">
             <Upload size={15} /> {prescription?.photoObjectPath ? "Replace" : "Upload File"}
             <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
@@ -161,128 +161,107 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
   );
 }
 
-// ── Online Appointment Card ─────────────────────────────────────
+// ── Online Appointment Card — 3 Sections, always visible ────────
 function OnlineCard({ appt, onPrescriptionUploaded }: {
   appt: OnlineAppt; onPrescriptionUploaded: (id: number, rx: Prescription) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const sc = STATUS_STYLES[appt.status] ?? STATUS_STYLES.confirmed;
 
   return (
     <div className={cn(
-      "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
+      "bg-white rounded-2xl border overflow-hidden shadow-sm",
       appt.joinEnabled ? "border-emerald-400 ring-2 ring-emerald-100" : "border-border"
     )}>
-      {/* Card header — always visible */}
+
+      {/* ── SECTION 1: Patient info ───────────────────────────── */}
       <div className="px-4 pt-4 pb-3">
-        {/* Top row: patient ID + status badges */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            {/* Big patient ID badge */}
-            <div className={cn(
-              "w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border-2",
-              appt.patient.patientCode
-                ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/20"
-                : appt.joinEnabled ? "bg-emerald-50 border-emerald-200" : "bg-blue-50 border-blue-100"
-            )}>
-              {appt.patient.patientCode ? (
-                <span className="font-black text-[#1a3d2b] text-sm leading-tight font-mono">{appt.patient.patientCode}</span>
-              ) : (
-                <User size={20} className="text-muted-foreground" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-base text-foreground truncate">{appt.patient.name}</p>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-                  Online
-                </span>
-                <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
-                  {appt.status}
-                </span>
-                {appt.joinEnabled && (
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">
-                    🟢 Live
-                  </span>
-                )}
-              </div>
+        <div className="flex items-center gap-3">
+          {/* Patient ID badge */}
+          <div className={cn(
+            "w-16 h-16 rounded-xl flex items-center justify-center shrink-0 border-2",
+            appt.patient.patientCode ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/25" : "bg-blue-50 border-blue-100"
+          )}>
+            {appt.patient.patientCode
+              ? <span className="font-black text-[#1a3d2b] text-base font-mono tracking-tight">{appt.patient.patientCode}</span>
+              : <User size={22} className="text-muted-foreground" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-lg text-foreground leading-tight">{appt.patient.name}</p>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                Online
+              </span>
+              {appt.joinEnabled
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
+                : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
+              }
             </div>
           </div>
-          <button onClick={() => setOpen(v => !v)}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-xl transition-colors shrink-0">
-            {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </button>
         </div>
-
-        {/* Date + contact row */}
         <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar size={11} className="text-[#1a3d2b]" /> {fmtDate(appt.date)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock size={11} className="text-[#1a3d2b]" /> {appt.timeLabel}
-          </span>
-          {appt.patient.phone && (
-            <span className="flex items-center gap-1">
-              <Phone size={11} /> {appt.patient.phone}
-            </span>
-          )}
+          <span className="flex items-center gap-1"><Calendar size={11} className="text-[#1a3d2b]" />{fmtDate(appt.date)}</span>
+          <span className="flex items-center gap-1"><Clock size={11} />{appt.timeLabel}</span>
+          {appt.patient.phone && <span className="flex items-center gap-1"><Phone size={11} />{appt.patient.phone}</span>}
         </div>
-
-        {/* Reason — always shown */}
         {appt.reason && (
           <p className="mt-2.5 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
             <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
           </p>
         )}
+      </div>
 
-        {/* Docs pill row */}
-        {appt.documents.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {appt.documents.map((d, i) => (
+      {/* ── SECTION 2: Patient documents ──────────────────────── */}
+      <div className="border-t border-border bg-gray-50/60 px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
+          <FileText size={11} /> Documents from Patient
+        </p>
+        {appt.documents.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No documents uploaded by patient</p>
+        ) : (
+          <div className="space-y-2">
+            {/* Image previews */}
+            {appt.documents.filter(isImage).length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {appt.documents.filter(isImage).map((d, i) => (
+                  <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
+                    className="block rounded-xl overflow-hidden border border-border hover:ring-2 hover:ring-[#1a3d2b]/30 transition-all">
+                    <img
+                      src={`${BASE}/api/storage${d.objectPath}`}
+                      alt={d.name}
+                      className="w-full h-28 object-cover bg-white"
+                    />
+                    <p className="text-[10px] text-center text-muted-foreground py-1 px-2 truncate bg-white border-t border-border">{d.name}</p>
+                  </a>
+                ))}
+              </div>
+            )}
+            {/* Non-image file pills */}
+            {appt.documents.filter(d => !isImage(d)).map((d, i) => (
               <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] bg-blue-50 border border-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-100 transition-colors">
-                <FileText size={10} /> {d.name}
+                className="flex items-center gap-2 bg-white border border-border rounded-xl px-3 py-2 hover:bg-muted/30 transition-colors">
+                <FileText size={14} className="text-blue-600 shrink-0" />
+                <span className="text-xs font-medium text-foreground flex-1 truncate">{d.name}</span>
+                <Download size={12} className="text-muted-foreground shrink-0" />
               </a>
             ))}
           </div>
         )}
       </div>
 
-      {/* Prescription section — collapsible */}
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-            <div className="border-t border-border px-4 py-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                <ImageIcon size={11} /> Prescription
-              </p>
-              <PrescriptionUpload
-                apptId={appt.id}
-                prescription={appt.prescription}
-                onUploaded={rx => onPrescriptionUploaded(appt.id, rx)}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Expand prescription toggle (always show at bottom) */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          "w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold border-t border-border transition-colors",
-          open
-            ? "bg-muted/20 text-muted-foreground hover:text-foreground"
-            : appt.prescription?.photoObjectPath
-              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              : "bg-muted/10 text-muted-foreground hover:bg-muted/20"
-        )}
-      >
-        <ImageIcon size={11} />
-        {open ? "Hide Prescription" : appt.prescription?.photoObjectPath ? "View / Update Prescription" : "Upload Prescription"}
-        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-      </button>
+      {/* ── SECTION 3: Prescription upload ────────────────────── */}
+      <div className="border-t border-border px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
+          <ImageIcon size={11} /> Prescription
+          {appt.prescription?.photoObjectPath && (
+            <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold">Uploaded</span>
+          )}
+        </p>
+        <PrescriptionUpload
+          apptId={appt.id}
+          prescription={appt.prescription}
+          onUploaded={rx => onPrescriptionUploaded(appt.id, rx)}
+        />
+      </div>
     </div>
   );
 }
@@ -290,49 +269,40 @@ function OnlineCard({ appt, onPrescriptionUploaded }: {
 // ── Physical Appointment Card ───────────────────────────────────
 function OfflineCard({ appt }: { appt: OfflineAppt }) {
   const sc = STATUS_STYLES[appt.status] ?? STATUS_STYLES.pending;
-
   return (
     <div className="bg-white rounded-2xl border border-border shadow-sm px-4 py-4">
-      <div className="flex items-start gap-3">
-        {/* Patient ID badge */}
+      <div className="flex items-center gap-3">
         <div className={cn(
-          "w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border-2",
-          appt.patient.patientCode ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/20" : "bg-gray-50 border-gray-200"
+          "w-16 h-16 rounded-xl flex items-center justify-center shrink-0 border-2",
+          appt.patient.patientCode ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/25" : "bg-gray-50 border-gray-200"
         )}>
-          {appt.patient.patientCode ? (
-            <span className="font-black text-[#1a3d2b] text-sm font-mono">{appt.patient.patientCode}</span>
-          ) : (
-            <User size={20} className="text-muted-foreground" />
-          )}
+          {appt.patient.patientCode
+            ? <span className="font-black text-[#1a3d2b] text-base font-mono tracking-tight">{appt.patient.patientCode}</span>
+            : <User size={22} className="text-muted-foreground" />}
         </div>
-
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-base text-foreground">{appt.patient.name}</p>
+          <p className="font-bold text-lg text-foreground">{appt.patient.name}</p>
           <div className="flex flex-wrap gap-1.5 mt-1">
-            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100">
-              In-Person
-            </span>
-            <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>
-              {appt.status}
-            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100">In-Person</span>
+            <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
           </div>
-          <div className="flex flex-wrap gap-3 mt-2.5 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Calendar size={11} className="text-green-600" />{fmtDate(appt.date)}</span>
-            <span className="flex items-center gap-1"><Clock size={11} />{appt.timeLabel}</span>
-            {appt.patient.phone && <span className="flex items-center gap-1"><Phone size={11} />{appt.patient.phone}</span>}
-          </div>
-          {appt.reason && (
-            <p className="mt-2.5 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
-              <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
-            </p>
-          )}
         </div>
       </div>
+      <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1"><Calendar size={11} className="text-green-600" />{fmtDate(appt.date)}</span>
+        <span className="flex items-center gap-1"><Clock size={11} />{appt.timeLabel}</span>
+        {appt.patient.phone && <span className="flex items-center gap-1"><Phone size={11} />{appt.patient.phone}</span>}
+      </div>
+      {appt.reason && (
+        <p className="mt-2.5 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
+          <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
+        </p>
+      )}
     </div>
   );
 }
 
-// ── Main ──────────────────────────────────────────────────────
+// ── Main ────────────────────────────────────────────────────────
 export default function DoctorAppointments() {
   const [, nav] = useLocation();
   const [online, setOnline] = useState<OnlineAppt[]>([]);
@@ -351,7 +321,7 @@ export default function DoctorAppointments() {
       setOffline(data.offline ?? []);
       setLastRefresh(new Date());
       setErr("");
-    } catch (e: any) {
+    } catch {
       if (!silent) setErr("Failed to load appointments");
     } finally {
       if (!silent) setLoading(false);
@@ -360,7 +330,6 @@ export default function DoctorAppointments() {
 
   useEffect(() => {
     load();
-    // Auto-refresh every 20 seconds
     intervalRef.current = setInterval(() => load(true), 20_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [load]);
@@ -394,7 +363,7 @@ export default function DoctorAppointments() {
           </div>
           <div className="flex items-center gap-1.5">
             <p className="text-white/40 text-[10px] hidden sm:block">
-              Updated {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
             </p>
             <button onClick={() => load()} className="p-2 text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors" title="Refresh">
               <RefreshCw size={15} />
@@ -410,14 +379,10 @@ export default function DoctorAppointments() {
         {/* Live session alert */}
         {liveAppts.length > 0 && (
           <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <Video size={18} className="animate-pulse" />
-            </div>
+            <Video size={20} className="animate-pulse shrink-0" />
             <div>
               <p className="font-bold text-sm">Session Active</p>
-              <p className="text-white/75 text-xs">
-                {liveAppts.map(a => a.patient.name).join(", ")} — consultation in progress
-              </p>
+              <p className="text-white/75 text-xs">{liveAppts.map(a => a.patient.name).join(", ")} — consultation in progress</p>
             </div>
           </div>
         )}
@@ -431,8 +396,8 @@ export default function DoctorAppointments() {
         {/* Tab bar */}
         <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-border shadow-sm">
           {[
-            { key: "online", label: "Online Consultations", count: online.length, icon: <Video size={14} /> },
-            { key: "offline", label: "In-Person Visits", count: offline.length, icon: <MapPin size={14} /> },
+            { key: "online", label: "Online Consultations", icon: <Video size={14} />, count: online.length },
+            { key: "offline", label: "In-Person Visits", icon: <MapPin size={14} />, count: offline.length },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key as any)}
               className={cn(
@@ -440,8 +405,7 @@ export default function DoctorAppointments() {
                 tab === t.key ? "bg-[#1a3d2b] text-white shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               )}>
               {t.icon}
-              <span className="hidden sm:inline">{t.label}</span>
-              <span className="sm:hidden">{t.key === "online" ? "Online" : "In-Person"}</span>
+              <span>{t.key === "online" ? "Online" : "In-Person"}</span>
               <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-bold",
                 tab === t.key ? "bg-white/20 text-white" : "bg-muted text-muted-foreground")}>
                 {t.count}
@@ -465,13 +429,9 @@ export default function DoctorAppointments() {
               <p className="font-semibold text-muted-foreground">No online consultations yet</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {sortedOnline.map(appt => (
-                <OnlineCard
-                  key={appt.id}
-                  appt={appt}
-                  onPrescriptionUploaded={handlePrescriptionUploaded}
-                />
+                <OnlineCard key={appt.id} appt={appt} onPrescriptionUploaded={handlePrescriptionUploaded} />
               ))}
             </div>
           )
