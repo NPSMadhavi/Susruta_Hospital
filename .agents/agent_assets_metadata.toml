@@ -1,0 +1,13 @@
+uploads = []
+
+[[generated]]
+id = "Rm6rLrNrGBTMs1bCRrj6g"
+uri = "file://attached_assets/patient_portal_mockup.png"
+type = "image"
+title = "patient portal redesign mockup"
+
+[[outputs]]
+id = "C85z4cwBSrvIYgQBvg2SU"
+uri = "file://attached_assets/patient_portal_mockup.png"
+type = "image"
+title = "Patient Portal — Proposed Redesign"
