@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
+import { BookingWizard } from "./BookingWizard";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -349,6 +350,7 @@ export default function PatientDashboard() {
   const [joinPopup, setJoinPopup] = useState<{ apptId: number; meetingLink: string } | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [joinMeetingLink, setJoinMeetingLink] = useState<string | null>(null);
+  const [showBooking, setShowBooking] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
 
   async function patientFetch(path: string) {
@@ -435,6 +437,13 @@ export default function PatientDashboard() {
       <AnimatePresence>
         {joinPopup && <JoinPopup meetingLink={joinPopup.meetingLink} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
+        {showBooking && (
+          <BookingWizard
+            patient={patient}
+            onClose={() => setShowBooking(false)}
+            onSuccess={() => loadData()}
+          />
+        )}
       </AnimatePresence>
 
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -501,7 +510,7 @@ export default function PatientDashboard() {
                 </div>
               )}
 
-              <button onClick={() => nav("/portal/book")}
+              <button onClick={() => setShowBooking(true)}
                 className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-sm">
                 <Calendar size={18} /> Book an Appointment
               </button>
@@ -598,7 +607,7 @@ export default function PatientDashboard() {
                 </div>
                 <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
                 <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
-                <button onClick={() => nav("/portal/book")}
+                <button onClick={() => setShowBooking(true)}
                   className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
                   <Calendar size={16} /> Book an Appointment
                 </button>
