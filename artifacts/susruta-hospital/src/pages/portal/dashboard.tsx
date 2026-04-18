@@ -3,14 +3,16 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar, Clock, LogOut, Video, FileText, User,
-  RefreshCw, AlertCircle, CheckCircle2, XCircle,
-  Download, Heart, QrCode, ChevronDown, ChevronUp, X
+  RefreshCw, CheckCircle2, XCircle, MapPin,
+  Download, Heart, QrCode, ChevronDown, ChevronUp, X, Plus,
+  Stethoscope, AlertCircle, Phone
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// ── Types ───────────────────────────────────────────────────────
 type DocFile = { name: string; objectPath: string; contentType: string; size: number };
 type OnlineAppt = {
   id: number; status: string; reason?: string; createdAt: string;
@@ -19,9 +21,15 @@ type OnlineAppt = {
   slot: { id: number; date: string; startTime: string; endTime: string };
   prescription: { photoObjectPath: string | null; notes: string | null; updatedAt: string } | null;
 };
+type PhysicalAppt = {
+  id: number; date: string; timeSlot: string; status: string;
+  reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
+};
 type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string };
 
+// ── Helpers ─────────────────────────────────────────────────────
 function fmtTime(t: string) {
+  if (!t) return t;
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
@@ -51,35 +59,38 @@ function playChime() {
   } catch {}
 }
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  pending:   { label: "Awaiting Approval", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  confirmed: { label: "Confirmed",         color: "bg-blue-100 text-blue-700 border-blue-200" },
-  completed: { label: "Completed",         color: "bg-green-100 text-green-700 border-green-200" },
-  cancelled: { label: "Cancelled",         color: "bg-gray-100 text-gray-500 border-gray-200" },
+// Status configs
+const ONLINE_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Awaiting Approval", cls: "bg-amber-100 text-amber-700 border-amber-200" },
+  confirmed: { label: "Confirmed",         cls: "bg-blue-100 text-blue-700 border-blue-200" },
+  completed: { label: "Completed",         cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  cancelled: { label: "Cancelled",         cls: "bg-gray-100 text-gray-500 border-gray-200" },
+};
+const PHYSICAL_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Pending",   cls: "bg-amber-100 text-amber-700 border-amber-200" },
+  confirmed: { label: "Confirmed", cls: "bg-blue-100 text-blue-700 border-blue-200" },
+  completed: { label: "Completed", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  cancelled: { label: "Cancelled", cls: "bg-gray-100 text-gray-500 border-gray-200" },
+  rescheduled: { label: "Rescheduled", cls: "bg-purple-100 text-purple-700 border-purple-200" },
 };
 
-// ── Join Meeting Popup ─────────────────────────────────────────
+// ── Join Meeting Popup ──────────────────────────────────────────
 function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center relative"
-      >
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-5 animate-pulse">
-          <Video size={36} className="text-green-600" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center">
+        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
+          <div className="w-14 h-14 rounded-full bg-emerald-200 flex items-center justify-center animate-pulse">
+            <Video size={28} className="text-emerald-700" />
+          </div>
         </div>
-        <h2 className="text-2xl font-extrabold text-[#1a3d2b] mb-2">Doctor is Ready!</h2>
+        <h2 className="text-2xl font-extrabold text-foreground mb-2">Doctor is Ready!</h2>
         <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
-          Dr. P. Murali Krishna is waiting for you. Please join the consultation now — your session has begun.
+          Dr. P. Murali Krishna is waiting for you. Your consultation session has begun.
         </p>
-        <a
-          href={meetingLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onClose}
-          className="block w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg mb-3"
-        >
+        <a href={meetingLink} target="_blank" rel="noopener noreferrer" onClick={onClose}
+          className="block w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg mb-3">
           Join Consultation Now →
         </a>
         <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -90,48 +101,40 @@ function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () 
   );
 }
 
-// ── Donation Popup ─────────────────────────────────────────────
+// ── Donation Popup ──────────────────────────────────────────────
 function DonationPopup({ qrObjectPath, onClose }: { qrObjectPath: string | null; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative"
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
-          <X size={18} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors">
+          <X size={16} />
         </button>
         <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
           <Heart size={30} className="text-red-500" />
         </div>
-        <h2 className="text-xl font-extrabold text-[#1a3d2b] mb-3">Thank You for Consulting with Us</h2>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-          Dr. Murali Krishna offers these online consultations <strong className="text-foreground">completely free of charge</strong> — his way of serving the community of Tirupati and beyond.
+        <h2 className="text-xl font-extrabold text-foreground mb-3">Thank You for Consulting with Us</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+          Dr. Murali Krishna offers online consultations <strong className="text-foreground">completely free of charge</strong> — his way of serving the community of Tirupati and beyond.
         </p>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          Your kind donation, no matter how small, helps him continue treating underprivileged patients, running free health camps, and supporting countless good causes in Tirupati. 🙏
+        <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+          Your kind donation helps him continue treating underprivileged patients, running free health camps, and supporting countless causes in Tirupati. 🙏
         </p>
         {qrObjectPath ? (
           <>
-            <div className="bg-gray-50 rounded-2xl p-4 border border-border mb-4 inline-block mx-auto">
-              <img
-                src={`${BASE}/api/storage${qrObjectPath}`}
-                alt="PhonePe UPI QR"
-                className="w-40 h-40 object-contain mx-auto"
-              />
+            <div className="bg-gray-50 rounded-2xl p-4 border border-border mb-3 inline-block">
+              <img src={`${BASE}/api/storage${qrObjectPath}`} alt="PhonePe UPI QR" className="w-44 h-44 object-contain mx-auto" />
             </div>
             <p className="text-xs text-muted-foreground mb-5">Scan with PhonePe, Google Pay, or any UPI app</p>
           </>
         ) : (
           <div className="bg-gray-50 rounded-2xl p-6 border border-border mb-5">
             <QrCode size={48} className="text-gray-300 mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">Payment QR will be set up soon</p>
+            <p className="text-xs text-muted-foreground">Payment QR will be available soon</p>
           </div>
         )}
-        <button
-          onClick={onClose}
-          className="w-full py-3 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm transition-colors hover:bg-[#1a3d2b]/90"
-        >
+        <button onClick={onClose}
+          className="w-full py-3 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm hover:bg-[#1a3d2b]/90 transition-colors">
           Close
         </button>
       </motion.div>
@@ -139,87 +142,95 @@ function DonationPopup({ qrObjectPath, onClose }: { qrObjectPath: string | null;
   );
 }
 
-// ── Appointment Card ───────────────────────────────────────────
-function ApptCard({ appt, joinMeetingLink, onJoinClick }: {
-  appt: OnlineAppt;
-  joinMeetingLink: string | null;
-  onJoinClick: () => void;
+// ── Online Appointment Card ─────────────────────────────────────
+function OnlineApptCard({ appt, joinMeetingLink, onJoinClick }: {
+  appt: OnlineAppt; joinMeetingLink: string | null; onJoinClick: () => void;
 }) {
   const [open, setOpen] = useState(appt.joinEnabled);
-  const sm = STATUS_META[appt.status] ?? STATUS_META.confirmed;
+  const sm = ONLINE_STATUS[appt.status] ?? ONLINE_STATUS.confirmed;
   const canJoin = appt.joinEnabled && !!joinMeetingLink;
 
   return (
     <div className={cn(
-      "bg-white rounded-2xl border shadow-sm overflow-hidden transition-all",
-      canJoin ? "border-green-400 ring-2 ring-green-200" : "border-border"
+      "bg-white rounded-2xl border overflow-hidden transition-all shadow-sm",
+      canJoin ? "border-emerald-400 ring-2 ring-emerald-200" : "border-border"
     )}>
-      <button className="w-full flex items-center gap-4 p-4 text-left hover:bg-muted/20 transition-colors"
+      <button className="w-full flex items-center gap-3.5 px-4 py-4 text-left hover:bg-muted/20 transition-colors"
         onClick={() => setOpen(v => !v)}>
         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-          canJoin ? "bg-green-100" : "bg-blue-50")}>
-          <Video size={18} className={canJoin ? "text-green-600" : "text-blue-600"} />
+          canJoin ? "bg-emerald-100" : "bg-blue-50")}>
+          <Video size={18} className={canJoin ? "text-emerald-600" : "text-blue-500"} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold text-sm">{fmtDateShort(appt.slot.date)}</p>
-            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${sm.color}`}>
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+              Online
+            </span>
+            <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sm.cls)}>
               {sm.label}
             </span>
             {canJoin && (
-              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-600 text-white animate-pulse">
-                🟢 LIVE – Join Now
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">
+                🟢 Live — Join Now
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            <Clock size={10} className="inline mr-1" />
+          <p className="font-semibold text-sm text-foreground">{fmtDate(appt.slot.date)}</p>
+          <p className="text-xs text-muted-foreground">
             {fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}
             {appt.documents.length > 0 && ` · ${appt.documents.length} doc(s)`}
           </p>
         </div>
-        {open ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
+        {open ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
       </button>
 
       <AnimatePresence>
         {open && (
           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
             className="overflow-hidden">
-            <div className="border-t border-border px-5 pb-5 pt-4 space-y-4">
-              {/* Join button */}
+            <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
               {canJoin ? (
                 <a href={joinMeetingLink!} target="_blank" rel="noopener noreferrer" onClick={onJoinClick}
-                  className="flex items-center justify-center gap-2 w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-extrabold rounded-2xl text-sm transition-colors shadow-lg">
-                  <Video size={16} /> Join Consultation Now →
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm">
+                  <Video size={15} /> Join Consultation Now →
                 </a>
-              ) : appt.status === "confirmed" || appt.status === "pending" ? (
-                <div className="flex items-center gap-2 w-full py-3 bg-gray-100 text-gray-400 font-bold rounded-2xl text-sm justify-center border border-gray-200 cursor-not-allowed">
-                  <Video size={15} />
-                  {appt.status === "pending" ? "Awaiting admin approval" : "Waiting for doctor — we'll notify you when ready"}
+              ) : (appt.status === "confirmed" || appt.status === "pending") ? (
+                <div className="flex items-center gap-2 w-full py-2.5 bg-gray-50 text-gray-400 font-medium rounded-xl text-xs justify-center border border-gray-100">
+                  <Clock size={13} />
+                  {appt.status === "pending" ? "Awaiting admin approval" : "Keep this page open — you'll be notified when the doctor is ready"}
                 </div>
               ) : null}
 
-              {/* Reason */}
               {appt.reason && (
-                <p className="text-sm text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">
-                  <span className="font-medium text-foreground">Reason:</span> {appt.reason}
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2.5">
+                  <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
                 </p>
               )}
 
-              {/* Documents */}
               {appt.documents.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                    <FileText size={11} /> Uploaded Documents
-                  </p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Uploaded Documents</p>
+                  <div className="flex flex-wrap gap-1.5">
                     {appt.documents.map((d, i) => (
                       <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
-                        className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5 font-medium hover:bg-blue-100 flex items-center gap-1.5">
-                        <FileText size={11} /> {d.name}
+                        className="text-xs bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-blue-100 flex items-center gap-1.5 transition-colors">
+                        <FileText size={10} /> {d.name}
                       </a>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {appt.prescription?.photoObjectPath && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-emerald-700">
+                    <FileText size={14} />
+                    <span className="text-xs font-semibold">Prescription available</span>
+                  </div>
+                  <a href={`${BASE}/api/storage${appt.prescription.photoObjectPath}`} target="_blank" rel="noopener noreferrer" download
+                    className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-emerald-700 flex items-center gap-1 transition-colors">
+                    <Download size={11} /> View
+                  </a>
                 </div>
               )}
             </div>
@@ -230,19 +241,76 @@ function ApptCard({ appt, joinMeetingLink, onJoinClick }: {
   );
 }
 
-// ── Main Dashboard ─────────────────────────────────────────────
+// ── Physical Appointment Card ───────────────────────────────────
+function PhysicalApptCard({ appt }: { appt: PhysicalAppt }) {
+  const [open, setOpen] = useState(false);
+  const sm = PHYSICAL_STATUS[appt.status] ?? PHYSICAL_STATUS.pending;
+
+  return (
+    <div className="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
+      <button className="w-full flex items-center gap-3.5 px-4 py-4 text-left hover:bg-muted/20 transition-colors"
+        onClick={() => setOpen(v => !v)}>
+        <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
+          <MapPin size={18} className="text-green-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100">
+              In-Person
+            </span>
+            <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sm.cls)}>
+              {sm.label}
+            </span>
+          </div>
+          <p className="font-semibold text-sm text-foreground">{fmtDate(appt.date)}</p>
+          <p className="text-xs text-muted-foreground">{appt.timeSlot}</p>
+        </div>
+        {open ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+            className="overflow-hidden">
+            <div className="border-t border-border px-4 pb-4 pt-3 space-y-2.5">
+              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2.5">
+                <MapPin size={12} className="text-green-600 mt-0.5 shrink-0" />
+                <span>119, Ramulavari North Mada Street, Tirupati</span>
+              </div>
+              {appt.reason && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2.5">
+                  <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
+                </p>
+              )}
+              {appt.status === "confirmed" && (
+                <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
+                  <Phone size={12} className="shrink-0" />
+                  Please arrive 10 minutes before your scheduled time.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Main Dashboard ──────────────────────────────────────────────
 export default function PatientDashboard() {
   const [, nav] = useLocation();
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [appts, setAppts] = useState<OnlineAppt[]>([]);
+  const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
+  const [physicalAppts, setPhysicalAppts] = useState<PhysicalAppt[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"appointments" | "prescriptions">("appointments");
+  const [apptFilter, setApptFilter] = useState<"all" | "online" | "physical">("all");
   const [joinPopup, setJoinPopup] = useState<{ apptId: number; meetingLink: string } | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [joinMeetingLink, setJoinMeetingLink] = useState<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
 
-  async function apiFetch(path: string) {
+  async function patientFetch(path: string) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include" });
     if (r.status === 401) { nav("/portal"); return null; }
     return r.json();
@@ -250,45 +318,38 @@ export default function PatientDashboard() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [me, myAppts, settings] = await Promise.all([
-      apiFetch("/me"),
+    const [me, myOnline, myPhysical, settings] = await Promise.all([
+      patientFetch("/me"),
       fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
+      patientFetch("/appointments"),
       fetch(`${BASE}/api/admin/settings`).then(r => r.ok ? r.json() : {}),
     ]);
     if (!me) return;
     setPatient(me);
-    setAppts(myAppts ?? []);
+    setOnlineAppts(myOnline ?? []);
+    setPhysicalAppts(myPhysical ?? []);
     setJoinMeetingLink(settings?.meetingLink ?? null);
     setLoading(false);
   }, []);
 
-  // SSE for real-time join / session-end notifications
+  // SSE — real-time join / session-end notifications
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/patient/sse`, { withCredentials: true });
     sseRef.current = es;
-
     es.addEventListener("join_enabled", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
-      // Play chime
       playChime();
-      // Update the appointment in state
-      setAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: true } : a));
+      setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: true } : a));
       setJoinMeetingLink(data.meetingLink);
       setJoinPopup({ apptId: data.apptId, meetingLink: data.meetingLink });
     });
-
     es.addEventListener("session_ended", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
-      setAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
+      setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
       setJoinPopup(null);
       setDonationPopup({ apptId: data.apptId, qrObjectPath: data.qrObjectPath });
     });
-
-    es.onerror = () => {
-      // Silently retry — browser handles reconnection
-    };
-
-    return () => { es.close(); };
+    return () => es.close();
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -300,185 +361,234 @@ export default function PatientDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f5f9f6] flex items-center justify-center">
+      <div className="min-h-screen bg-[#f4f7f5] flex items-center justify-center">
         <div className="text-center">
-          <img src={logoImg} alt="Logo" className="h-14 mx-auto mb-4 opacity-70" />
-          <p className="text-muted-foreground text-sm animate-pulse">Loading your portal…</p>
+          <img src={logoImg} alt="Logo" className="h-12 mx-auto mb-4 opacity-60" />
+          <div className="w-5 h-5 border-2 border-[#1a3d2b] border-t-transparent rounded-full animate-spin mx-auto" />
         </div>
       </div>
     );
   }
 
-  const prescriptions = appts.filter(a => a.prescription?.photoObjectPath);
+  const hasLiveAppt = onlineAppts.some(a => a.joinEnabled);
+  const prescriptions = onlineAppts.filter(a => a.prescription?.photoObjectPath);
+
+  // Combine and filter appointments
+  const allAppointments = [
+    ...onlineAppts.map(a => ({ type: "online" as const, date: a.slot.date, data: a })),
+    ...physicalAppts.map(a => ({ type: "physical" as const, date: a.date, data: a })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const filteredAppts = apptFilter === "all" ? allAppointments
+    : allAppointments.filter(a => a.type === apptFilter);
 
   return (
-    <div className="min-h-screen bg-[#f5f9f6]">
+    <div className="min-h-screen bg-[#f4f7f5]">
       {/* Popups */}
       <AnimatePresence>
-        {joinPopup && (
-          <JoinPopup
-            meetingLink={joinPopup.meetingLink}
-            onClose={() => setJoinPopup(null)}
-          />
-        )}
-        {donationPopup && (
-          <DonationPopup
-            qrObjectPath={donationPopup.qrObjectPath}
-            onClose={() => setDonationPopup(null)}
-          />
-        )}
+        {joinPopup && <JoinPopup meetingLink={joinPopup.meetingLink} onClose={() => setJoinPopup(null)} />}
+        {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
       </AnimatePresence>
 
       {/* Header */}
       <header className="bg-white border-b border-border shadow-sm sticky top-0 z-30">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <img src={logoImg} alt="Susruta Hospital" className="h-9" />
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground leading-none">Patient Portal</p>
-            <p className="font-bold text-sm text-foreground">{patient?.name}</p>
+          <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-muted-foreground leading-none font-medium uppercase tracking-wide">Patient Portal</p>
+            <p className="font-bold text-sm text-foreground truncate">{patient?.name}</p>
           </div>
           {patient?.patientCode && (
-            <div className="bg-[#1a3d2b] text-white px-3 py-1.5 rounded-xl text-center">
-              <p className="text-[9px] font-semibold uppercase tracking-wider opacity-70">Patient ID</p>
-              <p className="font-extrabold text-base leading-none">{patient.patientCode}</p>
+            <div className="bg-[#1a3d2b] text-white px-3 py-1.5 rounded-xl text-center shrink-0">
+              <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 leading-none">Patient ID</p>
+              <p className="font-black text-sm leading-tight font-mono">{patient.patientCode}</p>
             </div>
           )}
-          <button onClick={() => loadData()} className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40">
-            <RefreshCw size={16} />
+          {hasLiveAppt && (
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Live session active" />
+          )}
+          <button onClick={loadData} className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40 transition-colors" title="Refresh">
+            <RefreshCw size={15} />
           </button>
-          <button onClick={logout} className="p-2 text-muted-foreground hover:text-red-500 rounded-xl hover:bg-red-50">
-            <LogOut size={16} />
+          <button onClick={logout} className="p-2 text-muted-foreground hover:text-red-500 rounded-xl hover:bg-red-50 transition-colors" title="Logout">
+            <LogOut size={15} />
           </button>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-        {/* Patient Code Banner */}
-        {patient?.patientCode && (
-          <div className="bg-[#1a3d2b] text-white rounded-2xl p-4 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-              <User size={24} className="opacity-70" />
-            </div>
-            <div>
-              <p className="text-xs opacity-70 uppercase tracking-wider">Welcome back</p>
-              <p className="font-bold text-lg">{patient.name}</p>
-              <p className="text-xs opacity-80 mt-0.5">
-                Your Patient ID: <span className="font-extrabold text-base ml-1">{patient.patientCode}</span>
-                <span className="opacity-60 ml-1.5">· mention this when visiting in person</span>
-              </p>
-            </div>
+      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+
+        {/* Welcome card */}
+        <div className="bg-[#1a3d2b] rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Stethoscope size={22} className="text-white/80" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white/70 text-xs font-medium">Welcome back</p>
+            <p className="text-white font-bold text-base truncate">{patient?.name}</p>
+            {patient?.patientCode && (
+              <p className="text-white/60 text-xs mt-0.5">
+                ID: <span className="text-white font-extrabold font-mono">{patient.patientCode}</span>
+                <span className="ml-1.5 opacity-60">· mention when visiting in person</span>
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => nav("/portal/book")}
+            className="shrink-0 flex items-center gap-1.5 bg-white text-[#1a3d2b] font-bold text-xs px-3.5 py-2.5 rounded-xl hover:bg-white/90 transition-colors shadow-sm"
+          >
+            <Plus size={13} /> Book Appointment
+          </button>
+        </div>
+
+        {/* Live session alert */}
+        {hasLiveAppt && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-600 rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Video size={18} className="text-white animate-pulse" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">Your doctor is ready!</p>
+                <p className="text-white/80 text-xs">Tap to join your consultation now</p>
+              </div>
+            </div>
+            {joinMeetingLink && (
+              <a href={joinMeetingLink} target="_blank" rel="noopener noreferrer"
+                className="shrink-0 bg-white text-emerald-700 font-extrabold text-xs px-3.5 py-2 rounded-xl hover:bg-white/90 transition-colors">
+                Join Now →
+              </a>
+            )}
+          </motion.div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-2 bg-white rounded-2xl p-1.5 border border-border shadow-sm">
+        {/* Tab bar */}
+        <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-border shadow-sm">
           {[
-            { key: "appointments", label: "My Consultations", icon: <Calendar size={14} /> },
-            { key: "prescriptions", label: "Prescriptions", icon: <FileText size={14} /> },
+            { key: "appointments", label: "My Appointments", icon: <Calendar size={13} /> },
+            { key: "prescriptions", label: "Prescriptions", icon: <FileText size={13} /> },
           ].map(t => (
             <button key={t.key}
               onClick={() => setTab(t.key as any)}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all",
                 tab === t.key
                   ? "bg-[#1a3d2b] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               )}>
-              {t.icon} {t.label}
-              {t.key === "appointments" && appts.some(a => a.joinEnabled) && (
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              {t.icon}
+              {t.label}
+              {t.key === "appointments" && hasLiveAppt && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               )}
             </button>
           ))}
         </div>
 
-        {/* Appointments Tab */}
+        {/* ── Appointments Tab ── */}
         {tab === "appointments" && (
           <div className="space-y-3">
+            {/* Sub-filter */}
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-foreground">Online Consultations</h2>
+              <div className="flex gap-1">
+                {(["all", "online", "physical"] as const).map(f => (
+                  <button key={f} onClick={() => setApptFilter(f)}
+                    className={cn(
+                      "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all",
+                      apptFilter === f
+                        ? "bg-foreground text-white border-foreground"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground"
+                    )}>
+                    {f === "all" ? "All" : f === "online" ? "Online" : "In-Person"}
+                  </button>
+                ))}
+              </div>
               <button
-                onClick={() => nav("/portal/online-book")}
-                className="text-xs bg-[#1a3d2b] text-white font-semibold px-3 py-1.5 rounded-xl hover:bg-[#1a3d2b]/90 flex items-center gap-1.5">
-                + Book Consultation
+                onClick={() => nav("/portal/book")}
+                className="flex items-center gap-1 text-xs font-semibold text-[#1a3d2b] hover:underline">
+                <Plus size={12} /> New
               </button>
             </div>
 
-            {appts.length === 0 ? (
+            {/* Empty */}
+            {filteredAppts.length === 0 ? (
               <div className="bg-white rounded-2xl border border-border p-8 text-center">
-                <Calendar size={36} className="text-muted-foreground/30 mx-auto mb-3" />
-                <p className="font-semibold text-muted-foreground text-sm">No consultations yet</p>
-                <p className="text-xs text-muted-foreground mt-1 mb-4">Book your first online consultation with Dr. Murali Krishna</p>
-                <button onClick={() => nav("/portal/online-book")}
-                  className="text-sm bg-[#1a3d2b] text-white font-semibold px-5 py-2 rounded-xl hover:bg-[#1a3d2b]/90">
-                  Book Now
+                <Calendar size={36} className="text-muted-foreground/20 mx-auto mb-3" />
+                <p className="font-semibold text-foreground text-sm mb-1">No appointments yet</p>
+                <p className="text-xs text-muted-foreground mb-4">Book your first appointment with Dr. P. Murali Krishna</p>
+                <button onClick={() => nav("/portal/book")}
+                  className="text-sm bg-[#1a3d2b] text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-[#1a3d2b]/90 transition-colors">
+                  Book Appointment
                 </button>
               </div>
             ) : (
-              appts.map(appt => (
-                <ApptCard
-                  key={appt.id}
-                  appt={appt}
-                  joinMeetingLink={joinMeetingLink}
-                  onJoinClick={() => setJoinPopup(null)}
-                />
+              filteredAppts.map((item, i) => (
+                item.type === "online" ? (
+                  <OnlineApptCard
+                    key={`online-${(item.data as OnlineAppt).id}`}
+                    appt={item.data as OnlineAppt}
+                    joinMeetingLink={joinMeetingLink}
+                    onJoinClick={() => setJoinPopup(null)}
+                  />
+                ) : (
+                  <PhysicalApptCard
+                    key={`physical-${(item.data as PhysicalAppt).id}`}
+                    appt={item.data as PhysicalAppt}
+                  />
+                )
               ))
             )}
           </div>
         )}
 
-        {/* Prescriptions Tab */}
+        {/* ── Prescriptions Tab ── */}
         {tab === "prescriptions" && (
           <div className="space-y-3">
-            <h2 className="font-bold text-foreground">Prescriptions from Dr. Murali Krishna</h2>
             {prescriptions.length === 0 ? (
               <div className="bg-white rounded-2xl border border-border p-8 text-center">
-                <FileText size={36} className="text-muted-foreground/30 mx-auto mb-3" />
-                <p className="font-semibold text-muted-foreground text-sm">No prescriptions yet</p>
-                <p className="text-xs text-muted-foreground mt-1">After your consultation, the doctor will upload your prescription here.</p>
+                <FileText size={36} className="text-muted-foreground/20 mx-auto mb-3" />
+                <p className="font-semibold text-foreground text-sm mb-1">No prescriptions yet</p>
+                <p className="text-xs text-muted-foreground">After your online consultation, the doctor will upload your prescription here.</p>
               </div>
             ) : (
               prescriptions.map(appt => (
-                <div key={appt.id} className="bg-white rounded-2xl border border-border shadow-sm p-5">
-                  <div className="flex items-start justify-between gap-3 mb-4">
+                <div key={appt.id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
                     <div>
                       <p className="font-bold text-sm text-foreground">{fmtDate(appt.slot.date)}</p>
-                      <p className="text-xs text-muted-foreground">{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</p>
-                      {appt.prescription?.notes && (
-                        <p className="text-sm text-muted-foreground mt-2 bg-muted/40 rounded-xl px-3 py-2">
-                          <span className="font-medium text-foreground">Note:</span> {appt.prescription.notes}
-                        </p>
-                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</p>
                     </div>
-                    <a
-                      href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download
-                      className="flex items-center gap-1.5 text-xs bg-[#1a3d2b] text-white font-semibold px-3 py-2 rounded-xl hover:bg-[#1a3d2b]/90 shrink-0"
-                    >
+                    <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                      target="_blank" rel="noopener noreferrer" download
+                      className="flex items-center gap-1.5 text-xs bg-[#1a3d2b] text-white font-semibold px-3.5 py-2 rounded-xl hover:bg-[#1a3d2b]/90 shrink-0 transition-colors">
                       <Download size={12} /> Download
                     </a>
                   </div>
-                  <div className="bg-gray-50 rounded-xl overflow-hidden border border-border">
-                    <img
-                      src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                      alt="Prescription"
-                      className="w-full max-h-[400px] object-contain"
-                    />
+                  {appt.prescription?.notes && (
+                    <div className="px-5 pt-3 pb-0">
+                      <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2.5">
+                        <span className="font-semibold text-foreground">Doctor's Note: </span>{appt.prescription.notes}
+                      </p>
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <div className="bg-gray-50 rounded-xl overflow-hidden border border-border">
+                      <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                        alt="Prescription" className="w-full max-h-[420px] object-contain" />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-2 text-right">
+                      Issued {new Date(appt.prescription!.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Issued {new Date(appt.prescription!.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
-                  </p>
                 </div>
               ))
             )}
           </div>
         )}
 
-        {/* Footer note */}
         <p className="text-center text-xs text-muted-foreground pb-4">
-          Keep this portal open during your appointment time — we'll notify you when the doctor is ready.
+          Keep this portal open during your appointment time — you'll be notified when the doctor is ready.
         </p>
       </div>
     </div>
