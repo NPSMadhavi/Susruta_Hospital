@@ -75,6 +75,11 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
 
 // ── Join Popup ──────────────────────────────────────────────────
 function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () => void }) {
+  useEffect(() => {
+    const interval = setInterval(() => playChime(), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -89,12 +94,9 @@ function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () 
           Dr. P. Murali Krishna is waiting for you. Your consultation session has begun.
         </p>
         <a href={meetingLink} target="_blank" rel="noopener noreferrer" onClick={onClose}
-          className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg mb-3">
+          className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg">
           Join Consultation Now →
         </a>
-        <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-          I'll join in a moment
-        </button>
       </motion.div>
     </div>
   );
