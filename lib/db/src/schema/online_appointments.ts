@@ -17,6 +17,8 @@ export const onlineAppointmentsTable = pgTable("online_appointments", {
   // Join meeting control — admin enables when doctor is ready
   joinEnabled: boolean("join_enabled").notNull().default(false),
   joinEnabledAt: timestamp("join_enabled_at"),
+  // Set when patient clicks "Join" — confirms they entered the call
+  patientJoinedAt: timestamp("patient_joined_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

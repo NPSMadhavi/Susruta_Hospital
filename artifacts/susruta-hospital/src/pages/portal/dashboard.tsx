@@ -87,11 +87,25 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
 };
 
 // ── Join Popup ──────────────────────────────────────────────────
-function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () => void }) {
+function JoinPopup({ apptId, meetingLink, onClose }: { apptId: number; meetingLink: string; onClose: () => void }) {
   useEffect(() => {
     const interval = setInterval(() => playChime(), 30_000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Stop any in-progress speech when popup is dismissed
+      try { window.speechSynthesis?.cancel(); } catch {}
+    };
   }, []);
+
+  function handleJoin() {
+    // Stop audio immediately
+    try { window.speechSynthesis?.cancel(); } catch {}
+    // Tell the server — admin portal will flip to "🟢 Live"
+    fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
+      method: "POST", credentials: "include",
+    }).catch(() => {});
+    onClose();
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -106,7 +120,7 @@ function JoinPopup({ meetingLink, onClose }: { meetingLink: string; onClose: () 
         <p className="text-gray-500 text-sm mb-6 leading-relaxed">
           Dr. P. Murali Krishna is waiting for you. Your consultation session has begun.
         </p>
-        <a href={meetingLink} target="_blank" rel="noopener noreferrer" onClick={onClose}
+        <a href={meetingLink} target="_blank" rel="noopener noreferrer" onClick={handleJoin}
           className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg">
           Join Consultation Now →
         </a>
@@ -450,7 +464,7 @@ export default function PatientDashboard() {
     <div className="min-h-screen bg-[#f4f7f5]">
       {/* Popups */}
       <AnimatePresence>
-        {joinPopup && <JoinPopup meetingLink={joinPopup.meetingLink} onClose={() => setJoinPopup(null)} />}
+        {joinPopup && <JoinPopup apptId={joinPopup.apptId} meetingLink={joinPopup.meetingLink} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
         {showBooking && (
           <BookingWizard

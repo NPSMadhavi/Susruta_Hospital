@@ -89,6 +89,7 @@ router.get("/mine", requirePatient, async (req: any, res) => {
     meetingLink: r.appt.meetingLink ?? null,
     joinEnabled: r.appt.joinEnabled,
     joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
+    patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
     createdAt: r.appt.createdAt.toISOString(),
     slot: {
       id: r.slot.id,
@@ -102,6 +103,24 @@ router.get("/mine", requirePatient, async (req: any, res) => {
       updatedAt: r.prescription.updatedAt.toISOString(),
     } : null,
   })));
+});
+
+// ── POST /api/online-appointments/:id/patient-joined ──────────
+// Called when the patient clicks "Join" — records the timestamp so admin sees "Live"
+router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
+  if (!appt) return res.status(404).json({ error: "Not found" });
+
+  await db.update(onlineAppointmentsTable)
+    .set({ patientJoinedAt: new Date() })
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  res.json({ ok: true });
 });
 
 // ── GET /api/online-appointments/admin — Admin: list all ──────
@@ -127,6 +146,7 @@ router.get("/admin", requireAdmin, async (_req, res) => {
     meetingLink: r.appt.meetingLink ?? null,
     joinEnabled: r.appt.joinEnabled,
     joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
+    patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
     createdAt: r.appt.createdAt.toISOString(),
     slot: {
       id: r.slot.id,
@@ -186,7 +206,7 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   // Enable join for this appointment
   const [updated] = await db
     .update(onlineAppointmentsTable)
-    .set({ joinEnabled: true, joinEnabledAt: new Date(), status: "confirmed" })
+    .set({ joinEnabled: true, joinEnabledAt: new Date(), patientJoinedAt: null, status: "confirmed" })
     .where(eq(onlineAppointmentsTable.id, id))
     .returning();
 

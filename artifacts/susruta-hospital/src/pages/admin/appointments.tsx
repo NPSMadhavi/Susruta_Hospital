@@ -48,7 +48,8 @@ type DocFile = { name: string; objectPath: string; contentType: string; size: nu
 type Prescription = { photoObjectPath: string | null; notes: string | null; updatedAt: string };
 type OnlineAppt = {
   id: number; status: string; reason: string | null;
-  documents: DocFile[]; joinEnabled: boolean; joinEnabledAt: string | null; createdAt: string;
+  documents: DocFile[]; joinEnabled: boolean; joinEnabledAt: string | null;
+  patientJoinedAt: string | null; createdAt: string;
   slot: { id: number; date: string; startTime: string; endTime: string };
   patient: { id: number; patientCode: string | null; name: string; email: string; phone: string | null };
   prescription: Prescription | null;
@@ -361,7 +362,9 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescri
   return (
     <div className={cn(
       "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
-      appt.joinEnabled ? "border-amber-400 ring-2 ring-amber-100" : "border-border"
+      appt.joinEnabled && appt.patientJoinedAt ? "border-emerald-500 ring-2 ring-emerald-100"
+        : appt.joinEnabled ? "border-amber-400 ring-2 ring-amber-100"
+        : "border-border"
     )}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start gap-3">
@@ -377,9 +380,11 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescri
           <div className="flex-1 min-w-0">
             <p className="font-bold text-base">{appt.patient.name}</p>
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {appt.joinEnabled
-                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">⏳ Not Joined Yet</span>
-                : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
+              {appt.joinEnabled && appt.patientJoinedAt
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
+                : appt.joinEnabled
+                  ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">⏳ Not Joined Yet</span>
+                  : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
               }
             </div>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
@@ -520,7 +525,7 @@ export default function AdminAppointments() {
         method: "POST", credentials: "include",
       });
       setOnlineAppts(prev => prev.map(a => a.id === id
-        ? { ...a, joinEnabled: enable, status: enable ? "confirmed" : "completed" }
+        ? { ...a, joinEnabled: enable, patientJoinedAt: enable ? null : a.patientJoinedAt, status: enable ? "confirmed" : "completed" }
         : enable ? { ...a, joinEnabled: false } : a
       ));
       if (enable) playChime();
