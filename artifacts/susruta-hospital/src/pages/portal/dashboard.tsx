@@ -87,23 +87,12 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
 };
 
 // ── Join Popup ──────────────────────────────────────────────────
-function JoinPopup({ apptId, meetingLink, onClose }: { apptId: number; meetingLink: string; onClose: () => void }) {
-  useEffect(() => {
-    const interval = setInterval(() => playChime(), 15_000);
-    return () => {
-      clearInterval(interval);
-      // Stop any in-progress speech when popup is dismissed
-      try { window.speechSynthesis?.cancel(); } catch {}
-    };
-  }, []);
-
+function JoinPopup({ apptId, meetingLink, onJoin, onClose }: {
+  apptId: number; meetingLink: string;
+  onJoin: (id: number) => void; onClose: () => void;
+}) {
   function handleJoin() {
-    // Stop audio immediately
-    try { window.speechSynthesis?.cancel(); } catch {}
-    // Tell the server — admin portal will flip to "🟢 Live"
-    fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
-      method: "POST", credentials: "include",
-    }).catch(() => {});
+    onJoin(apptId);
     onClose();
   }
 
@@ -381,6 +370,27 @@ export default function PatientDashboard() {
   const [joinMeetingLink, setJoinMeetingLink] = useState<string | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
+  const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startChiming() {
+    if (chimeIntervalRef.current) return;
+    chimeIntervalRef.current = setInterval(() => playChime(), 15_000);
+  }
+
+  function stopChiming() {
+    if (chimeIntervalRef.current) {
+      clearInterval(chimeIntervalRef.current);
+      chimeIntervalRef.current = null;
+    }
+    try { window.speechSynthesis?.cancel(); } catch {}
+  }
+
+  function handlePatientJoined(apptId: number) {
+    stopChiming();
+    fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
+      method: "POST", credentials: "include",
+    }).catch(() => {});
+  }
 
   async function patientFetch(path: string) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include" });
@@ -410,17 +420,19 @@ export default function PatientDashboard() {
     es.addEventListener("join_enabled", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       playChime();
+      startChiming();
       setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: true } : a));
       setJoinMeetingLink(data.meetingLink);
       setJoinPopup({ apptId: data.apptId, meetingLink: data.meetingLink });
     });
     es.addEventListener("session_ended", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
+      stopChiming();
       setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
       setJoinPopup(null);
       setDonationPopup({ apptId: data.apptId, qrObjectPath: data.qrObjectPath });
     });
-    return () => es.close();
+    return () => { es.close(); stopChiming(); };
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -464,7 +476,7 @@ export default function PatientDashboard() {
     <div className="min-h-screen bg-[#f4f7f5]">
       {/* Popups */}
       <AnimatePresence>
-        {joinPopup && <JoinPopup apptId={joinPopup.apptId} meetingLink={joinPopup.meetingLink} onClose={() => setJoinPopup(null)} />}
+        {joinPopup && <JoinPopup apptId={joinPopup.apptId} meetingLink={joinPopup.meetingLink} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
         {showBooking && (
           <BookingWizard
