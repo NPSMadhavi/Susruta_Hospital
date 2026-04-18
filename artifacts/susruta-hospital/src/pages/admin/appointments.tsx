@@ -455,12 +455,14 @@ export default function AdminAppointments() {
 
   // Online state
   const [mainTab, setMainTab] = useState<"inperson" | "online">("inperson");
+  const [onlineSubTab, setOnlineSubTab] = useState<"pending" | "completed">("pending");
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
   const [meetingLink, setMeetingLink] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [onlineErr, setOnlineErr] = useState("");
   const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevOnlineCountRef = useRef<number | null>(null);
 
   // ── Load online appointments ──
   const loadOnline = useCallback(async (silent = false) => {
@@ -471,7 +473,14 @@ export default function AdminAppointments() {
         fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" }).then(r => r.json()),
         fetch(`${BASE}/api/admin/settings`, { credentials: "include" }).then(r => r.json()),
       ]);
-      setOnlineAppts(Array.isArray(list) ? list : []);
+      const appts: OnlineAppt[] = Array.isArray(list) ? list : [];
+      // Play chime when new appointments arrive
+      if (prevOnlineCountRef.current !== null && appts.length > prevOnlineCountRef.current) {
+        playChime();
+        notifyRef.current("New Online Appointment", `${appts.length - prevOnlineCountRef.current} new online booking(s)`);
+      }
+      prevOnlineCountRef.current = appts.length;
+      setOnlineAppts(appts);
       setMeetingLink(settings.meetingLink ?? null);
       setLastRefresh(new Date());
     } catch { if (!silent) setOnlineErr("Failed to load online appointments"); }
@@ -533,15 +542,28 @@ export default function AdminAppointments() {
 
   const today = new Date().toISOString().slice(0, 10);
   const pendingCount = appts.filter(a => a.status === "pending").length;
-  const onlinePendingCount = onlineAppts.filter(a => a.status === "pending").length;
+  const onlinePendingCount = onlineAppts.filter(a => ["pending", "confirmed"].includes(a.status) || a.joinEnabled).length;
+  const onlineCompletedCount = onlineAppts.filter(a => ["completed", "cancelled"].includes(a.status) && !a.joinEnabled).length;
   const onlineLiveCount = onlineAppts.filter(a => a.joinEnabled).length;
   const todayAppts = appts.filter(a => a.date === today);
   const shown = filter === "all" ? appts : appts.filter(a => a.status === filter);
-  const sortedOnline = [...onlineAppts].sort((a, b) => {
-    if (a.joinEnabled && !b.joinEnabled) return -1;
-    if (!a.joinEnabled && b.joinEnabled) return 1;
-    return b.slot.date.localeCompare(a.slot.date);
-  });
+
+  // Online sub-tab filtering + sorting
+  const onlinePendingList = [...onlineAppts]
+    .filter(a => a.joinEnabled || ["pending", "confirmed"].includes(a.status))
+    .sort((a, b) => {
+      if (a.joinEnabled && !b.joinEnabled) return -1;
+      if (!a.joinEnabled && b.joinEnabled) return 1;
+      return a.slot.date.localeCompare(b.slot.date); // earliest first
+    });
+  const onlineCompletedList = [...onlineAppts]
+    .filter(a => !a.joinEnabled && ["completed", "cancelled"].includes(a.status))
+    .sort((a, b) => b.slot.date.localeCompare(a.slot.date)); // most recent first
+
+  // Prescription pending alert: completed with no prescription
+  const prescriptionPending = onlineAppts.filter(
+    a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath
+  );
 
   return (
     <AdminLayout>
@@ -608,11 +630,28 @@ export default function AdminAppointments() {
       {/* ── ONLINE TAB ───────────────────────────────────────────── */}
       {mainTab === "online" && (
         <div className="space-y-4">
-          {/* Sub-header with auto-refresh time */}
+          {/* Auto-refresh bar */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Auto-refreshes every 20s</span>
             <span>Last: {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
           </div>
+
+          {/* Prescription pending alert */}
+          {prescriptionPending.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 flex items-start gap-3">
+              <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-800">
+                  {prescriptionPending.length === 1
+                    ? "1 completed appointment has no prescription uploaded yet"
+                    : `${prescriptionPending.length} completed appointments have no prescription uploaded yet`}
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {prescriptionPending.map(a => a.patient.name).join(", ")} — please upload the prescription photo in the Completed tab.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Meeting link editor */}
           <MeetingLinkBar meetingLink={meetingLink} onSaved={link => setMeetingLink(link)} />
@@ -622,8 +661,8 @@ export default function AdminAppointments() {
             <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3 flex items-center gap-3">
               <Video size={16} className="animate-pulse shrink-0" />
               <div>
-                <p className="font-bold text-sm">{onlineLiveCount === 1 ? "1 Session Active" : `${onlineLiveCount} Sessions Active`}</p>
-                <p className="text-white/70 text-xs">{sortedOnline.filter(a => a.joinEnabled).map(a => a.patient.name).join(", ")}</p>
+                <p className="font-bold text-sm">{onlineLiveCount === 1 ? "1 Session Live Now" : `${onlineLiveCount} Sessions Live Now`}</p>
+                <p className="text-white/70 text-xs">{onlinePendingList.filter(a => a.joinEnabled).map(a => a.patient.name).join(", ")}</p>
               </div>
             </div>
           )}
@@ -634,24 +673,81 @@ export default function AdminAppointments() {
             </div>
           )}
 
+          {/* ── Sub-tabs: Pending / Completed ── */}
+          <div className="flex gap-2 bg-muted/40 rounded-xl p-1 border border-border">
+            <button onClick={() => setOnlineSubTab("pending")}
+              className={cn(
+                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2",
+                onlineSubTab === "pending" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}>
+              <Clock size={13} /> Pending
+              {onlinePendingCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                  {onlinePendingCount}
+                </span>
+              )}
+              {onlineLiveCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+            </button>
+            <button onClick={() => setOnlineSubTab("completed")}
+              className={cn(
+                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2",
+                onlineSubTab === "completed" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}>
+              <CheckCircle2 size={13} /> Completed
+              {onlineCompletedCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                  {onlineCompletedCount}
+                </span>
+              )}
+              {prescriptionPending.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                  {prescriptionPending.length} Rx pending
+                </span>
+              )}
+            </button>
+          </div>
+
           {onlineLoading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-muted-foreground" /></div>
-          ) : sortedOnline.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-border p-12 text-center">
-              <Video size={40} className="text-muted-foreground/20 mx-auto mb-3" />
-              <p className="font-semibold text-muted-foreground">No online appointments yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Patients can book through the patient portal</p>
+            <div className="flex items-center justify-center py-16">
+              <Loader2 size={24} className="animate-spin text-muted-foreground" />
             </div>
+          ) : onlineSubTab === "pending" ? (
+            onlinePendingList.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-border p-12 text-center">
+                <CheckCircle2 size={40} className="text-emerald-200 mx-auto mb-3" />
+                <p className="font-semibold text-muted-foreground">No pending appointments</p>
+                <p className="text-xs text-muted-foreground mt-1">All online appointments are completed</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {onlinePendingList.map(appt => (
+                  <OnlineApptCard
+                    key={appt.id} appt={appt} meetingLink={meetingLink}
+                    onJoinToggle={toggleJoin}
+                    onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+                  />
+                ))}
+              </div>
+            )
           ) : (
-            <div className="space-y-3">
-              {sortedOnline.map(appt => (
-                <OnlineApptCard
-                  key={appt.id} appt={appt} meetingLink={meetingLink}
-                  onJoinToggle={toggleJoin}
-                  onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
-                />
-              ))}
-            </div>
+            onlineCompletedList.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-border p-12 text-center">
+                <Video size={40} className="text-muted-foreground/20 mx-auto mb-3" />
+                <p className="font-semibold text-muted-foreground">No completed appointments yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {onlineCompletedList.map(appt => (
+                  <OnlineApptCard
+                    key={appt.id} appt={appt} meetingLink={meetingLink}
+                    onJoinToggle={toggleJoin}
+                    onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+                  />
+                ))}
+              </div>
+            )
           )}
         </div>
       )}
