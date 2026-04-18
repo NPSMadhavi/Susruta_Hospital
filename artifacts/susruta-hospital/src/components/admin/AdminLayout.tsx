@@ -27,10 +27,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin", icon: <LayoutDashboard size={20}/>, label: "Dashboard" },
     { href: "/admin/appointments", icon: <Calendar size={20}/>, label: "Appointments" },
     { href: "/admin/availability", icon: <Clock size={20}/>, label: "Availability" },
+    { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
     { href: "/admin/testimonials", icon: <MessageSquare size={20}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={20}/>, label: "Subscribers" },
-    { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
-    { href: "/admin/online-appointments", icon: <Video size={20}/>, label: "Consultations" },
     { href: "/admin/settings", icon: <Settings size={20}/>, label: "Settings" },
   ];
 

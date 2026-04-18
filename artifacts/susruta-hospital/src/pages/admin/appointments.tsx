@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminToastContainer } from "@/components/admin/AdminToast";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
@@ -6,13 +6,37 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
-  Video, Link2, Loader2
+  Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
+  Link, Edit2, Save, AlertCircle, FileText, MapPin, User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
+function apiFetch(path: string, opts: RequestInit = {}) {
+  return fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts })
+    .then((r) => r.json());
+}
+
+// ── Audio chime ─────────────────────────────────────────────────
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.22);
+      gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + i * 0.22 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 1.2);
+      osc.start(ctx.currentTime + i * 0.22);
+      osc.stop(ctx.currentTime + i * 0.22 + 1.2);
+    });
+  } catch {}
+}
+
+// ── Types ────────────────────────────────────────────────────────
 type Appt = {
   id: number; patientName: string; patientPhone: string; patientEmail?: string;
   date: string; timeSlot: string; reason?: string; status: string; notes?: string;
@@ -20,7 +44,29 @@ type Appt = {
   rescheduleDates?: string; rescheduleChosen?: string; followUpDate?: string;
   followUpConfirmed: boolean; createdAt: string;
 };
+type DocFile = { name: string; objectPath: string; contentType: string; size: number };
+type Prescription = { photoObjectPath: string | null; notes: string | null; updatedAt: string };
+type OnlineAppt = {
+  id: number; status: string; reason: string | null;
+  documents: DocFile[]; joinEnabled: boolean; joinEnabledAt: string | null; createdAt: string;
+  slot: { id: number; date: string; startTime: string; endTime: string };
+  patient: { id: number; patientCode: string | null; name: string; email: string; phone: string | null };
+  prescription: Prescription | null;
+};
 
+// ── Helpers ──────────────────────────────────────────────────────
+function fmt(date: string) {
+  return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+function fmtFull(date: string) {
+  return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+function fmtTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+// ── In-Person Status configs ─────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
   confirmed: "bg-blue-100 text-blue-800 border-blue-300",
@@ -31,36 +77,27 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800 border-red-200",
   missed: "bg-gray-100 text-gray-600 border-gray-200",
 };
-
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending", confirmed: "Confirmed", reschedule_proposed: "Reschedule Proposed",
   reschedule_accepted: "Reschedule Accepted", arrived: "Arrived", completed: "Completed",
   cancelled: "Cancelled", missed: "Missed",
 };
+const ONLINE_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-700 border-amber-200",
+  confirmed: "bg-blue-100 text-blue-700 border-blue-200",
+  completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+};
 
-function fmt(date: string) {
-  return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-}
-
-function apiFetch(path: string, opts: RequestInit = {}) {
-  return fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts })
-    .then((r) => r.json());
-}
-
-
-// ── Pay Modal ─────────────────────────────────────────────────
+// ── Modals (In-Person) ───────────────────────────────────────────
 function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; onPaid: (a: Appt) => void }) {
   const [mode, setMode] = useState<"cash" | "upi">("cash");
   const [loading, setLoading] = useState(false);
-
   async function pay() {
     setLoading(true);
     const updated = await apiFetch(`/appointments/${appt.id}/pay`, { method: "PATCH", body: JSON.stringify({ mode }) });
-    onPaid(updated);
-    onClose();
-    setLoading(false);
+    onPaid(updated); onClose(); setLoading(false);
   }
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
@@ -69,7 +106,8 @@ function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; 
         <div className="grid grid-cols-2 gap-3 mb-6">
           {(["cash", "upi"] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={cn("py-4 rounded-2xl border-2 font-semibold flex flex-col items-center gap-2 transition-all", mode === m ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/30")}>
+              className={cn("py-4 rounded-2xl border-2 font-semibold flex flex-col items-center gap-2 transition-all",
+                mode === m ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/30")}>
               {m === "cash" ? <Banknote size={22} /> : <Smartphone size={22} />}
               <span className="text-sm">{m === "cash" ? "Cash" : "UPI"}</span>
             </button>
@@ -87,23 +125,17 @@ function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; 
   );
 }
 
-// ── Reschedule Modal ──────────────────────────────────────────
 function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: () => void; onProposed: (a: Appt) => void }) {
   const [dates, setDates] = useState<string[]>(["", "", ""]);
   const [loading, setLoading] = useState(false);
-
+  const today = new Date().toISOString().slice(0, 10);
   async function propose() {
     const valid = dates.filter(Boolean);
     if (!valid.length) return;
     setLoading(true);
     const updated = await apiFetch(`/appointments/${appt.id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dates: valid }) });
-    onProposed(updated);
-    onClose();
-    setLoading(false);
+    onProposed(updated); onClose(); setLoading(false);
   }
-
-  const today = new Date().toISOString().slice(0, 10);
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
@@ -113,7 +145,7 @@ function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: (
           {dates.map((d, i) => (
             <div key={i}>
               <label className="text-xs text-muted-foreground mb-1 block">Option {i + 1}{i > 0 && " (optional)"}</label>
-              <input type="date" min={today} value={d} onChange={(e) => setDates((prev) => prev.map((x, j) => j === i ? e.target.value : x))}
+              <input type="date" min={today} value={d} onChange={(e) => setDates(prev => prev.map((x, j) => j === i ? e.target.value : x))}
                 className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
             </div>
           ))}
@@ -130,21 +162,16 @@ function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: (
   );
 }
 
-// ── Follow-up Modal ────────────────────────────────────────────
 function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => void; onSet: (a: Appt) => void }) {
   const [date, setDate] = useState(appt.followUpDate || "");
   const [loading, setLoading] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
-
   async function save() {
     if (!date) return;
     setLoading(true);
     const updated = await apiFetch(`/appointments/${appt.id}/followup`, { method: "PATCH", body: JSON.stringify({ followUpDate: date }) });
-    onSet(updated);
-    onClose();
-    setLoading(false);
+    onSet(updated); onClose(); setLoading(false);
   }
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs p-6">
@@ -163,86 +190,257 @@ function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => vo
   );
 }
 
-// ── Online Appointment Type ───────────────────────────────────
-type OnlineAppt = {
-  id: number; patientName: string; patientEmail: string; reason: string | null;
-  status: string; meetingLink: string | null; createdAt: string;
-  slot: { id: number; date: string; startTime: string; endTime: string };
-};
+// ── Prescription Upload (Online) ─────────────────────────────────
+function PrescriptionUpload({ apptId, prescription, onUploaded }: {
+  apptId: number; prescription: Prescription | null; onUploaded: (rx: Prescription) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [err, setErr] = useState("");
 
-function fmtOnlineSlot(a: OnlineAppt) {
-  const d = new Date(a.slot.date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  function ft(t: string) {
-    const [h, m] = t.split(":").map(Number);
-    return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  }
-  return `${d} · ${ft(a.slot.startTime)}–${ft(a.slot.endTime)}`;
-}
+  function handleFile(file: File) { setErr(""); setPreview(URL.createObjectURL(file)); setPendingFile(file); }
 
-const ONLINE_STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-blue-100 text-blue-800 border-blue-300",
-  completed: "bg-green-100 text-green-800 border-green-300",
-  cancelled: "bg-gray-100 text-gray-500 border-gray-200",
-};
-const ONLINE_STATUS_LABELS: Record<string, string> = {
-  pending: "Awaiting Approval", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled",
-};
-
-// ── Online Approve Modal ───────────────────────────────────────
-function OnlineApproveModal({ appt, onClose, onApproved }: { appt: OnlineAppt; onClose: () => void; onApproved: (a: OnlineAppt) => void }) {
-  const [meetingLink, setMeetingLink] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function approve() {
-    if (!meetingLink.trim()) { setError("Please enter a meeting link."); return; }
-    setLoading(true);
-    setError("");
+  async function confirmUpload() {
+    if (!pendingFile) return;
+    setUploading(true); setErr("");
     try {
-      const updated = await apiFetch(`/online-appointments/admin/${appt.id}/approve`, {
-        method: "PATCH", body: JSON.stringify({ meetingLink: meetingLink.trim() }),
+      const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: pendingFile.name, contentType: pendingFile.type, size: pendingFile.size }),
       });
-      onApproved(updated);
-      onClose();
-    } catch (e: any) {
-      setError(e?.error || "Failed to approve.");
-    } finally {
-      setLoading(false);
-    }
+      if (!urlRes.ok) throw new Error("Upload URL failed");
+      const { uploadURL, objectPath } = await urlRes.json();
+      const upRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": pendingFile.type }, body: pendingFile });
+      if (!upRes.ok) throw new Error("Upload failed");
+      const saveRes = await fetch(`${BASE}/api/online-appointments/admin/${apptId}/prescription`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoObjectPath: objectPath }),
+      });
+      if (!saveRes.ok) throw new Error("Save failed");
+      const rx = await saveRes.json();
+      setPreview(null); setPendingFile(null); onUploaded(rx);
+    } catch (e: any) { setErr(e.message || "Upload failed"); }
+    finally { setUploading(false); }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-serif font-bold text-lg">Approve Online Consultation</h3>
-          <button onClick={onClose} className="p-1.5 rounded-xl text-muted-foreground hover:bg-muted"><X size={16} /></button>
+    <div className="space-y-3">
+      {prescription?.photoObjectPath && !preview && (
+        <div className="bg-gray-50 rounded-xl overflow-hidden border border-border">
+          <img src={`${BASE}/api/storage${prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-40 object-contain" />
         </div>
-        <p className="text-muted-foreground text-sm mb-1">{appt.patientName}</p>
-        <p className="text-xs text-muted-foreground mb-5">{fmtOnlineSlot(appt)}</p>
-        {appt.reason && <p className="text-sm bg-muted/40 rounded-xl px-3 py-2 mb-4">"{appt.reason}"</p>}
-        <div className="mb-4">
-          <label className="text-xs font-semibold text-muted-foreground mb-1.5 block flex items-center gap-1"><Link2 size={11} /> Meeting Link (Google Meet / Zoom / etc.)</label>
-          <input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)}
-            placeholder="https://meet.google.com/..."
-            className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
-          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      )}
+      {preview && (
+        <div className="space-y-2">
+          <div className="bg-gray-50 rounded-xl overflow-hidden border-2 border-[#1a3d2b]/30">
+            <img src={preview} alt="Preview" className="w-full max-h-48 object-contain" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={confirmUpload} disabled={uploading}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
+              {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><CheckCircle2 size={13} /> Upload</>}
+            </button>
+            <button onClick={() => { setPreview(null); setPendingFile(null); }} disabled={uploading}
+              className="px-3 py-2 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 transition-colors">
+              <X size={13} />
+            </button>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-3 border border-border rounded-xl text-sm font-semibold text-muted-foreground">Cancel</button>
-          <button onClick={approve} disabled={loading}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Approve
-          </button>
+      )}
+      {err && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+      {!preview && (
+        <div className="flex gap-2">
+          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-[#1a3d2b]/30 rounded-xl text-xs text-[#1a3d2b] font-semibold cursor-pointer hover:bg-[#1a3d2b]/5 transition-colors">
+            <Camera size={13} /> Camera
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          </label>
+          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-border rounded-xl text-xs text-muted-foreground font-semibold cursor-pointer hover:bg-muted/30 transition-colors">
+            <Upload size={13} /> {prescription?.photoObjectPath ? "Replace" : "Upload"}
+            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          </label>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────
+// ── Meeting Link Bar ─────────────────────────────────────────────
+function MeetingLinkBar({ meetingLink, onSaved }: { meetingLink: string | null; onSaved: (link: string) => void }) {
+  const [editing, setEditing] = useState(!meetingLink);
+  const [value, setValue] = useState(meetingLink ?? "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    const trimmed = value.trim();
+    if (!trimmed) { setErr("Please enter a valid meeting link"); return; }
+    setSaving(true); setErr("");
+    try {
+      await fetch(`${BASE}/api/admin/settings`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingLink: trimmed }),
+      });
+      onSaved(trimmed);
+      setEditing(false);
+    } catch { setErr("Failed to save. Try again."); }
+    finally { setSaving(false); }
+  }
+
+  if (editing) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-1.5 flex items-center gap-1.5">
+          <Link size={12} /> Default Meeting Link
+        </p>
+        <p className="text-xs text-amber-700 mb-3">
+          Enter your Google Meet or Zoom link once — it will be sent to all patients automatically when you click "Enable Join".
+        </p>
+        <div className="flex gap-2">
+          <input type="url" value={value} onChange={e => setValue(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && save()}
+            placeholder="https://meet.google.com/xxx-xxxx-xxx"
+            className="flex-1 text-sm border border-amber-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-white" />
+          <button onClick={save} disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors shrink-0">
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
+          </button>
+          {meetingLink && <button onClick={() => { setEditing(false); setValue(meetingLink); }}
+            className="px-3 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 transition-colors">
+            <X size={13} />
+          </button>}
+        </div>
+        {err && <p className="text-xs text-red-600 mt-2 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+      <Link size={15} className="text-blue-600 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Active Meeting Link</p>
+        <p className="text-sm text-blue-800 font-medium truncate">{meetingLink}</p>
+      </div>
+      <button onClick={() => setEditing(true)}
+        className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors shrink-0" title="Edit">
+        <Edit2 size={13} />
+      </button>
+    </div>
+  );
+}
+
+// ── Online Appointment Card ──────────────────────────────────────
+function OnlineApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
+  appt: OnlineAppt; meetingLink: string | null;
+  onJoinToggle: (id: number, enable: boolean) => Promise<void>;
+  onPrescriptionUploaded: (id: number, rx: Prescription) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const sc = ONLINE_STATUS_COLORS[appt.status] ?? ONLINE_STATUS_COLORS.confirmed;
+  const noLink = !meetingLink && !appt.joinEnabled;
+
+  async function toggleJoin() {
+    setToggling(true);
+    await onJoinToggle(appt.id, !appt.joinEnabled);
+    setToggling(false);
+  }
+
+  return (
+    <div className={cn(
+      "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
+      appt.joinEnabled ? "border-emerald-400 ring-2 ring-emerald-100" : "border-border"
+    )}>
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex items-start gap-3">
+          {/* Patient ID */}
+          <div className={cn(
+            "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 border-2",
+            appt.patient.patientCode ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/20" : "bg-blue-50 border-blue-100"
+          )}>
+            {appt.patient.patientCode
+              ? <span className="font-black text-[#1a3d2b] text-sm font-mono">{appt.patient.patientCode}</span>
+              : <User size={20} className="text-muted-foreground" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base">{appt.patient.name}</p>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {appt.joinEnabled
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
+                : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
+              }
+            </div>
+            <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><Calendar size={11} className="text-[#1a3d2b]" />{fmtFull(appt.slot.date)}</span>
+              <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</span>
+              {appt.patient.phone && <span>{appt.patient.phone}</span>}
+            </div>
+          </div>
+          {/* Enable/Disable Join button */}
+          <button
+            onClick={e => { e.stopPropagation(); toggleJoin(); }}
+            disabled={toggling || noLink}
+            title={noLink ? "Set a meeting link above first" : ""}
+            className={cn(
+              "shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
+              appt.joinEnabled
+                ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                : noLink
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+            )}>
+            {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+            {appt.joinEnabled ? "End" : "Enable Join"}
+          </button>
+        </div>
+
+        {appt.reason && (
+          <p className="mt-3 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
+            <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
+          </p>
+        )}
+        {appt.documents.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {appt.documents.map((d, i) => (
+              <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] bg-blue-50 border border-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-100 transition-colors">
+                <FileText size={10} /> {d.name}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Prescription toggle */}
+      <button onClick={() => setOpen(v => !v)}
+        className={cn(
+          "w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold border-t border-border transition-colors",
+          open ? "bg-muted/20 text-muted-foreground" : appt.prescription?.photoObjectPath
+            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            : "bg-muted/10 text-muted-foreground hover:bg-muted/20"
+        )}>
+        <ImageIcon size={11} />
+        {open ? "Hide Prescription" : appt.prescription?.photoObjectPath ? "View / Update Prescription" : "Upload Prescription"}
+        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-4 py-4">
+          <PrescriptionUpload apptId={appt.id} prescription={appt.prescription}
+            onUploaded={rx => onPrescriptionUploaded(appt.id, rx)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────
 export default function AdminAppointments() {
+  // In-person state
   const [appts, setAppts] = useState<Appt[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -255,43 +453,52 @@ export default function AdminAppointments() {
   useEffect(() => { notifyRef.current = notify; }, [notify]);
   const queryClient = useQueryClient();
 
-  // Online appointments
+  // Online state
   const [mainTab, setMainTab] = useState<"inperson" | "online">("inperson");
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
-  const [onlineFilter, setOnlineFilter] = useState("all");
   const [onlineLoading, setOnlineLoading] = useState(false);
-  const [approveModal, setApproveModal] = useState<OnlineAppt | null>(null);
+  const [meetingLink, setMeetingLink] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [onlineErr, setOnlineErr] = useState("");
+  const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchOnlineAppts() {
-    setOnlineLoading(true);
+  // ── Load online appointments ──
+  const loadOnline = useCallback(async (silent = false) => {
+    if (!silent) setOnlineLoading(true);
+    setOnlineErr("");
     try {
-      const data = await apiFetch("/online-appointments/admin");
-      setOnlineAppts(Array.isArray(data) ? data : []);
-    } catch { /* ignore */ }
-    finally { setOnlineLoading(false); }
-  }
-
-  useEffect(() => {
-    fetchOnlineAppts();
+      const [list, settings] = await Promise.all([
+        fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" }).then(r => r.json()),
+        fetch(`${BASE}/api/admin/settings`, { credentials: "include" }).then(r => r.json()),
+      ]);
+      setOnlineAppts(Array.isArray(list) ? list : []);
+      setMeetingLink(settings.meetingLink ?? null);
+      setLastRefresh(new Date());
+    } catch { if (!silent) setOnlineErr("Failed to load online appointments"); }
+    finally { if (!silent) setOnlineLoading(false); }
   }, []);
 
   useEffect(() => {
-    if (mainTab === "online") fetchOnlineAppts();
-  }, [mainTab]);
+    if (mainTab !== "online") return;
+    loadOnline();
+    onlineIntervalRef.current = setInterval(() => loadOnline(true), 20_000);
+    return () => { if (onlineIntervalRef.current) clearInterval(onlineIntervalRef.current); };
+  }, [mainTab, loadOnline]);
 
-  function mutateOnline(updated: OnlineAppt) {
-    setOnlineAppts(prev => prev.map(a => a.id === updated.id ? updated : a));
+  async function toggleJoin(id: number, enable: boolean) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/${enable ? "enable-join" : "disable-join"}`, {
+        method: "POST", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.map(a => a.id === id
+        ? { ...a, joinEnabled: enable, status: enable ? "confirmed" : "completed" }
+        : enable ? { ...a, joinEnabled: false } : a
+      ));
+      if (enable) playChime();
+    } catch { setOnlineErr("Action failed. Please try again."); }
   }
 
-  async function cancelOnline(id: number) {
-    if (!confirm("Cancel this online consultation?")) return;
-    const updated = await apiFetch(`/online-appointments/admin/${id}/cancel`, { method: "PATCH" });
-    mutateOnline(updated);
-  }
-
-  const onlinePendingCount = onlineAppts.filter(a => a.status === "pending").length;
-  const shownOnline = onlineFilter === "all" ? onlineAppts : onlineAppts.filter(a => a.status === onlineFilter);
-
+  // ── Load in-person appointments ──
   async function fetchAppts() {
     setLoading(true);
     const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
@@ -302,7 +509,7 @@ export default function AdminAppointments() {
 
   useEffect(() => { fetchAppts(); }, [filter]);
 
-  // SSE subscription — connect once, use notifyRef so we always call the latest notify
+  // SSE for in-person new appointments
   useEffect(() => {
     const es = new EventSource(`${API}/appointments/notifications`, { withCredentials: true });
     es.onmessage = (e) => {
@@ -310,317 +517,279 @@ export default function AdminAppointments() {
         const msg = JSON.parse(e.data);
         if (msg.type === "new_appointment") {
           const a: Appt = msg.appointment;
-          setAppts((prev) => [a, ...prev.filter((x) => x.id !== a.id)]);
-          notifyRef.current("New Appointment Request", `${a.patientName} — ${fmt(a.date)} ${a.timeSlot}`);
+          setAppts(prev => [a, ...prev.filter(x => x.id !== a.id)]);
+          notifyRef.current("New Appointment", `${a.patientName} — ${fmt(a.date)} ${a.timeSlot}`);
         }
       } catch {}
     };
-    // Polling fallback every 30s in case SSE drops or proxy buffers
     const poll = setInterval(() => fetchAppts(), 30000);
     return () => { es.close(); clearInterval(poll); };
   }, []);
 
-  function mutate(updated: Appt) {
-    setAppts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-  }
-
-  async function approve(id: number) {
-    const updated = await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) });
-    mutate(updated);
-  }
-  async function cancel(id: number) {
-    if (!confirm("Cancel this appointment?")) return;
-    const updated = await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "cancelled" }) });
-    mutate(updated);
-  }
-  async function arrive(id: number) {
-    const updated = await apiFetch(`/appointments/${id}/arrive`, { method: "PATCH" });
-    mutate(updated);
-  }
+  function mutate(updated: Appt) { setAppts(prev => prev.map(a => a.id === updated.id ? updated : a)); }
+  async function approve(id: number) { mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) })); }
+  async function cancel(id: number) { if (!confirm("Cancel this appointment?")) return; mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "cancelled" }) })); }
+  async function arrive(id: number) { mutate(await apiFetch(`/appointments/${id}/arrive`, { method: "PATCH" })); }
 
   const today = new Date().toISOString().slice(0, 10);
-  const pendingCount = appts.filter((a) => a.status === "pending").length;
-  const todayAppts = appts.filter((a) => a.date === today);
-  const shown = filter === "all" ? appts : appts.filter((a) => a.status === filter);
+  const pendingCount = appts.filter(a => a.status === "pending").length;
+  const onlinePendingCount = onlineAppts.filter(a => a.status === "pending").length;
+  const onlineLiveCount = onlineAppts.filter(a => a.joinEnabled).length;
+  const todayAppts = appts.filter(a => a.date === today);
+  const shown = filter === "all" ? appts : appts.filter(a => a.status === filter);
+  const sortedOnline = [...onlineAppts].sort((a, b) => {
+    if (a.joinEnabled && !b.joinEnabled) return -1;
+    if (!a.joinEnabled && b.joinEnabled) return 1;
+    return b.slot.date.localeCompare(a.slot.date);
+  });
 
   return (
     <AdminLayout>
-      {payModal && <PayModal appt={payModal} onClose={() => setPayModal(null)} onPaid={(a) => { mutate(a); setPayModal(null); }} />}
-      {rescheduleModal && <RescheduleModal appt={rescheduleModal} onClose={() => setRescheduleModal(null)} onProposed={(a) => { mutate(a); }} />}
-      {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={(a) => { mutate(a); }} />}
+      {payModal && <PayModal appt={payModal} onClose={() => setPayModal(null)} onPaid={a => { mutate(a); setPayModal(null); }} />}
+      {rescheduleModal && <RescheduleModal appt={rescheduleModal} onClose={() => setRescheduleModal(null)} onProposed={a => { mutate(a); }} />}
+      {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={a => { mutate(a); }} />}
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Appointments</h1>
+          <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             {pendingCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-sm text-yellow-700 font-medium bg-yellow-100 px-3 py-0.5 rounded-full border border-yellow-200">
-                <Clock size={13} /> {pendingCount} in-person pending
+              <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                <Clock size={11} /> {pendingCount} in-person pending
               </span>
             )}
             {onlinePendingCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-sm text-blue-700 font-medium bg-blue-100 px-3 py-0.5 rounded-full border border-blue-200">
-                <Video size={13} /> {onlinePendingCount} online pending
+              <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 font-medium bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200">
+                <Video size={11} /> {onlinePendingCount} online pending
               </span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={requestPermission}
-            className={cn("flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors",
-              permission === "granted" ? "bg-green-50 text-green-700 border-green-200" : "bg-muted text-muted-foreground border-border hover:border-primary/40")}>
-            {permission === "granted" ? <Bell size={14} /> : <BellOff size={14} />}
-            {permission === "granted" ? "Notifications On" : "Enable Notifications"}
-          </button>
-          <button onClick={mainTab === "inperson" ? fetchAppts : fetchOnlineAppts} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted">
+          {mainTab === "inperson" && (
+            <button onClick={requestPermission}
+              className={cn("flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors",
+                permission === "granted" ? "bg-green-50 text-green-700 border-green-200" : "bg-muted text-muted-foreground border-border hover:border-primary/40")}>
+              {permission === "granted" ? <Bell size={14} /> : <BellOff size={14} />}
+              {permission === "granted" ? "Notifs On" : "Enable Notifs"}
+            </button>
+          )}
+          <button onClick={() => mainTab === "inperson" ? fetchAppts() : loadOnline()}
+            className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors" title="Refresh">
             <RefreshCw size={15} />
           </button>
         </div>
       </div>
 
       {/* Main type tabs */}
-      <div className="flex gap-2 mb-6 bg-muted/50 rounded-2xl p-1">
+      <div className="flex gap-2 mb-6 bg-muted/40 rounded-2xl p-1 border border-border">
         <button onClick={() => setMainTab("inperson")}
           className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
             mainTab === "inperson" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
-          <UserCheck size={14} /> In-Person
+          <MapPin size={14} /> In-Person
+          {pendingCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{pendingCount}</span>
+          )}
         </button>
         <button onClick={() => setMainTab("online")}
           className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
             mainTab === "online" ? "bg-white shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground")}>
-          <Video size={14} /> Online Consultations
+          <Video size={14} /> Online
           {onlinePendingCount > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-              {onlinePendingCount} new
-            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{onlinePendingCount} new</span>
+          )}
+          {onlineLiveCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           )}
         </button>
       </div>
 
-      {/* ── Online tab content ─────────────────────────────────── */}
+      {/* ── ONLINE TAB ───────────────────────────────────────────── */}
       {mainTab === "online" && (
-        <>
-          {approveModal && (
-            <OnlineApproveModal appt={approveModal} onClose={() => setApproveModal(null)}
-              onApproved={(a) => { mutateOnline(a); setApproveModal(null); }} />
-          )}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {["all", "pending", "confirmed", "completed", "cancelled"].map((s) => (
-              <button key={s} onClick={() => setOnlineFilter(s)}
-                className={cn("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border capitalize",
-                  onlineFilter === s ? "bg-foreground text-white border-foreground" : "bg-white border-border text-muted-foreground hover:border-primary/40")}>
-                {ONLINE_STATUS_LABELS[s] || s}
-              </button>
-            ))}
+        <div className="space-y-4">
+          {/* Sub-header with auto-refresh time */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Auto-refreshes every 20s</span>
+            <span>Last: {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
           </div>
-          <div className="space-y-3">
-            {onlineLoading ? (
-              <div className="py-16 text-center text-muted-foreground flex items-center justify-center gap-2">
-                <Loader2 size={16} className="animate-spin" /> Loading online appointments…
-              </div>
-            ) : shownOnline.length === 0 ? (
-              <div className="py-16 text-center bg-white rounded-2xl border border-border">
-                <Video size={40} className="mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-muted-foreground text-sm">No online consultation appointments</p>
-              </div>
-            ) : shownOnline.map((a) => (
-              <div key={a.id} className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden",
-                a.status === "pending" ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border")}>
-                <div className="p-4 flex flex-wrap items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                    <Video size={16} className="text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <span className="font-bold text-foreground">{a.patientName}</span>
-                      <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", ONLINE_STATUS_COLORS[a.status] ?? ONLINE_STATUS_COLORS.pending)}>
-                        {ONLINE_STATUS_LABELS[a.status] ?? a.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{fmtOnlineSlot(a)} · {a.patientEmail}</p>
-                    {a.reason && <p className="text-xs text-muted-foreground mt-0.5 italic">"{a.reason}"</p>}
-                    {a.meetingLink && (
-                      <a href={a.meetingLink} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline mt-0.5">
-                        <Link2 size={10} /> {a.meetingLink}
-                      </a>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {a.status === "pending" && (
-                      <>
-                        <button onClick={() => setApproveModal(a)}
-                          className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-700 transition-colors">
-                          <CheckCircle2 size={13} /> Approve
-                        </button>
-                        <button onClick={() => cancelOnline(a.id)}
-                          className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
-                          <XCircle size={13} /> Decline
-                        </button>
-                      </>
-                    )}
-                    {a.status === "confirmed" && (
-                      <button onClick={() => cancelOnline(a.id)}
-                        className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
-                        Cancel
-                      </button>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(a.createdAt).toLocaleDateString("en-IN")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
 
-      {/* ── In-Person tab content ───────────────────────────────── */}
-      {mainTab === "inperson" && (
-      <div className="space-y-6">
-      {/* Today summary */}
-      {todayAppts.length > 0 && (
-        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 mb-6">
-          <p className="text-primary font-semibold text-sm flex items-center gap-2 mb-2">
-            <Calendar size={14} /> Today's Schedule — {todayAppts.length} appointment{todayAppts.length !== 1 && "s"}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {todayAppts.map((a) => (
-              <span key={a.id} className={cn("text-xs px-3 py-1 rounded-full border font-medium", STATUS_COLORS[a.status] || STATUS_COLORS.pending)}>
-                {a.timeSlot} · {a.patientName}
-              </span>
-            ))}
-          </div>
+          {/* Meeting link editor */}
+          <MeetingLinkBar meetingLink={meetingLink} onSaved={link => setMeetingLink(link)} />
+
+          {/* Live session badge */}
+          {onlineLiveCount > 0 && (
+            <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3 flex items-center gap-3">
+              <Video size={16} className="animate-pulse shrink-0" />
+              <div>
+                <p className="font-bold text-sm">{onlineLiveCount === 1 ? "1 Session Active" : `${onlineLiveCount} Sessions Active`}</p>
+                <p className="text-white/70 text-xs">{sortedOnline.filter(a => a.joinEnabled).map(a => a.patient.name).join(", ")}</p>
+              </div>
+            </div>
+          )}
+
+          {onlineErr && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-red-700">
+              <AlertCircle size={14} /> {onlineErr}
+            </div>
+          )}
+
+          {onlineLoading ? (
+            <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-muted-foreground" /></div>
+          ) : sortedOnline.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-border p-12 text-center">
+              <Video size={40} className="text-muted-foreground/20 mx-auto mb-3" />
+              <p className="font-semibold text-muted-foreground">No online appointments yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Patients can book through the patient portal</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sortedOnline.map(appt => (
+                <OnlineApptCard
+                  key={appt.id} appt={appt} meetingLink={meetingLink}
+                  onJoinToggle={toggleJoin}
+                  onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {["all", "pending", "confirmed", "arrived", "completed", "reschedule_proposed", "cancelled"].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={cn("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border capitalize",
-              filter === s ? "bg-foreground text-white border-foreground" : "bg-white border-border text-muted-foreground hover:border-primary/40")}>
-            {STATUS_LABELS[s] || s}
-          </button>
-        ))}
-      </div>
-
-      {/* Appointment list */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="py-16 text-center text-muted-foreground">Loading...</div>
-        ) : shown.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground">No appointments found</div>
-        ) : (
-          shown.map((a) => {
-            const isExpanded = expanded === a.id;
-            const reschedDates: string[] = a.rescheduleDates ? JSON.parse(a.rescheduleDates) : [];
-            return (
-              <div key={a.id} className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden transition-all",
-                a.status === "pending" ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border")}>
-                {/* Main row */}
-                <div className="p-4 flex flex-wrap items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <span className="font-bold text-foreground truncate">{a.patientName}</span>
-                      <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", STATUS_COLORS[a.status] || "bg-gray-100 text-gray-600 border-gray-200")}>
-                        {STATUS_LABELS[a.status] || a.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1"><Calendar size={11} /> {fmt(a.date)}</span>
-                      <span className="flex items-center gap-1"><Clock size={11} /> {a.timeSlot}</span>
-                      <span>{a.patientPhone}</span>
-                    </div>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {/* Approve */}
-                    {a.status === "pending" && (
-                      <>
-                        <button onClick={() => approve(a.id)}
-                          className="flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-green-700 transition-colors">
-                          <CheckCircle2 size={13} /> Approve
-                        </button>
-                        <button onClick={() => setRescheduleModal(a)}
-                          className="flex items-center gap-1.5 bg-orange-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-orange-600 transition-colors">
-                          <RefreshCw size={13} /> Reschedule
-                        </button>
-                        <button onClick={() => cancel(a.id)}
-                          className="flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-red-600 transition-colors">
-                          <XCircle size={13} /> Decline
-                        </button>
-                      </>
-                    )}
-                    {/* Arrived */}
-                    {a.status === "confirmed" && (
-                      <>
-                        <button onClick={() => arrive(a.id)}
-                          className="flex items-center gap-1.5 bg-teal-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-teal-700 transition-colors">
-                          <UserCheck size={13} /> Arrived
-                        </button>
-                        <button onClick={() => cancel(a.id)}
-                          className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
-                          Cancel
-                        </button>
-                      </>
-                    )}
-                    {/* Pay */}
-                    {a.status === "arrived" && a.paymentStatus === "unpaid" && (
-                      <button onClick={() => setPayModal(a)}
-                        className="flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors">
-                        <Banknote size={13} /> Mark Paid
-                      </button>
-                    )}
-                    {/* Follow-up */}
-                    {a.status === "completed" && (
-                      <button onClick={() => setFollowUpModal(a)}
-                        className="flex items-center gap-1.5 border border-border text-muted-foreground text-xs font-medium px-3 py-2 rounded-xl hover:bg-muted transition-colors">
-                        <Calendar size={13} /> {a.followUpDate ? "Edit Follow-up" : "Set Follow-up"}
-                      </button>
-                    )}
-                    {/* Reschedule for confirmed */}
-                    {a.status === "reschedule_accepted" && (
-                      <button onClick={() => approve(a.id)}
-                        className="flex items-center gap-1.5 bg-purple-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-purple-700 transition-colors">
-                        <CheckCircle2 size={13} /> Confirm New Date
-                      </button>
-                    )}
-                    {/* Expand */}
-                    <button onClick={() => setExpanded(isExpanded ? null : a.id)}
-                      className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted">
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded details */}
-                {isExpanded && (
-                  <div className="border-t border-border bg-muted/30 p-4 space-y-3">
-                    {a.reason && <div className="text-sm"><span className="font-medium">Reason: </span>{a.reason}</div>}
-                    {a.patientEmail && <div className="text-sm"><span className="font-medium">Email: </span>{a.patientEmail}</div>}
-                    {a.arrivedAt && <div className="text-sm text-teal-700"><span className="font-medium">Arrived at: </span>{new Date(a.arrivedAt).toLocaleTimeString("en-IN")}</div>}
-                    {a.paymentStatus === "paid" && <div className="text-sm text-green-700"><span className="font-medium">Payment: </span>Paid via {a.paymentMode?.toUpperCase()}</div>}
-                    {a.followUpDate && <div className="text-sm text-amber-700"><span className="font-medium">Follow-up: </span>{fmt(a.followUpDate)} {a.followUpConfirmed ? "✓ Patient confirmed" : "⏳ Awaiting patient confirmation"}</div>}
-                    {reschedDates.length > 0 && (
-                      <div className="text-sm"><span className="font-medium">Proposed dates: </span>{reschedDates.map(fmt).join(", ")}
-                        {a.rescheduleChosen && <span className="text-purple-700 ml-2">→ Patient chose: {fmt(a.rescheduleChosen)}</span>}
-                      </div>
-                    )}
-                    {a.notes && <div className="text-sm"><span className="font-medium">Notes: </span>{a.notes}</div>}
-                    <div className="text-xs text-muted-foreground">Booked: {new Date(a.createdAt).toLocaleString("en-IN")}</div>
-                  </div>
-                )}
+      {/* ── IN-PERSON TAB ────────────────────────────────────────── */}
+      {mainTab === "inperson" && (
+        <div className="space-y-5">
+          {/* Today summary */}
+          {todayAppts.length > 0 && (
+            <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/15 rounded-2xl p-4">
+              <p className="text-[#1a3d2b] font-semibold text-sm flex items-center gap-2 mb-2">
+                <Calendar size={14} /> Today — {todayAppts.length} appointment{todayAppts.length !== 1 && "s"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {todayAppts.map(a => (
+                  <span key={a.id} className={cn("text-xs px-3 py-1 rounded-full border font-medium", STATUS_COLORS[a.status] || STATUS_COLORS.pending)}>
+                    {a.timeSlot} · {a.patientName}
+                  </span>
+                ))}
               </div>
-            );
-          })
-        )}
-      </div>
-      </div>
+            </div>
+          )}
+
+          {/* Filter tabs */}
+          <div className="flex flex-wrap gap-2">
+            {["all", "pending", "confirmed", "arrived", "completed", "reschedule_proposed", "cancelled"].map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                className={cn("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border capitalize",
+                  filter === s ? "bg-foreground text-white border-foreground" : "bg-white border-border text-muted-foreground hover:border-primary/40")}>
+                {STATUS_LABELS[s] || s}
+              </button>
+            ))}
+          </div>
+
+          {/* List */}
+          <div className="space-y-3">
+            {loading ? (
+              <div className="py-16 text-center text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={16} className="animate-spin" /> Loading…
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="py-16 text-center text-muted-foreground bg-white rounded-2xl border border-border">
+                No appointments found
+              </div>
+            ) : shown.map(a => {
+              const isExpanded = expanded === a.id;
+              const reschedDates: string[] = a.rescheduleDates ? JSON.parse(a.rescheduleDates) : [];
+              return (
+                <div key={a.id} className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden transition-all",
+                  a.status === "pending" ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border")}>
+                  <div className="p-4 flex flex-wrap items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                        <span className="font-bold text-foreground truncate">{a.patientName}</span>
+                        <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", STATUS_COLORS[a.status] || "bg-gray-100 text-gray-600 border-gray-200")}>
+                          {STATUS_LABELS[a.status] || a.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1"><Calendar size={11} /> {fmt(a.date)}</span>
+                        <span className="flex items-center gap-1"><Clock size={11} /> {a.timeSlot}</span>
+                        <span>{a.patientPhone}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {a.status === "pending" && (
+                        <>
+                          <button onClick={() => approve(a.id)}
+                            className="flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-green-700 transition-colors">
+                            <CheckCircle2 size={13} /> Approve
+                          </button>
+                          <button onClick={() => setRescheduleModal(a)}
+                            className="flex items-center gap-1.5 bg-orange-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-orange-600 transition-colors">
+                            <RefreshCw size={13} /> Reschedule
+                          </button>
+                          <button onClick={() => cancel(a.id)}
+                            className="flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-red-600 transition-colors">
+                            <XCircle size={13} /> Decline
+                          </button>
+                        </>
+                      )}
+                      {a.status === "confirmed" && (
+                        <>
+                          <button onClick={() => arrive(a.id)}
+                            className="flex items-center gap-1.5 bg-teal-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-teal-700 transition-colors">
+                            <UserCheck size={13} /> Arrived
+                          </button>
+                          <button onClick={() => cancel(a.id)}
+                            className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                      {a.status === "arrived" && a.paymentStatus === "unpaid" && (
+                        <button onClick={() => setPayModal(a)}
+                          className="flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors">
+                          <Banknote size={13} /> Mark Paid
+                        </button>
+                      )}
+                      {a.status === "completed" && (
+                        <button onClick={() => setFollowUpModal(a)}
+                          className="flex items-center gap-1.5 border border-border text-muted-foreground text-xs font-medium px-3 py-2 rounded-xl hover:bg-muted transition-colors">
+                          <Calendar size={13} /> {a.followUpDate ? "Edit Follow-up" : "Set Follow-up"}
+                        </button>
+                      )}
+                      {a.status === "reschedule_accepted" && (
+                        <button onClick={() => approve(a.id)}
+                          className="flex items-center gap-1.5 bg-purple-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-purple-700 transition-colors">
+                          <CheckCircle2 size={13} /> Confirm New Date
+                        </button>
+                      )}
+                      <button onClick={() => setExpanded(isExpanded ? null : a.id)}
+                        className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors">
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-border bg-muted/30 p-4 space-y-2.5 text-sm">
+                      {a.reason && <div><span className="font-medium">Reason: </span>{a.reason}</div>}
+                      {a.patientEmail && <div><span className="font-medium">Email: </span>{a.patientEmail}</div>}
+                      {a.arrivedAt && <div className="text-teal-700"><span className="font-medium">Arrived: </span>{new Date(a.arrivedAt).toLocaleTimeString("en-IN")}</div>}
+                      {a.paymentStatus === "paid" && <div className="text-green-700"><span className="font-medium">Payment: </span>Paid via {a.paymentMode?.toUpperCase()}</div>}
+                      {a.followUpDate && <div className="text-amber-700"><span className="font-medium">Follow-up: </span>{fmt(a.followUpDate)} {a.followUpConfirmed ? "✓ Patient confirmed" : "⏳ Awaiting"}</div>}
+                      {reschedDates.length > 0 && (
+                        <div><span className="font-medium">Proposed dates: </span>{reschedDates.map(fmt).join(", ")}
+                          {a.rescheduleChosen && <span className="text-purple-700 ml-2">→ Chose: {fmt(a.rescheduleChosen)}</span>}
+                        </div>
+                      )}
+                      {a.notes && <div><span className="font-medium">Notes: </span>{a.notes}</div>}
+                      <div className="text-xs text-muted-foreground">Booked: {new Date(a.createdAt).toLocaleString("en-IN")}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
