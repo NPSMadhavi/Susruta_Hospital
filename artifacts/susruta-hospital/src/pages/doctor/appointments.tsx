@@ -355,7 +355,7 @@ export default function DoctorAppointments() {
     <div className="min-h-screen bg-[#f4f7f5]">
       {/* Header */}
       <header className="bg-[#1a3d2b] shadow-lg sticky top-0 z-30">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3">
           <img src={logoImg} alt="" className="h-9 brightness-0 invert" />
           <div className="flex-1">
             <p className="text-white/60 text-[11px] font-medium uppercase tracking-wide leading-none">Doctor Portal</p>
@@ -375,7 +375,7 @@ export default function DoctorAppointments() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-5 space-y-4">
         {/* Live session alert */}
         {liveAppts.length > 0 && (
           <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3 flex items-center gap-3">
@@ -429,7 +429,7 @@ export default function DoctorAppointments() {
               <p className="font-semibold text-muted-foreground">No online consultations yet</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {sortedOnline.map(appt => (
                 <OnlineCard key={appt.id} appt={appt} onPrescriptionUploaded={handlePrescriptionUploaded} />
               ))}
@@ -442,7 +442,7 @@ export default function DoctorAppointments() {
               <p className="font-semibold text-muted-foreground">No in-person appointments yet</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {sortedOffline.map(appt => (
                 <OfflineCard key={appt.id} appt={appt} />
               ))}

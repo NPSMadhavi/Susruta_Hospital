@@ -328,7 +328,7 @@ export default function PatientDashboard() {
     setPatient(me);
     setOnlineAppts(myOnline ?? []);
     setPhysicalAppts(myPhysical ?? []);
-    setJoinMeetingLink(settings?.meetingLink ?? null);
+    setJoinMeetingLink((settings as any)?.meetingLink ?? null);
     setLoading(false);
   }, []);
 
@@ -392,204 +392,218 @@ export default function PatientDashboard() {
 
       {/* Header */}
       <header className="bg-white border-b border-border shadow-sm sticky top-0 z-30">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain" />
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+          <img src={logoImg} alt="Susruta Hospital" className="h-8 w-auto object-contain shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-muted-foreground leading-none font-medium uppercase tracking-wide">Patient Portal</p>
+            <p className="hidden sm:block text-[10px] text-muted-foreground leading-none font-medium uppercase tracking-wide">Patient Portal</p>
             <p className="font-bold text-sm text-foreground truncate">{patient?.name}</p>
           </div>
           {patient?.patientCode && (
-            <div className="bg-[#1a3d2b] text-white px-3 py-1.5 rounded-xl text-center shrink-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 leading-none">Patient ID</p>
+            <div className="bg-[#1a3d2b] text-white px-2.5 py-1.5 rounded-xl text-center shrink-0">
+              <p className="text-[8px] font-bold uppercase tracking-widest opacity-60 leading-none hidden sm:block">Patient ID</p>
               <p className="font-black text-sm leading-tight font-mono">{patient.patientCode}</p>
             </div>
           )}
-          {hasLiveAppt && (
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Live session active" />
-          )}
-          <button onClick={loadData} className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40 transition-colors" title="Refresh">
-            <RefreshCw size={15} />
+          {hasLiveAppt && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+          <button onClick={loadData}
+            className="flex items-center gap-1.5 px-2.5 py-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40 transition-colors text-xs font-medium shrink-0"
+            title="Refresh">
+            <RefreshCw size={14} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
-          <button onClick={logout} className="p-2 text-muted-foreground hover:text-red-500 rounded-xl hover:bg-red-50 transition-colors" title="Logout">
-            <LogOut size={15} />
+          <button onClick={logout}
+            className="flex items-center gap-1.5 px-2.5 py-2 text-muted-foreground hover:text-red-600 rounded-xl hover:bg-red-50 transition-colors text-xs font-medium border border-border shrink-0"
+            title="Logout">
+            <LogOut size={14} />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-5">
+        <div className="lg:grid lg:grid-cols-[300px_1fr] lg:gap-6 space-y-4 lg:space-y-0">
 
-        {/* Welcome card */}
-        <div className="bg-[#1a3d2b] rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
-          <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-            <Stethoscope size={22} className="text-white/80" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white/70 text-xs font-medium">Welcome back</p>
-            <p className="text-white font-bold text-base truncate">{patient?.name}</p>
-            {patient?.patientCode && (
-              <p className="text-white/60 text-xs mt-0.5">
-                ID: <span className="text-white font-extrabold font-mono">{patient.patientCode}</span>
-                <span className="ml-1.5 opacity-60">· mention when visiting in person</span>
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => nav("/portal/book")}
-            className="shrink-0 flex items-center gap-1.5 bg-white text-[#1a3d2b] font-bold text-xs px-3.5 py-2.5 rounded-xl hover:bg-white/90 transition-colors shadow-sm"
-          >
-            <Plus size={13} /> Book Appointment
-          </button>
-        </div>
-
-        {/* Live session alert */}
-        {hasLiveAppt && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-emerald-600 rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 shadow-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Video size={18} className="text-white animate-pulse" />
+          {/* ── LEFT SIDEBAR (desktop) / TOP SECTION (mobile) ── */}
+          <div className="space-y-4">
+            {/* Welcome card */}
+            <div className="bg-[#1a3d2b] rounded-2xl px-5 py-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                  <Stethoscope size={20} className="text-white/80" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/60 text-xs font-medium">Welcome back</p>
+                  <p className="text-white font-bold text-base truncate">{patient?.name}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-white font-bold text-sm">Your doctor is ready!</p>
-                <p className="text-white/80 text-xs">Tap to join your consultation now</p>
-              </div>
-            </div>
-            {joinMeetingLink && (
-              <a href={joinMeetingLink} target="_blank" rel="noopener noreferrer"
-                className="shrink-0 bg-white text-emerald-700 font-extrabold text-xs px-3.5 py-2 rounded-xl hover:bg-white/90 transition-colors">
-                Join Now →
-              </a>
-            )}
-          </motion.div>
-        )}
-
-        {/* Tab bar */}
-        <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-border shadow-sm">
-          {[
-            { key: "appointments", label: "My Appointments", icon: <Calendar size={13} /> },
-            { key: "prescriptions", label: "Prescriptions", icon: <FileText size={13} /> },
-          ].map(t => (
-            <button key={t.key}
-              onClick={() => setTab(t.key as any)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                tab === t.key
-                  ? "bg-[#1a3d2b] text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-              )}>
-              {t.icon}
-              {t.label}
-              {t.key === "appointments" && hasLiveAppt && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {patient?.patientCode && (
+                <div className="bg-white/10 rounded-xl px-4 py-3 mb-4">
+                  <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest mb-0.5">Your Patient ID</p>
+                  <p className="text-white font-black text-2xl font-mono tracking-wider">{patient.patientCode}</p>
+                  <p className="text-white/50 text-[10px] mt-0.5">Mention this ID when visiting in person</p>
+                </div>
               )}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Appointments Tab ── */}
-        {tab === "appointments" && (
-          <div className="space-y-3">
-            {/* Sub-filter */}
-            <div className="flex items-center justify-between">
-              <div className="flex gap-1">
-                {(["all", "online", "physical"] as const).map(f => (
-                  <button key={f} onClick={() => setApptFilter(f)}
-                    className={cn(
-                      "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all",
-                      apptFilter === f
-                        ? "bg-foreground text-white border-foreground"
-                        : "bg-white text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground"
-                    )}>
-                    {f === "all" ? "All" : f === "online" ? "Online" : "In-Person"}
-                  </button>
-                ))}
-              </div>
               <button
                 onClick={() => nav("/portal/book")}
-                className="flex items-center gap-1 text-xs font-semibold text-[#1a3d2b] hover:underline">
-                <Plus size={12} /> New
+                className="w-full flex items-center justify-center gap-1.5 bg-white text-[#1a3d2b] font-bold text-sm px-4 py-2.5 rounded-xl hover:bg-white/90 transition-colors shadow-sm">
+                <Plus size={14} /> Book Appointment
               </button>
             </div>
 
-            {/* Empty */}
-            {filteredAppts.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-border p-8 text-center">
-                <Calendar size={36} className="text-muted-foreground/20 mx-auto mb-3" />
-                <p className="font-semibold text-foreground text-sm mb-1">No appointments yet</p>
-                <p className="text-xs text-muted-foreground mb-4">Book your first appointment with Dr. P. Murali Krishna</p>
-                <button onClick={() => nav("/portal/book")}
-                  className="text-sm bg-[#1a3d2b] text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-[#1a3d2b]/90 transition-colors">
-                  Book Appointment
-                </button>
-              </div>
-            ) : (
-              filteredAppts.map((item, i) => (
-                item.type === "online" ? (
-                  <OnlineApptCard
-                    key={`online-${(item.data as OnlineAppt).id}`}
-                    appt={item.data as OnlineAppt}
-                    joinMeetingLink={joinMeetingLink}
-                    onJoinClick={() => setJoinPopup(null)}
-                  />
-                ) : (
-                  <PhysicalApptCard
-                    key={`physical-${(item.data as PhysicalAppt).id}`}
-                    appt={item.data as PhysicalAppt}
-                  />
-                )
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ── Prescriptions Tab ── */}
-        {tab === "prescriptions" && (
-          <div className="space-y-3">
-            {prescriptions.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-border p-8 text-center">
-                <FileText size={36} className="text-muted-foreground/20 mx-auto mb-3" />
-                <p className="font-semibold text-foreground text-sm mb-1">No prescriptions yet</p>
-                <p className="text-xs text-muted-foreground">After your online consultation, the doctor will upload your prescription here.</p>
-              </div>
-            ) : (
-              prescriptions.map(appt => (
-                <div key={appt.id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-                    <div>
-                      <p className="font-bold text-sm text-foreground">{fmtDate(appt.slot.date)}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</p>
-                    </div>
-                    <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                      target="_blank" rel="noopener noreferrer" download
-                      className="flex items-center gap-1.5 text-xs bg-[#1a3d2b] text-white font-semibold px-3.5 py-2 rounded-xl hover:bg-[#1a3d2b]/90 shrink-0 transition-colors">
-                      <Download size={12} /> Download
-                    </a>
-                  </div>
-                  {appt.prescription?.notes && (
-                    <div className="px-5 pt-3 pb-0">
-                      <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2.5">
-                        <span className="font-semibold text-foreground">Doctor's Note: </span>{appt.prescription.notes}
-                      </p>
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <div className="bg-gray-50 rounded-xl overflow-hidden border border-border">
-                      <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                        alt="Prescription" className="w-full max-h-[420px] object-contain" />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-2 text-right">
-                      Issued {new Date(appt.prescription!.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
-                    </p>
+            {/* Live session alert */}
+            {hasLiveAppt && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-emerald-600 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <Video size={18} className="text-white animate-pulse shrink-0" />
+                  <div>
+                    <p className="text-white font-bold text-sm">Doctor is ready!</p>
+                    <p className="text-white/80 text-xs">Join your consultation now</p>
                   </div>
                 </div>
-              ))
+                {joinMeetingLink && (
+                  <a href={joinMeetingLink} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 bg-white text-emerald-700 font-extrabold text-xs px-3 py-2 rounded-xl hover:bg-white/90 transition-colors">
+                    Join →
+                  </a>
+                )}
+              </motion.div>
             )}
-          </div>
-        )}
 
-        <p className="text-center text-xs text-muted-foreground pb-4">
-          Keep this portal open during your appointment time — you'll be notified when the doctor is ready.
-        </p>
+            {/* Info note (desktop only) */}
+            <p className="hidden lg:block text-xs text-muted-foreground text-center">
+              Keep this portal open during your appointment — you'll be notified when the doctor is ready.
+            </p>
+          </div>
+
+          {/* ── RIGHT MAIN CONTENT ── */}
+          <div className="space-y-4">
+            {/* Tab bar */}
+            <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-border shadow-sm">
+              {[
+                { key: "appointments", label: "My Appointments", icon: <Calendar size={13} /> },
+                { key: "prescriptions", label: "Prescriptions", icon: <FileText size={13} /> },
+              ].map(t => (
+                <button key={t.key}
+                  onClick={() => setTab(t.key as any)}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                    tab === t.key
+                      ? "bg-[#1a3d2b] text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                  )}>
+                  {t.icon}
+                  {t.label}
+                  {t.key === "appointments" && hasLiveAppt && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Appointments Tab ── */}
+            {tab === "appointments" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-1">
+                    {(["all", "online", "physical"] as const).map(f => (
+                      <button key={f} onClick={() => setApptFilter(f)}
+                        className={cn(
+                          "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all",
+                          apptFilter === f
+                            ? "bg-foreground text-white border-foreground"
+                            : "bg-white text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground"
+                        )}>
+                        {f === "all" ? "All" : f === "online" ? "Online" : "In-Person"}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => nav("/portal/book")}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#1a3d2b] hover:underline">
+                    <Plus size={12} /> New
+                  </button>
+                </div>
+
+                {filteredAppts.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-border p-8 text-center">
+                    <Calendar size={36} className="text-muted-foreground/20 mx-auto mb-3" />
+                    <p className="font-semibold text-foreground text-sm mb-1">No appointments yet</p>
+                    <p className="text-xs text-muted-foreground mb-4">Book your first appointment with Dr. P. Murali Krishna</p>
+                    <button onClick={() => nav("/portal/book")}
+                      className="text-sm bg-[#1a3d2b] text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-[#1a3d2b]/90 transition-colors">
+                      Book Appointment
+                    </button>
+                  </div>
+                ) : (
+                  filteredAppts.map((item) => (
+                    item.type === "online" ? (
+                      <OnlineApptCard
+                        key={`online-${(item.data as OnlineAppt).id}`}
+                        appt={item.data as OnlineAppt}
+                        joinMeetingLink={joinMeetingLink}
+                        onJoinClick={() => setJoinPopup(null)}
+                      />
+                    ) : (
+                      <PhysicalApptCard
+                        key={`physical-${(item.data as PhysicalAppt).id}`}
+                        appt={item.data as PhysicalAppt}
+                      />
+                    )
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* ── Prescriptions Tab ── */}
+            {tab === "prescriptions" && (
+              <div className="space-y-4">
+                {prescriptions.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-border p-8 text-center">
+                    <FileText size={36} className="text-muted-foreground/20 mx-auto mb-3" />
+                    <p className="font-semibold text-foreground text-sm mb-1">No prescriptions yet</p>
+                    <p className="text-xs text-muted-foreground">After your online consultation, the doctor will upload your prescription here.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {prescriptions.map(appt => (
+                      <div key={appt.id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+                          <div>
+                            <p className="font-bold text-sm text-foreground">{fmtDate(appt.slot.date)}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</p>
+                          </div>
+                          <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                            target="_blank" rel="noopener noreferrer" download
+                            className="flex items-center gap-1.5 text-xs bg-[#1a3d2b] text-white font-semibold px-3.5 py-2 rounded-xl hover:bg-[#1a3d2b]/90 shrink-0 transition-colors">
+                            <Download size={12} /> Download
+                          </a>
+                        </div>
+                        {appt.prescription?.notes && (
+                          <div className="px-4 pt-3">
+                            <p className="text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2.5">
+                              <span className="font-semibold text-foreground">Note: </span>{appt.prescription.notes}
+                            </p>
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                            alt="Prescription" className="w-full max-h-[380px] object-contain rounded-xl border border-border bg-gray-50" />
+                          <p className="text-[11px] text-muted-foreground mt-2 text-right">
+                            Issued {new Date(appt.prescription!.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <p className="lg:hidden text-center text-xs text-muted-foreground pb-4">
+              Keep this portal open during your appointment — you'll be notified when the doctor is ready.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
