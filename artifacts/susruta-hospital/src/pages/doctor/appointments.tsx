@@ -61,47 +61,50 @@ const STATUS_PILL: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-400 border border-gray-200",
 };
 
-// ── Drag-resize hook ──────────────────────────────────────────
+// ── Drag-resize hook (pointer-capture based — works inside iframes) ──
 function useDragResize(initial: number, min: number, max: number) {
   const [width, setWidth] = useState(initial);
-  const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
+  const widthRef = useRef(initial);
 
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      if (!dragging.current) return;
+  // Keep widthRef in sync so callbacks always read latest value
+  useEffect(() => { widthRef.current = width; }, [width]);
+
+  const handlers = useRef({
+    onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+      startX.current = e.clientX;
+      startW.current = widthRef.current;
+      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+      e.preventDefault();
+    },
+    onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+      if (!(e.currentTarget as HTMLDivElement).hasPointerCapture(e.pointerId)) return;
       const delta = e.clientX - startX.current;
       setWidth(Math.max(min, Math.min(max, startW.current + delta)));
-    }
-    function onUp() {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
-  }, [min, max]);
+    },
+    onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    },
+  });
 
-  function onMouseDown(e: React.MouseEvent) {
-    dragging.current = true;
-    startX.current = e.clientX;
-    startW.current = width;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  }
-  return { width, onMouseDown };
+  return { width, handlers: handlers.current };
 }
 
 // ── Drag Handle ────────────────────────────────────────────────
-function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+function DragHandle({ handlers }: {
+  handlers: {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
+  };
+}) {
   return (
     <div
-      onMouseDown={onMouseDown}
-      className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 hover:bg-[#1a3d2b]/30 transition-colors group flex items-center justify-center relative"
+      onPointerDown={handlers.onPointerDown}
+      onPointerMove={handlers.onPointerMove}
+      onPointerUp={handlers.onPointerUp}
+      className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 hover:bg-[#1a3d2b]/30 active:bg-[#1a3d2b]/50 transition-colors group flex items-center justify-center relative touch-none"
     >
       <div className="absolute w-1 h-8 rounded-full bg-gray-300 group-hover:bg-[#1a3d2b]/40 transition-colors" />
     </div>
@@ -828,7 +831,7 @@ export default function DoctorPortal() {
           </div>
         </div>
 
-        <DragHandle onMouseDown={listPanel.onMouseDown} />
+        <DragHandle handlers={listPanel.handlers} />
 
         {/* ── Right area: detail + optional preview ─────────────── */}
         <div className="flex flex-1 overflow-hidden">
@@ -851,7 +854,7 @@ export default function DoctorPortal() {
                   />
                 )}
               </div>
-              <DragHandle onMouseDown={detailPanel.onMouseDown} />
+              <DragHandle handlers={detailPanel.handlers} />
               {/* Inline doc viewer */}
               <div className="flex-1 overflow-hidden">
                 <InlineDocViewer
