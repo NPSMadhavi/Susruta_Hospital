@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { db, siteSettingsTable, patientsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable } from "@workspace/db";
+import { eq, desc, inArray } from "drizzle-orm";
+import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
-import { testSmtpConnection, type SmtpConfig } from "../lib/email";
+import { sendMagicLink, testSmtpConnection, type SmtpConfig } from "../lib/email";
 
 const router = Router();
 
@@ -204,6 +205,57 @@ router.get("/patients", requireAdmin, async (_req, res) => {
     console.error("Admin patients list error:", err);
     res.status(500).json({ error: "Failed to fetch patients" });
   }
+});
+
+// ── POST /admin/patients/:id/resend-verification ───────────────
+router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
+  if (!patient) { res.status(404).json({ error: "not_found" }); return; }
+  if (patient.emailVerified) {
+    res.status(400).json({ error: "already_verified", message: "Email is already verified." });
+    return;
+  }
+
+  // Invalidate old tokens
+  await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.patientId, id));
+
+  const token = randomBytes(48).toString("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(loginTokensTable).values({ token, patientId: id, nextUrl: "/portal/dashboard", expiresAt, used: false });
+
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  const frontendUrl = domain ? `https://${domain}` : process.env.APP_URL || "https://susrutahospital.com";
+  const verifyUrl = `${frontendUrl}/api/patient/auth/verify?token=${token}`;
+
+  sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});
+
+  res.json({ success: true, message: `Verification email sent to ${patient.email}` });
+});
+
+// ── DELETE /admin/patients/:id ─────────────────────────────────
+router.delete("/patients/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
+  if (!patient) { res.status(404).json({ error: "not_found" }); return; }
+
+  // Delete in FK-safe order
+  const appts = await db.select({ id: onlineAppointmentsTable.id })
+    .from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.patientId, id));
+  if (appts.length > 0) {
+    const apptIds = appts.map(a => a.id);
+    await db.delete(prescriptionsTable).where(inArray(prescriptionsTable.onlineAppointmentId, apptIds));
+  }
+  await db.delete(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.patientId, id));
+  await db.delete(patientSessionsTable).where(eq(patientSessionsTable.patientId, id));
+  await db.delete(loginTokensTable).where(eq(loginTokensTable.patientId, id));
+  await db.delete(patientsTable).where(eq(patientsTable.id, id));
+
+  res.json({ success: true });
 });
 
 export default router;

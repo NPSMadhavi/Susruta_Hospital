@@ -29,7 +29,7 @@ type PhysicalAppt = {
   id: number; date: string; timeSlot: string; status: string;
   reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
 };
-type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string };
+type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string; emailVerified: boolean };
 
 // ── Helpers ─────────────────────────────────────────────────────
 function fmtTime(t: string) {
@@ -432,6 +432,8 @@ export default function PatientDashboard() {
   const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
+  const [verifyResending, setVerifyResending] = useState(false);
+  const [verifySent, setVerifySent] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
@@ -476,10 +478,19 @@ export default function PatientDashboard() {
     setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
   }
 
-  async function patientFetch(path: string) {
-    const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include" });
+  async function patientFetch(path: string, opts?: RequestInit) {
+    const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
     if (r.status === 401) { nav("/portal"); return null; }
     return r.json();
+  }
+
+  async function resendVerificationEmail() {
+    setVerifyResending(true);
+    try {
+      await patientFetch("/auth/resend-verification", { method: "POST" });
+      setVerifySent(true);
+    } catch {}
+    setVerifyResending(false);
   }
 
   const loadData = useCallback(async () => {
@@ -712,6 +723,37 @@ export default function PatientDashboard() {
 
           {/* ── MAIN CONTENT ───────────────────────────────────── */}
           <div ref={mainContentRef}>
+            {/* Email verification banner */}
+            {patient && !patient.emailVerified && (
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
+                    <p className="text-amber-700 text-xs mt-0.5">Please verify your email address to enable all features. Check your inbox for the verification link.</p>
+                  </div>
+                </div>
+                {verifySent ? (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shrink-0">
+                    Email sent! Check your inbox.
+                  </span>
+                ) : (
+                  <button
+                    onClick={resendVerificationEmail}
+                    disabled={verifyResending}
+                    className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl px-3 py-2 transition-colors shrink-0 disabled:opacity-60"
+                  >
+                    {verifyResending ? (
+                      <RefreshCw size={12} className="animate-spin" />
+                    ) : (
+                      <Bell size={12} />
+                    )}
+                    Resend Verification
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Tab bar */}
             <div className="flex gap-1 bg-white rounded-2xl border border-gray-200 p-1 shadow-sm mb-5">
               <button

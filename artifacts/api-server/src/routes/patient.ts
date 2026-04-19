@@ -189,6 +189,26 @@ router.get("/auth/verify", async (req, res) => {
   res.redirect(`${frontendUrl}${row.nextUrl ?? "/portal/dashboard"}`);
 });
 
+// ── Resend Verification Email ─────────────────────────────────
+router.post("/auth/resend-verification", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  if (patient.emailVerified) {
+    res.status(400).json({ error: "already_verified", message: "Your email is already verified." });
+    return;
+  }
+
+  // Invalidate old tokens
+  await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.patientId, patient.id));
+
+  const token = randomBytes(48).toString("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(loginTokensTable).values({ token, patientId: patient.id, nextUrl: "/portal/dashboard", expiresAt, used: false });
+  const verifyUrl = `${getFrontendUrl(req)}/api/patient/auth/verify?token=${token}`;
+  sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});
+
+  res.json({ success: true, message: `Verification email sent to ${patient.email}` });
+});
+
 // ── Logout ─────────────────────────────────────────────────────
 router.post("/logout", async (req, res) => {
   const token = req.cookies?.patient_session;
