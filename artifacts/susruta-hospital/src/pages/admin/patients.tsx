@@ -124,7 +124,7 @@ export default function AdminPatients() {
                           <BadgeCheck size={12} /> Verified
                         </span>
                       : <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
-                          <Clock size={12} /> Pending
+                          <Clock size={12} /> Email Unverified
                         </span>
                     }
                   </td>

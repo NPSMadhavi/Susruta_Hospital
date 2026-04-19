@@ -175,7 +175,10 @@ function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
     : physicalAppt!.timeSlot;
   const status = appt.status;
   const canJoin = isOnline && onlineAppt!.joinEnabled && !!joinMeetingLink;
-  const sm = STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed;
+  // Online bookings are always auto-confirmed — show "Booked" not "Awaiting Approval"
+  const sm = (status === "pending" && isOnline)
+    ? { label: "Booked", cls: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" }
+    : (STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed);
 
   return (
     <div className={cn(
@@ -220,11 +223,11 @@ function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
               className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-lg transition-colors shadow-lg">
               <Video size={20} /> Join Consultation Now →
             </a>
-          ) : isOnline && status === "confirmed" ? (
+          ) : isOnline && (status === "confirmed" || status === "pending") ? (
             <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
               <Clock size={18} className="text-blue-500 mt-0.5 shrink-0" />
               <p className="text-sm text-blue-700 font-medium leading-snug">
-                Keep this page open. You will hear a chime and see a pop-up when the doctor is ready to see you.
+                Your booking is confirmed. Keep this page open on the day — you will hear a chime when the doctor is ready.
               </p>
             </div>
           ) : !isOnline ? (
@@ -258,8 +261,10 @@ function ApptCard({ item, joinMeetingLink, onJoin }: {
     ? `${fmtTime(onlineAppt!.slot.startTime)} – ${fmtTime(onlineAppt!.slot.endTime)}`
     : physicalAppt!.timeSlot;
   const status = data.status;
-  const sm = STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed;
   const canJoin = isOnline && onlineAppt!.joinEnabled && !!joinMeetingLink;
+  const sm = (status === "pending" && isOnline)
+    ? { label: "Booked", cls: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" }
+    : (STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed);
   const upcoming = isUpcoming(date, status);
 
   return (
