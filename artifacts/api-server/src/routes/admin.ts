@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, siteSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, siteSettingsTable, patientsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
 import { testSmtpConnection, type SmtpConfig } from "../lib/email";
@@ -187,6 +187,28 @@ router.post("/smtp-test", requireAdmin, async (req, res) => {
     res.json({ success: true, message: `Test email sent to ${testTo}. Check your inbox!` });
   } catch (err: any) {
     res.status(400).json({ error: "smtp_error", message: err.message || "SMTP connection failed." });
+  }
+});
+
+// ── GET /admin/patients — list all registered patients ────────
+router.get("/patients", requireAdmin, async (_req, res) => {
+  try {
+    const patients = await db
+      .select({
+        id: patientsTable.id,
+        patientCode: patientsTable.patientCode,
+        name: patientsTable.name,
+        email: patientsTable.email,
+        phone: patientsTable.phone,
+        emailVerified: patientsTable.emailVerified,
+        createdAt: patientsTable.createdAt,
+      })
+      .from(patientsTable)
+      .orderBy(desc(patientsTable.createdAt));
+    res.json(patients);
+  } catch (err) {
+    console.error("Admin patients list error:", err);
+    res.status(500).json({ error: "Failed to fetch patients" });
   }
 });
 
