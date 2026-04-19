@@ -2,12 +2,14 @@ import React from "react";
 import { useLanguage } from "@/store/use-language";
 import { t as tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { Menu, X, Phone, Clock, MapPin } from "lucide-react";
+import { Menu, X, Phone, Clock, MapPin, Send, CheckCircle2 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { BookingLoginModal } from "@/components/BookingLoginModal";
 import { patientApi } from "@/lib/patient-api";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { lang, toggleLanguage } = useLanguage();
@@ -19,6 +21,33 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
   const [isPatientLoggedIn, setIsPatientLoggedIn] = React.useState(false);
   const [, navigate] = useLocation();
+  const [subEmail, setSubEmail] = React.useState("");
+  const [subName, setSubName] = React.useState("");
+  const [subLoading, setSubLoading] = React.useState(false);
+  const [subSuccess, setSubSuccess] = React.useState(false);
+  const [subError, setSubError] = React.useState("");
+
+  async function handleSubscribe(e: React.FormEvent) {
+    e.preventDefault();
+    setSubError("");
+    setSubLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/subscribers/subscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: subName.trim() || subEmail.split("@")[0], email: subEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.already_subscribed) throw new Error(data.message || "Failed to subscribe");
+      setSubSuccess(true);
+      setSubEmail("");
+      setSubName("");
+    } catch (err: any) {
+      setSubError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubLoading(false);
+    }
+  }
 
   React.useEffect(() => {
     patientApi.me().then(() => setIsPatientLoggedIn(true)).catch(() => {});
@@ -201,8 +230,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           style={{ opacity: 0.22, mixBlendMode: "screen" }}
         />
 
-        <div className="w-full px-4 sm:px-8 lg:px-14 grid grid-cols-1 md:grid-cols-3 gap-10 relative z-10">
-          <div className="space-y-5">
+        <div className="w-full px-4 sm:px-8 lg:px-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 relative z-10">
+          {/* Col 1 — About */}
+          <div className="space-y-5 sm:col-span-2 lg:col-span-1">
             <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert" />
             <p className="text-sm leading-relaxed text-white/50">
               Rooted in the ancient wisdom of Ayurveda, Susruta Hospital brings authentic classical
@@ -224,20 +254,22 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               ))}
             </div>
           </div>
-          <div className="flex flex-col items-center">
-            <div>
-              <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
-              <ul className="space-y-2 text-sm">
-                {navLinks.map((link) => (
-                  <li key={link.id}>
-                    <a href={link.href} onClick={(e) => scrollTo(e, link.id)} className="hover:text-white transition-colors">
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+
+          {/* Col 2 — Quick Links */}
+          <div>
+            <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.quicklinks", lang)}</h3>
+            <ul className="space-y-2 text-sm">
+              {navLinks.map((link) => (
+                <li key={link.id}>
+                  <a href={link.href} onClick={(e) => scrollTo(e, link.id)} className="hover:text-white transition-colors">
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
+
+          {/* Col 3 — Contact */}
           <div>
             <h3 className="font-serif font-semibold text-lg text-white mb-4">{tr("footer.contact", lang)}</h3>
             <ul className="space-y-4 text-sm text-white/60">
@@ -257,6 +289,58 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 <span>{settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
               </li>
             </ul>
+          </div>
+
+          {/* Col 4 — Newsletter */}
+          <div>
+            <h3 className="font-serif font-semibold text-lg text-white mb-2">Stay Connected</h3>
+            <p className="text-xs text-white/45 leading-relaxed mb-4">
+              Get Ayurvedic wellness tips, seasonal health guides, and clinic updates straight to your inbox.
+            </p>
+
+            {subSuccess ? (
+              <div className="flex items-start gap-2.5 bg-green-900/40 border border-green-600/30 rounded-xl px-4 py-3.5">
+                <CheckCircle2 size={16} className="text-green-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-green-300">You're subscribed!</p>
+                  <p className="text-xs text-white/50 mt-0.5">Thank you for joining. We'll be in touch.</p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubscribe} className="space-y-2.5">
+                <input
+                  type="text"
+                  placeholder="Your name (optional)"
+                  value={subName}
+                  onChange={e => setSubName(e.target.value)}
+                  className="w-full bg-white/8 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/60 focus:bg-white/10 transition-all"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    required
+                    placeholder="Your email address"
+                    value={subEmail}
+                    onChange={e => setSubEmail(e.target.value)}
+                    className="flex-1 min-w-0 bg-white/8 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/60 focus:bg-white/10 transition-all"
+                  />
+                  <button
+                    type="submit"
+                    disabled={subLoading}
+                    className="shrink-0 bg-green-700 hover:bg-green-600 text-white rounded-xl px-3.5 py-2.5 transition-colors disabled:opacity-60 flex items-center gap-1.5 text-sm font-semibold"
+                  >
+                    {subLoading
+                      ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : <Send size={14} />
+                    }
+                  </button>
+                </div>
+                {subError && <p className="text-xs text-red-400">{subError}</p>}
+                <p className="text-xs text-white/25 leading-snug">
+                  No spam, ever. Unsubscribe at any time.
+                </p>
+              </form>
+            )}
           </div>
         </div>
 
