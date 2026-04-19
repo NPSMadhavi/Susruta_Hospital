@@ -579,17 +579,15 @@ export default function PatientDashboard() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
           <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain shrink-0 brightness-0 invert" />
           <div className="hidden sm:block h-5 w-px bg-white/20" />
-          <div className="hidden sm:block min-w-0">
+          {/* flex-1 here fills the center on desktop; hidden on mobile so no gap */}
+          <div className="hidden sm:block sm:flex-1 min-w-0">
             <p className="text-white/50 text-[10px] font-medium uppercase tracking-wider leading-none">Patient Portal</p>
             <p className="text-white font-bold text-sm truncate">{patient?.name}</p>
           </div>
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Patient ID badge */}
+          {/* Patient ID badge — ml-auto snaps it right on mobile (since name div is hidden) */}
           {patient?.patientCode && (
-            <div className="bg-white/15 border border-white/20 text-white px-3 py-1.5 rounded-xl text-center shrink-0">
+            <div className="ml-auto sm:ml-0 bg-white/15 border border-white/20 text-white px-3 py-1.5 rounded-xl text-center shrink-0">
               <p className="text-white/60 text-[9px] font-bold uppercase tracking-widest leading-none hidden sm:block">Patient ID</p>
               <p className="font-black text-base leading-tight font-mono tracking-wide">{patient.patientCode}</p>
             </div>
