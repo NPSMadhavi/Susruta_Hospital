@@ -42,9 +42,8 @@ async function fetchGuestToken(apptId: number, name?: string): Promise<CallCrede
 }
 
 // ── Guest Link Display ─────────────────────────────────────────
-export function GuestLinkCard({ apptId, guestToken }: { apptId: number; guestToken: string | null }) {
+export function GuestLinkCard({ apptId }: { apptId: number; guestToken?: string | null }) {
   const [copied, setCopied] = useState(false);
-  if (!guestToken) return null;
 
   const url = `${window.location.origin}/guest-call/${apptId}`;
 
@@ -55,17 +54,22 @@ export function GuestLinkCard({ apptId, guestToken }: { apptId: number; guestTok
   }
 
   return (
-    <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mt-3">
-      <Link size={15} className="text-blue-500 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold text-blue-700 mb-0.5">Share with Caregiver</p>
-        <p className="text-[11px] text-blue-600 truncate">{url}</p>
+    <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3.5">
+      <div className="flex items-center gap-2 mb-2">
+        <Link size={14} className="text-blue-600 shrink-0" />
+        <p className="text-xs font-bold text-blue-700">Caregiver / Family Join Link</p>
       </div>
-      <button onClick={copy}
-        className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0">
-        {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-        {copied ? "Copied!" : "Copy"}
-      </button>
+      <p className="text-[11px] text-blue-600 mb-2.5 leading-relaxed">
+        Share this link with a family member or caregiver so they can join the call as a guest (up to 3 people total).
+      </p>
+      <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2">
+        <p className="text-[11px] text-blue-800 font-mono flex-1 min-w-0 truncate">{url}</p>
+        <button onClick={copy}
+          className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0">
+          {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+          {copied ? "Copied!" : "Copy Link"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -129,8 +133,8 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className }: 
 
   if (inCall && creds) {
     return (
-      <div className={cn("rounded-2xl overflow-hidden border-2 border-emerald-400 bg-gray-900 shadow-xl", className)}
-        style={{ minHeight: 400 }}>
+      <div className={cn("rounded-2xl overflow-hidden border-2 border-emerald-400 bg-gray-900 shadow-xl flex flex-col", className)}
+        style={{ height: 460 }}>
         <LiveKitRoom
           token={creds.token}
           serverUrl={creds.serverUrl}
@@ -138,7 +142,7 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className }: 
           video={true}
           audio={true}
           onDisconnected={handleDisconnect}
-          style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <RoomInner onLeave={() => handleDisconnect()} />
         </LiveKitRoom>
       </div>
