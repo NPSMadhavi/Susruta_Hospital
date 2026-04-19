@@ -266,6 +266,20 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   res.json({ ok: true, joinEnabled: false });
 });
 
+// ── POST /api/online-appointments/admin/:id/reset-pending ─────
+router.post("/admin/:id/reset-pending", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  await db.update(onlineAppointmentsTable)
+    .set({ status: "pending", joinEnabled: false, joinEnabledAt: null, livekitRoomName: null, guestToken: null })
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  res.json({ ok: true });
+});
+
 // ── PATCH /api/online-appointments/admin/:id/approve ──────────
 // Approve appointment (keep existing flow)
 router.patch("/admin/:id/approve", requireAdmin, async (req, res) => {

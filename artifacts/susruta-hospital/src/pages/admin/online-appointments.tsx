@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Video, User, Calendar, Clock, RefreshCw, CheckCircle2, AlertCircle,
   Loader2, FileText, ChevronDown, ChevronUp, ImageIcon, Upload, Camera,
-  X, Play, Square, Trash2
+  X, Play, Square, Trash2, RotateCcw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtTimeIST } from "@/lib/ist";
@@ -144,14 +144,16 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 }
 
 // ── Appointment Card ────────────────────────────────────────────
-function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
+function ApptCard({ appt, onJoinToggle, onResetPending, onPrescriptionUploaded, onDelete }: {
   appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
+  onResetPending: (id: number) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
   onDelete: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(appt.joinEnabled);
   const [toggling, setToggling] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const sc = STATUS_COLORS[appt.status] ?? STATUS_COLORS.confirmed;
@@ -166,6 +168,12 @@ function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
     setToggling(true);
     await onJoinToggle(appt.id, false);
     setToggling(false);
+  }
+
+  async function resetPending() {
+    setResetting(true);
+    await onResetPending(appt.id);
+    setResetting(false);
   }
 
   async function handleDelete() {
@@ -218,6 +226,18 @@ function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Reset to Pending — shown on completed appointments so admin can reopen for doctor */}
+            {appt.status === "completed" && (
+              <button
+                onClick={e => { e.stopPropagation(); resetPending(); }}
+                disabled={resetting}
+                title="Reset this appointment back to pending so the doctor can conduct it"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-all"
+              >
+                {resetting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                Reset to Pending
+              </button>
+            )}
             {/* Mark Complete — shown when call ended but status wasn't auto-updated */}
             {!appt.joinEnabled && appt.status === "confirmed" && (
               <button
@@ -380,6 +400,18 @@ export default function AdminOnlineAppointments() {
     setAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a));
   }
 
+  async function resetToPending(id: number) {
+    try {
+      await adminFetch(`/online-appointments/admin/${id}/reset-pending`, { method: "POST" });
+      setAppts(prev => prev.map(a => a.id === id
+        ? { ...a, status: "pending", joinEnabled: false }
+        : a
+      ));
+    } catch {
+      setErr("Failed to reset appointment. Please try again.");
+    }
+  }
+
   async function deleteAppt(id: number) {
     try {
       await adminFetch(`/online-appointments/admin/${id}`, { method: "DELETE" });
@@ -468,6 +500,7 @@ export default function AdminOnlineAppointments() {
                 key={appt.id}
                 appt={appt}
                 onJoinToggle={toggleJoin}
+                onResetPending={resetToPending}
                 onPrescriptionUploaded={handlePrescriptionUploaded}
                 onDelete={deleteAppt}
               />
