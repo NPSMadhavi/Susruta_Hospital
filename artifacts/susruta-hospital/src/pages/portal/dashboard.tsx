@@ -122,39 +122,74 @@ function JoinPopup({ apptId, onJoin, onClose }: {
 // ── Donation Popup ──────────────────────────────────────────────
 function DonationPopup({ qrObjectPath, onClose }: { qrObjectPath: string | null; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+      <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full relative my-4">
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors z-10">
           <X size={18} />
         </button>
-        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-          <Heart size={30} className="text-red-500" />
-        </div>
-        <h2 className="text-xl font-extrabold text-gray-900 mb-3">Thank You for Consulting with Us</h2>
-        <p className="text-sm text-gray-500 leading-relaxed mb-3">
-          Dr. Murali Krishna offers online consultations <strong className="text-gray-800">completely free of charge</strong> — his way of serving the community of Tirupati and beyond.
-        </p>
-        <p className="text-sm text-gray-500 leading-relaxed mb-5">
-          Your kind donation helps him continue treating underprivileged patients, running free health camps, and supporting countless causes in Tirupati. 🙏
-        </p>
-        {qrObjectPath ? (
-          <>
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-3 inline-block">
-              <img src={`${BASE}/api/storage${qrObjectPath}`} alt="PhonePe UPI QR" className="w-44 h-44 object-contain mx-auto" />
-            </div>
-            <p className="text-xs text-gray-400 mb-5">Scan with PhonePe, Google Pay, or any UPI app</p>
-          </>
-        ) : (
-          <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-5">
-            <QrCode size={48} className="text-gray-300 mx-auto mb-2" />
-            <p className="text-xs text-gray-400">Payment QR will be available soon</p>
+
+        {/* Header */}
+        <div className="bg-gradient-to-br from-[#1a3d2b] to-[#2a5a40] rounded-t-3xl px-6 pt-8 pb-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-white/15 flex items-center justify-center mx-auto mb-3">
+            <Heart size={28} className="text-red-300" fill="currentColor" />
           </div>
-        )}
-        <button onClick={onClose}
-          className="w-full py-3.5 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm hover:bg-[#1a3d2b]/90 transition-colors">
-          Close
-        </button>
+          <h2 className="text-xl font-extrabold text-white leading-snug">
+            If You Have Benefited,<br />This Is Your Opportunity to Give Back
+          </h2>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Quote */}
+          <p className="text-sm text-gray-600 leading-relaxed italic border-l-4 border-[#1a3d2b]/30 pl-4">
+            "Many patients and families have found relief, guidance, and long-term healing through Dr. Murali Krishna's care."
+          </p>
+
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Behind every consultation is time, effort, and often the cost of medicines personally supported to help those who cannot afford treatment.
+          </p>
+
+          <p className="text-sm text-gray-700 font-semibold">
+            If his guidance has helped you or your loved ones, consider supporting this service. Your contribution will:
+          </p>
+
+          <ul className="space-y-2">
+            {[
+              "Help provide free treatment to those in need",
+              "Sustain ongoing charitable medical support",
+              "Extend this service to more lives",
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">{i + 1}</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-sm text-gray-500 text-center font-medium">
+            A small contribution from you can make a big difference for someone else. 🙏
+          </p>
+
+          {/* QR */}
+          {qrObjectPath ? (
+            <div className="text-center">
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 inline-block">
+                <img src={`${BASE}/api/storage${qrObjectPath}`} alt="PhonePe UPI QR" className="w-48 h-48 object-contain mx-auto" />
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Scan with PhonePe, Google Pay, or any UPI app</p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 text-center">
+              <QrCode size={44} className="text-gray-300 mx-auto mb-2" />
+              <p className="text-xs text-gray-400">Payment QR will be available soon</p>
+            </div>
+          )}
+
+          <button onClick={onClose}
+            className="w-full py-3.5 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm hover:bg-[#1a3d2b]/90 transition-colors">
+            Close
+          </button>
+        </div>
       </motion.div>
     </div>
   );
@@ -649,6 +684,22 @@ export default function PatientDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Donate card */}
+            <button
+              onClick={() => setDonationPopup({ apptId: 0, qrObjectPath: phonepeQrRef.current })}
+              className="w-full bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-3xl px-5 py-4 text-left hover:from-rose-100 hover:to-red-100 hover:border-rose-300 transition-all shadow-sm group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
+                  <Heart size={18} className="text-red-500" fill="currentColor" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-gray-800">Support Dr. Murali Krishna</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-snug">Help extend free care to those in need</p>
+                </div>
+              </div>
+            </button>
           </div>
 
           {/* ── MAIN CONTENT ───────────────────────────────────── */}
