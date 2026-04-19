@@ -106,3 +106,14 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
     font-weight: 700;
   }
 }
+
+/* Hide native browser clock/calendar picker icons so our custom icons show consistently */
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 2rem;
+  height: 100%;
+  cursor: pointer;
+}
