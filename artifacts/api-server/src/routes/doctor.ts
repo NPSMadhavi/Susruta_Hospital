@@ -122,7 +122,7 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
     .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
     .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-    .where(inArray(onlineAppointmentsTable.status, ["confirmed", "completed"]))
+    .where(inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"]))
     .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime);
 
   const offlineRows = await db
