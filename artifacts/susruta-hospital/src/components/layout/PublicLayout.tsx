@@ -164,10 +164,14 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          {/* Right side: Book CTA */}
-          <div className="hidden lg:flex items-center gap-3 ml-auto flex-shrink-0">
-
-            {/* Book Appointment button */}
+          {/* Right side: Login + Book CTA */}
+          <div className="hidden lg:flex items-center gap-2 ml-auto flex-shrink-0">
+            <a
+              href="/portal"
+              className="px-4 py-2.5 rounded-xl border border-primary/30 text-primary font-semibold text-sm hover:bg-primary/5 hover:-translate-y-0.5 transition-all whitespace-nowrap"
+            >
+              Login
+            </a>
             <button
               onClick={handleBookClick}
               className="px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm shadow-md shadow-primary/20 hover:bg-primary/90 hover:-translate-y-0.5 transition-all whitespace-nowrap"
@@ -201,12 +205,20 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 {link.label}
               </a>
             ))}
-            <button
-              onClick={handleBookClick}
-              className="mt-2 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center w-full"
-            >
-              {tr("btn.book", lang)}
-            </button>
+            <div className="mt-2 flex gap-2">
+              <a
+                href="/portal"
+                className="flex-1 px-4 py-3 rounded-xl border border-primary/30 text-primary font-bold text-center"
+              >
+                Login
+              </a>
+              <button
+                onClick={handleBookClick}
+                className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center"
+              >
+                {tr("btn.book", lang)}
+              </button>
+            </div>
           </div>
         )}
       </header>
