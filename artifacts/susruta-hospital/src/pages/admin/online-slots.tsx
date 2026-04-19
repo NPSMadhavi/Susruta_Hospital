@@ -188,7 +188,7 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <div className="relative">
+                <div className="relative inline-block">
                   <input ref={startTimeRef} type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
                     onClick={() => { try { (startTimeRef.current as any)?.showPicker?.(); } catch { startTimeRef.current?.focus(); } }}
@@ -199,7 +199,7 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <div className="relative">
+                <div className="relative inline-block">
                   <input ref={endTimeRef} type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
                     onClick={() => { try { (endTimeRef.current as any)?.showPicker?.(); } catch { endTimeRef.current?.focus(); } }}
