@@ -209,30 +209,31 @@ export default function AdminSettings() {
         <p className="text-muted-foreground text-sm mt-0.5">Manage clinic preferences and portal configuration.</p>
       </div>
 
-      <form onSubmit={save} className="max-w-2xl">
-        {/* Tab bar */}
-        <div className="flex items-center justify-center gap-0 border-b border-border mb-6 overflow-x-auto">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px",
-                  active
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
-                )}
-              >
-                <Icon size={14} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+      {/* Tab bar — full width, centered */}
+      <div className="flex items-center justify-center gap-1 border-b border-border mb-8 overflow-x-auto">
+        {TABS.map(tab => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px",
+                active
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
+              )}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <form onSubmit={save} className="max-w-2xl mx-auto">
 
         {/* ── General Tab ── */}
         {activeTab === "general" && (
