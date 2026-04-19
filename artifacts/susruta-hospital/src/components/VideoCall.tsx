@@ -231,6 +231,7 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
           video={true}
           audio={true}
           onDisconnected={() => setEnded(true)}
+          data-lk-theme="default"
           style={{ height: "100%" }}>
           <VideoConference />
           <RoomAudioRenderer />
