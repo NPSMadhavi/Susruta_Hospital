@@ -618,8 +618,8 @@ export default function PatientDashboard() {
 
           {/* ── LEFT SIDEBAR ──────────────────────────────────── */}
           <div className="space-y-4">
-            {/* Welcome + Patient ID */}
-            <div className="bg-[#1a3d2b] rounded-3xl px-6 py-6 shadow-md">
+            {/* Welcome + Patient ID — flat top on mobile so it visually merges with the header */}
+            <div className="bg-[#1a3d2b] rounded-b-3xl sm:rounded-3xl px-6 py-6 shadow-md">
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-13 h-13 rounded-2xl bg-white/10 flex items-center justify-center shrink-0" style={{ width: 52, height: 52 }}>
                   <User size={24} className="text-white/80" />

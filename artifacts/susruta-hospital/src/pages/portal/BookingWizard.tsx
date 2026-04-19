@@ -256,7 +256,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         exit={{ y: 80, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="bg-white w-full sm:max-w-xl md:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-        style={{ maxHeight: "92dvh", fontSize: "107%" }}
+        style={{ maxHeight: "90vh" }}
       >
         {/* Modal header */}
         <div className="bg-[#1a3d2b] px-6 py-5 flex items-center gap-3 shrink-0">
