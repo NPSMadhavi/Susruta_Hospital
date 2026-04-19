@@ -197,7 +197,7 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   for (const prev of prevEnabled) {
     await db
       .update(onlineAppointmentsTable)
-      .set({ joinEnabled: false })
+      .set({ joinEnabled: false, status: "completed" })
       .where(eq(onlineAppointmentsTable.id, prev.appt.id));
     // Notify that patient their session has ended
     notifyPatientSessionEnded(prev.appt.patientId, prev.appt.id, settings?.phonepeQrObjectPath ?? null);

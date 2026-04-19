@@ -162,6 +162,12 @@ function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
     setToggling(false);
   }
 
+  async function markComplete() {
+    setToggling(true);
+    await onJoinToggle(appt.id, false);
+    setToggling(false);
+  }
+
   async function handleDelete() {
     setDeleting(true);
     await onDelete(appt.id);
@@ -212,20 +218,34 @@ function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Enable/Disable Join */}
-            <button
-              onClick={e => { e.stopPropagation(); toggleJoin(); }}
-              disabled={toggling}
-              title={appt.joinEnabled ? "End session for this patient" : "Start LiveKit video room for this patient"}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm",
-                appt.joinEnabled
-                  ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
-              )}>
-              {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
-              {appt.joinEnabled ? "End Session" : "Enable Join"}
-            </button>
+            {/* Mark Complete — shown when call ended but status wasn't auto-updated */}
+            {!appt.joinEnabled && appt.status === "confirmed" && (
+              <button
+                onClick={e => { e.stopPropagation(); markComplete(); }}
+                disabled={toggling}
+                title="Mark this session as completed"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all"
+              >
+                {toggling ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                Mark Complete
+              </button>
+            )}
+            {/* Enable/Disable Join — hidden when stuck in confirmed-but-not-live (use Mark Complete instead) */}
+            {appt.status !== "completed" && !(appt.status === "confirmed" && !appt.joinEnabled) && (
+              <button
+                onClick={e => { e.stopPropagation(); toggleJoin(); }}
+                disabled={toggling}
+                title={appt.joinEnabled ? "End session for this patient" : "Start LiveKit video room for this patient"}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm",
+                  appt.joinEnabled
+                    ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+                )}>
+                {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+                {appt.joinEnabled ? "End Session" : "Enable Join"}
+              </button>
+            )}
 
             {/* Delete */}
             {!confirmDelete ? (
@@ -348,7 +368,7 @@ export default function AdminOnlineAppointments() {
       await adminFetch(`/online-appointments/admin/${id}/${enable ? "enable-join" : "disable-join"}`, { method: "POST" });
       setAppts(prev => prev.map(a => a.id === id
         ? { ...a, joinEnabled: enable, status: enable ? "confirmed" : "completed" }
-        : enable ? { ...a, joinEnabled: false } : a
+        : enable ? { ...a, joinEnabled: false, status: a.joinEnabled ? "completed" : a.status } : a
       ));
       if (enable) playChime();
     } catch {
