@@ -595,11 +595,14 @@ export default function AdminSettings() {
                           method: "POST",
                           credentials: "include",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ contentType: file.type, folder: "qr-codes" }),
+                          body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
                         });
-                        if (!urlRes.ok) throw new Error("Could not get upload URL");
-                        const { uploadUrl, objectPath } = await urlRes.json();
-                        const uploadRes = await fetch(uploadUrl, {
+                        if (!urlRes.ok) {
+                          const errData = await urlRes.json().catch(() => ({}));
+                          throw new Error(errData.message || `Upload request failed (${urlRes.status})`);
+                        }
+                        const { uploadURL, objectPath } = await urlRes.json();
+                        const uploadRes = await fetch(uploadURL, {
                           method: "PUT",
                           headers: { "Content-Type": file.type },
                           body: file,
