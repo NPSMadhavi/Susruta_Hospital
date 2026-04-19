@@ -746,14 +746,14 @@ export default function DoctorPortal() {
             <span className="text-emerald-300 text-xs font-semibold">{liveCount} Live</span>
           </div>
         )}
-        <p className="text-white/30 text-[11px] hidden md:block">
+        <p className="text-white/40 text-[12px] hidden md:block font-medium">
           {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
         </p>
         <button onClick={() => load()} className="p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Refresh">
           <RefreshCw size={14} />
         </button>
-        <button onClick={logout} className="p-2 text-white/50 hover:text-red-300 rounded-lg hover:bg-white/10 transition-colors" title="Logout">
-          <LogOut size={14} />
+        <button onClick={logout} className="flex items-center gap-1.5 px-3 py-1.5 text-white/70 hover:text-red-300 rounded-lg hover:bg-white/10 border border-white/15 hover:border-red-400/30 transition-colors text-[12px] font-semibold">
+          <LogOut size={13} /> Logout
         </button>
       </header>
 
