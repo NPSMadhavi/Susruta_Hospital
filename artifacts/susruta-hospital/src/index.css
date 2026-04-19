@@ -107,3 +107,8 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   }
 }
 
+
+/* Hide Chrome native clock indicator — replaced by a custom clickable button */
+input[type="time"]::-webkit-calendar-picker-indicator {
+  display: none !important;
+}

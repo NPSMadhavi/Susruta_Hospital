@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { AdminToastContainer } from "@/components/admin/AdminToast";
@@ -54,7 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
-const timeInputCls = "w-auto px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
+const timeInputCls = "w-full pl-3.5 pr-10 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -68,6 +68,9 @@ export default function AdminOnlineSlots() {
   const [preview, setPreview] = useState<SlotPreview[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [err, setErr] = useState("");
+
+  const startTimeRef = useRef<HTMLInputElement>(null);
+  const endTimeRef = useRef<HTMLInputElement>(null);
 
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
@@ -185,11 +188,25 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <input type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
+                <div className="relative">
+                  <input ref={startTimeRef} type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
+                  <button type="button" tabIndex={-1}
+                    onClick={() => (startTimeRef.current as any)?.showPicker?.()}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1a3d2b] transition-colors">
+                    <Clock size={15} />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <input type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
+                <div className="relative">
+                  <input ref={endTimeRef} type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
+                  <button type="button" tabIndex={-1}
+                    onClick={() => (endTimeRef.current as any)?.showPicker?.()}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1a3d2b] transition-colors">
+                    <Clock size={15} />
+                  </button>
+                </div>
               </div>
             </div>
 
