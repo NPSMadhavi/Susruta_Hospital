@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { AdminToastContainer } from "@/components/admin/AdminToast";
@@ -54,7 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
-const timeInputCls = "px-3.5 py-2.5 text-sm outline-none bg-transparent w-[120px]";
+const timeInputCls = "w-auto px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -68,9 +68,6 @@ export default function AdminOnlineSlots() {
   const [preview, setPreview] = useState<SlotPreview[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [err, setErr] = useState("");
-
-  const startTimeRef = useRef<HTMLInputElement>(null);
-  const endTimeRef = useRef<HTMLInputElement>(null);
 
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
@@ -188,25 +185,11 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <div className="inline-flex items-center border border-border rounded-xl bg-white pr-2 gap-0.5 focus-within:ring-2 focus-within:ring-[#1a3d2b]/20 focus-within:border-[#1a3d2b] transition-all">
-                  <input ref={startTimeRef} type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
-                  <button type="button" tabIndex={-1}
-                    onClick={() => { startTimeRef.current?.focus(); (startTimeRef.current as any)?.showPicker?.(); }}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Clock size={14} />
-                  </button>
-                </div>
+                <input type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <div className="inline-flex items-center border border-border rounded-xl bg-white pr-2 gap-0.5 focus-within:ring-2 focus-within:ring-[#1a3d2b]/20 focus-within:border-[#1a3d2b] transition-all">
-                  <input ref={endTimeRef} type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
-                  <button type="button" tabIndex={-1}
-                    onClick={() => { endTimeRef.current?.focus(); (endTimeRef.current as any)?.showPicker?.(); }}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Clock size={14} />
-                  </button>
-                </div>
+                <input type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
               </div>
             </div>
 
