@@ -97,16 +97,18 @@ function RoomInner({ onLeave }: { onLeave: () => void }) {
 interface VideoCallProps {
   apptId: number;
   role: Role;
-  guestToken?: string | null; // pre-generated guest token from appointment
+  guestToken?: string | null;
   onCallEnded?: () => void;
   className?: string;
+  autoJoin?: boolean; // skip the pre-join screen and connect immediately
 }
 
-export function VideoCall({ apptId, role, guestToken, onCallEnded, className }: VideoCallProps) {
+export function VideoCall({ apptId, role, guestToken, onCallEnded, className, autoJoin }: VideoCallProps) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [inCall, setInCall] = useState(false);
+  const autoJoinFired = useRef(false);
 
   const join = useCallback(async () => {
     setLoading(true);
@@ -124,6 +126,14 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className }: 
       setLoading(false);
     }
   }, [apptId, role]);
+
+  // Auto-join: fire join() once on mount if autoJoin=true
+  useEffect(() => {
+    if (autoJoin && !autoJoinFired.current) {
+      autoJoinFired.current = true;
+      join();
+    }
+  }, [autoJoin, join]);
 
   function handleDisconnect() {
     setInCall(false);

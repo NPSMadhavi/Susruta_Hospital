@@ -94,8 +94,7 @@ function JoinPopup({ apptId, onJoin, onClose }: {
   onJoin: (id: number) => void; onClose: () => void;
 }) {
   function handleJoin() {
-    onJoin(apptId);
-    onClose();
+    onJoin(apptId); // handlePatientJoined already calls setJoinPopup(null)
   }
 
   return (
@@ -224,7 +223,7 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
         <div className="mt-5">
           {isInCall ? (
             <>
-              <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} />
+              <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
               <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
             </>
           ) : canJoin ? (
@@ -316,7 +315,7 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded }: {
             <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50">
               {canJoin && videoCallApptId === onlineAppt!.id ? (
                 <>
-                  <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} />
+                  <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
                   <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
                 </>
               ) : canJoin ? (
