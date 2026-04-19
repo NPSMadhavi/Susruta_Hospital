@@ -1,14 +1,58 @@
-import React from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
+import { useAdminNotifications } from "@/hooks/useAdminNotifications";
+
+const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
+
+async function adminFetch(path: string) {
+  const r = await fetch(`${API}${path}`, { credentials: "include" });
+  if (!r.ok) throw new Error("admin fetch failed");
+  return r.json();
+}
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: admin, isLoading, isError } = useGetAdminMe({ query: { retry: false }});
   const logoutMutation = useAdminLogout();
+  const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
+
+  // Track seen appointment IDs to detect new arrivals
+  const seenIdsRef = useRef<Set<number>>(new Set());
+  const initializedRef = useRef(false);
+
+  const checkNewAppts = useCallback(async () => {
+    try {
+      const list: { id: number; status: string; patient?: { name?: string } }[] = await adminFetch("/online-appointments/admin");
+      const incoming = list.filter(a => a.status === "pending");
+
+      if (!initializedRef.current) {
+        // First load — just seed the seen set, don't notify
+        incoming.forEach(a => seenIdsRef.current.add(a.id));
+        initializedRef.current = true;
+        return;
+      }
+
+      const newOnes = incoming.filter(a => !seenIdsRef.current.has(a.id));
+      newOnes.forEach(a => {
+        seenIdsRef.current.add(a.id);
+        const name = a.patient?.name ?? "A patient";
+        notify("New Online Booking!", `${name} booked an online consultation.`);
+      });
+    } catch {
+      // Silent — layout shouldn't crash on poll failures
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    if (!admin) return;
+    checkNewAppts();
+    const interval = setInterval(checkNewAppts, 20_000);
+    return () => clearInterval(interval);
+  }, [admin, checkNewAppts]);
 
   // Protect route
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
@@ -62,6 +106,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-4 border-t border-white/10">
+          {/* Notification permission button */}
+          {permission !== "granted" && (
+            <button
+              onClick={requestPermission}
+              className="w-full flex items-center gap-2 px-4 py-2 mb-2 rounded-xl text-xs text-amber-300 hover:bg-white/10 border border-amber-400/30 transition-colors"
+            >
+              <Bell size={14} /> Enable notifications
+            </button>
+          )}
           <Button variant="ghost" className="w-full justify-start text-white/60 hover:text-white hover:bg-white/10" onClick={handleLogout}>
             <LogOut size={20} className="mr-3" /> Logout
           </Button>
@@ -76,9 +129,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Mobile Header */}
         <header className="md:hidden bg-foreground text-white px-4 py-3 flex justify-between items-center shrink-0">
           <img src={logoImg} alt="Susruta Hospital" className="h-7 w-auto object-contain brightness-0 invert" />
-          <Button variant="ghost" size="sm" className="text-white/70 hover:text-white" onClick={handleLogout}>
-            <LogOut size={16} className="mr-1.5" /> Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            {permission !== "granted" && (
+              <button onClick={requestPermission} className="p-1.5 text-amber-300 hover:text-amber-200" title="Enable notifications">
+                <Bell size={18} />
+              </button>
+            )}
+            <Button variant="ghost" size="sm" className="text-white/70 hover:text-white" onClick={handleLogout}>
+              <LogOut size={16} className="mr-1.5" /> Logout
+            </Button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-10 pb-20 md:pb-10">
@@ -102,6 +162,29 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
+
+      {/* Global toast notifications — visible on ALL admin pages */}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(toast => (
+          <div key={toast.id}
+            className="pointer-events-auto flex items-start gap-3 bg-[#1a3d2b] text-white rounded-2xl shadow-2xl px-4 py-3 min-w-[280px] max-w-[340px] border border-white/10 animate-in slide-in-from-right-4 duration-300"
+          >
+            <div className="w-8 h-8 rounded-full bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center shrink-0 mt-0.5">
+              <Bell size={15} className="text-emerald-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold leading-tight">{toast.title}</p>
+              <p className="text-xs text-white/60 mt-0.5 leading-snug">{toast.body}</p>
+              <Link href="/admin/online-appointments" className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold mt-1 block">
+                View appointment →
+              </Link>
+            </div>
+            <button onClick={() => dismissToast(toast.id)} className="text-white/30 hover:text-white/70 shrink-0 mt-0.5">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
