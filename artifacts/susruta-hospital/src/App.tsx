@@ -26,6 +26,11 @@ import PatientDashboard from "./pages/portal/dashboard";
 import PortalBook from "./pages/portal/book";
 import OnlineBook from "./pages/portal/online-book";
 
+// Legal Pages
+import MedicalDisclaimer from "./pages/medical-disclaimer";
+import TermsAndConditions from "./pages/terms";
+import PrivacyPolicy from "./pages/privacy-policy";
+
 // Doctor Portal Pages
 import DoctorLogin from "./pages/doctor/login";
 import DoctorAppointments from "./pages/doctor/appointments";
@@ -52,6 +57,11 @@ function Router() {
       {/* Single-page public website */}
       <Route path="/" component={Home} />
       <Route path="/appointments" component={Appointments} />
+
+      {/* Legal Pages */}
+      <Route path="/medical-disclaimer" component={MedicalDisclaimer} />
+      <Route path="/terms" component={TermsAndConditions} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
 
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />

@@ -55,6 +55,8 @@ export default function PortalLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState(defaultForm);
+  const [agreeDisclaimer, setAgreeDisclaimer] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const selectedCountry = COUNTRIES.find(c => c.code === form.countryCode) ?? COUNTRIES[0];
 
@@ -81,6 +83,8 @@ export default function PortalLogin() {
     if (mode === "register") {
       if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
+      if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer to continue."); return; }
+      if (!agreeTerms) { setError("Please accept the Terms & Conditions and Privacy Policy to continue."); return; }
     }
     setLoading(true);
     try {
@@ -279,6 +283,62 @@ export default function PortalLogin() {
                             </button>
                           </div>
                         </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Consent checkboxes — register only */}
+                  <AnimatePresence initial={false}>
+                    {mode === "register" && (
+                      <motion.div key="consent"
+                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden space-y-3"
+                      >
+                        {/* Medical Disclaimer */}
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <div className="mt-0.5 shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={agreeDisclaimer}
+                              onChange={e => setAgreeDisclaimer(e.target.checked)}
+                              className="w-4 h-4 rounded border-gray-300 accent-[#1a3d2b] cursor-pointer"
+                            />
+                          </div>
+                          <span className="text-xs text-gray-600 leading-relaxed">
+                            I have read and agree to the{" "}
+                            <a href="/medical-disclaimer" target="_blank" rel="noopener noreferrer"
+                              className="text-[#1a3d2b] font-semibold underline underline-offset-2 hover:text-[#1a3d2b]/80"
+                              onClick={e => e.stopPropagation()}>
+                              Privacy & Medical Data Disclaimer
+                            </a>
+                          </span>
+                        </label>
+
+                        {/* Terms & Privacy Policy */}
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <div className="mt-0.5 shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={agreeTerms}
+                              onChange={e => setAgreeTerms(e.target.checked)}
+                              className="w-4 h-4 rounded border-gray-300 accent-[#1a3d2b] cursor-pointer"
+                            />
+                          </div>
+                          <span className="text-xs text-gray-600 leading-relaxed">
+                            I agree to the{" "}
+                            <a href="/terms" target="_blank" rel="noopener noreferrer"
+                              className="text-[#1a3d2b] font-semibold underline underline-offset-2 hover:text-[#1a3d2b]/80"
+                              onClick={e => e.stopPropagation()}>
+                              Terms & Conditions
+                            </a>
+                            {" "}and{" "}
+                            <a href="/privacy-policy" target="_blank" rel="noopener noreferrer"
+                              className="text-[#1a3d2b] font-semibold underline underline-offset-2 hover:text-[#1a3d2b]/80"
+                              onClick={e => e.stopPropagation()}>
+                              Privacy Policy
+                            </a>
+                          </span>
+                        </label>
                       </motion.div>
                     )}
                   </AnimatePresence>

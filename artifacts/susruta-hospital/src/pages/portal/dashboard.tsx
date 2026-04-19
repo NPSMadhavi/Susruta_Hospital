@@ -293,13 +293,32 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
 }
 
 // ── Appointment Card (history list) ─────────────────────────────
-function ApptCard({ item, videoCallApptId, onJoin, onCallEnded }: {
+function ApptCard({ item, videoCallApptId, onJoin, onCallEnded, onDocumentsChange }: {
   item: { type: "online" | "physical"; date: string; data: OnlineAppt | PhysicalAppt };
   videoCallApptId: number | null;
   onJoin: () => void;
   onCallEnded: () => void;
+  onDocumentsChange?: (apptId: number, docs: any[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
+
+  async function deleteDocument(apptId: number, objectPath: string) {
+    setDeletingDoc(objectPath);
+    try {
+      const r = await fetch(`${BASE}/api/online-appointments/${apptId}/documents`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath }),
+      });
+      if (r.ok) {
+        const { documents } = await r.json();
+        onDocumentsChange?.(apptId, documents);
+      }
+    } catch {}
+    setDeletingDoc(null);
+  }
   const { type, data } = item;
   const isOnline = type === "online";
   const onlineAppt = isOnline ? data as OnlineAppt : null;
@@ -449,7 +468,6 @@ export default function PatientDashboard() {
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
   const [verifyResending, setVerifyResending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
-  const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
@@ -498,23 +516,6 @@ export default function PatientDashboard() {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
     if (r.status === 401) { nav("/portal"); return null; }
     return r.json();
-  }
-
-  async function deleteDocument(apptId: number, objectPath: string) {
-    setDeletingDoc(objectPath);
-    try {
-      const r = await fetch(`${BASE}/api/online-appointments/${apptId}/documents`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objectPath }),
-      });
-      if (r.ok) {
-        const { documents } = await r.json();
-        setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents } : a));
-      }
-    } catch {}
-    setDeletingDoc(null);
   }
 
   async function resendVerificationEmail() {
@@ -858,7 +859,8 @@ export default function PatientDashboard() {
                         {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
                           <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
                             onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
-                            onCallEnded={() => handleCallEnded((item.data as any).id)} />
+                            onCallEnded={() => handleCallEnded((item.data as any).id)}
+                            onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
                         ))}
                       </div>
                     </div>
@@ -889,7 +891,8 @@ export default function PatientDashboard() {
                         {pastAppts.map((item, i) => (
                           <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
                             onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
-                            onCallEnded={() => handleCallEnded((item.data as any).id)} />
+                            onCallEnded={() => handleCallEnded((item.data as any).id)}
+                            onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
                         ))}
                       </div>
                     </div>
