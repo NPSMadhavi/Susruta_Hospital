@@ -5,7 +5,7 @@ import {
   RoomAudioRenderer,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { Video, Loader2, AlertCircle, Copy, CheckCircle2, Link } from "lucide-react";
+import { Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
