@@ -144,6 +144,7 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className, au
           video={true}
           audio={true}
           onDisconnected={handleDisconnect}
+          data-lk-theme="default"
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <RoomInner />
         </LiveKitRoom>
