@@ -250,6 +250,67 @@ export async function sendMagicLink(opts: {
   });
 }
 
+// ── Password reset email ──────────────────────────────────────
+export async function sendPasswordResetEmail(opts: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}) {
+  const { to, name, resetUrl } = opts;
+  const subject = "Reset your Susruta Hospital password";
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;font-family:Arial,sans-serif;">
+        We received a request to reset your patient portal password. Click the button below to set a new password. This link is valid for <strong>1 hour</strong> and can only be used once.
+      </p>
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="${resetUrl}" style="display:inline-block;background:#2d6a4f;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color:#999;font-size:12px;line-height:1.6;margin:0;font-family:Arial,sans-serif;">
+        If you did not request a password reset, you can safely ignore this email — your password will not change.<br>
+        This link expires in 1 hour.
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${name}`,
+    "",
+    "We received a request to reset your patient portal password.",
+    "Visit the link below to set a new password. Valid for 1 hour.",
+    "",
+    resetUrl,
+    "",
+    "If you did not request this, please ignore this email.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  const cfg = await getSmtpConfig();
+
+  if (!cfg) {
+    console.log("\n========================================");
+    console.log("PASSWORD RESET (SMTP not configured)");
+    console.log(`To: ${to}`);
+    console.log(`Reset URL: ${resetUrl}`);
+    console.log("========================================\n");
+    return;
+  }
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+  });
+}
+
 // ── Subscriber acknowledgement ────────────────────────────────
 export async function sendSubscriptionConfirmation(opts: { to: string; name: string }) {
   const { to, name } = opts;

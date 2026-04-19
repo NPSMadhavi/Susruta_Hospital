@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Sparkles, Globe } from "lucide-react";
+import { Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { patientApi } from "@/lib/patient-api";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot" | "reset";
 
 const COUNTRIES = [
   { code: "IN", name: "India", dial: "+91", flag: "🇮🇳" },
@@ -49,11 +49,17 @@ export default function PortalLogin() {
   const params = new URLSearchParams(search);
   const nextUrl = params.get("next") || "/portal/dashboard";
 
-  const [mode, setMode] = useState<Mode>("login");
+  const resetToken = params.get("reset_token");
+
+  const [mode, setMode] = useState<Mode>(resetToken ? "reset" : "login");
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [form, setForm] = useState(defaultForm);
   const [agreeDisclaimer, setAgreeDisclaimer] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -61,7 +67,9 @@ export default function PortalLogin() {
   const selectedCountry = COUNTRIES.find(c => c.code === form.countryCode) ?? COUNTRIES[0];
 
   useEffect(() => {
-    patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
+    if (!resetToken) {
+      patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
+    }
     detectCountryCode().then(code => {
       const match = COUNTRIES.find(c => c.code === code);
       if (match) setForm(f => ({ ...f, countryCode: match.code }));
@@ -73,6 +81,31 @@ export default function PortalLogin() {
     if (err === "expired_token") setError("This verification link has expired. Please sign in and request a new one.");
     else if (err === "invalid_token") setError("This verification link is invalid.");
   }, [search]);
+
+  async function submitForgot(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail.trim()) { setError("Please enter your email address."); return; }
+    setLoading(true); setError("");
+    try {
+      await patientApi.forgotPassword(forgotEmail.trim());
+      setSuccess("If an account exists for that email, a reset link has been sent. Please check your inbox.");
+    } catch {
+      setSuccess("If an account exists for that email, a reset link has been sent. Please check your inbox.");
+    } finally { setLoading(false); }
+  }
+
+  async function submitReset(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (newPassword !== confirmNewPassword) { setError("Passwords do not match."); return; }
+    setLoading(true); setError("");
+    try {
+      await patientApi.resetPassword(resetToken!, newPassword);
+      navigate(nextUrl);
+    } catch (err: any) {
+      setError(err?.message || "This reset link is invalid or has expired. Please request a new one.");
+    } finally { setLoading(false); }
+  }
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -161,16 +194,35 @@ export default function PortalLogin() {
 
             <AnimatePresence mode="wait">
               <motion.div key="form" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                {/* Tab switcher */}
-                <div className="bg-muted/60 rounded-2xl p-1 flex mb-6">
-                  {(["login", "register"] as Mode[]).map((m) => (
-                    <button key={m} onClick={() => { setMode(m); setError(""); setShowPw(false); setShowConfirmPw(false); }}
-                      className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${mode === m ? "bg-white text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      {m === "login" ? "Sign In" : "Create Account"}
-                    </button>
-                  ))}
-                </div>
+                {/* Tab switcher — hidden in forgot/reset modes */}
+                {(mode === "login" || mode === "register") && (
+                  <div className="bg-muted/60 rounded-2xl p-1 flex mb-6">
+                    {(["login", "register"] as Mode[]).map((m) => (
+                      <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); setShowPw(false); setShowConfirmPw(false); }}
+                        className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${mode === m ? "bg-white text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {m === "login" ? "Sign In" : "Create Account"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Forgot/Reset header */}
+                {(mode === "forgot" || mode === "reset") && (
+                  <div className="mb-6">
+                    <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                      <KeyRound size={20} className="text-primary" />
+                    </div>
+                    <h2 className="text-xl font-bold text-foreground">
+                      {mode === "forgot" ? "Forgot your password?" : "Set a new password"}
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {mode === "forgot"
+                        ? "Enter your registered email and we'll send you a reset link."
+                        : "Choose a strong password for your account."}
+                    </p>
+                  </div>
+                )}
 
                 {error && (
                   <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -179,6 +231,85 @@ export default function PortalLogin() {
                   </motion.div>
                 )}
 
+                {success && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3 flex items-start gap-2">
+                    <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
+                    <span>{success}</span>
+                  </motion.div>
+                )}
+
+                {/* ── Forgot password form ── */}
+                {mode === "forgot" && !success && (
+                  <form onSubmit={submitForgot} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1.5">Email Address *</label>
+                      <div className="relative">
+                        <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input type="email" required value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
+                          placeholder="you@example.com" autoComplete="email" className={inputCls} />
+                      </div>
+                    </div>
+                    <button type="submit" disabled={loading}
+                      className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-60 transition-all shadow-sm shadow-primary/20">
+                      {loading ? "Sending..." : "Send Reset Link"}
+                      {!loading && <ArrowRight size={15} />}
+                    </button>
+                    <button type="button" onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                      className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors">
+                      ← Back to Sign In
+                    </button>
+                  </form>
+                )}
+
+                {mode === "forgot" && success && (
+                  <button onClick={() => { setMode("login"); setSuccess(""); setForgotEmail(""); }}
+                    className="w-full py-3 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted/40 transition-all">
+                    ← Back to Sign In
+                  </button>
+                )}
+
+                {/* ── Reset password form ── */}
+                {mode === "reset" && (
+                  <form onSubmit={submitReset} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1.5">New Password *</label>
+                      <div className="relative">
+                        <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input type={showPw ? "text" : "password"} required value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          placeholder="At least 6 characters" autoComplete="new-password"
+                          className={`${inputCls} pr-10`} />
+                        <button type="button" onClick={() => setShowPw(v => !v)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1.5">Confirm Password *</label>
+                      <div className="relative">
+                        <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input type={showConfirmPw ? "text" : "password"} required value={confirmNewPassword}
+                          onChange={e => setConfirmNewPassword(e.target.value)}
+                          placeholder="Re-enter your new password" autoComplete="new-password"
+                          className={`${inputCls} pr-10`} />
+                        <button type="button" onClick={() => setShowConfirmPw(v => !v)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </div>
+                    <button type="submit" disabled={loading}
+                      className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-60 transition-all shadow-sm shadow-primary/20">
+                      {loading ? "Updating..." : "Set New Password"}
+                      {!loading && <ArrowRight size={15} />}
+                    </button>
+                  </form>
+                )}
+
+                {/* ── Main login / register form ── */}
+                {(mode === "login" || mode === "register") && (
                 <form onSubmit={submit} className="space-y-4">
                   <AnimatePresence initial={false}>
                     {mode === "register" && (
@@ -343,6 +474,17 @@ export default function PortalLogin() {
                     )}
                   </AnimatePresence>
 
+                  {/* Forgot password link — login mode only */}
+                  {mode === "login" && (
+                    <div className="text-right -mt-1">
+                      <button type="button"
+                        onClick={() => { setMode("forgot"); setError(""); setSuccess(""); setForgotEmail(form.email); }}
+                        className="text-xs text-primary/80 hover:text-primary font-medium underline underline-offset-2 transition-colors">
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
+
                   <button type="submit" disabled={loading}
                     className="w-full bg-primary text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 transition-all disabled:opacity-60 shadow-lg shadow-primary/20"
                   >
@@ -352,6 +494,7 @@ export default function PortalLogin() {
                     }
                   </button>
                 </form>
+                )}
               </motion.div>
             </AnimatePresence>
 

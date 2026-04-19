@@ -5,7 +5,7 @@ import {
   createPatientSession, deletePatientSession, requirePatient,
   hashPassword, verifyPassword,
 } from "../lib/patient-auth";
-import { sendMagicLink } from "../lib/email";
+import { sendMagicLink, sendPasswordResetEmail } from "../lib/email";
 import { randomBytes } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment } from "./appointments";
@@ -230,6 +230,66 @@ router.post("/logout", async (req, res) => {
   if (token) await deletePatientSession(token);
   res.clearCookie("patient_session");
   res.json({ success: true });
+});
+
+// ── Forgot Password ────────────────────────────────────────────
+router.post("/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "validation_error", message: "Email is required." });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, normalizedEmail));
+
+  // Always respond success to prevent email enumeration
+  if (!patient) {
+    res.json({ success: true });
+    return;
+  }
+
+  const token = randomBytes(48).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  await db.insert(loginTokensTable).values({
+    token, patientId: patient.id, nextUrl: "__password_reset__", expiresAt, used: false,
+  });
+
+  const resetUrl = `${getFrontendUrl(req)}/portal/login?reset_token=${token}`;
+  sendPasswordResetEmail({ to: normalizedEmail, name: patient.name, resetUrl }).catch(console.error);
+
+  res.json({ success: true });
+});
+
+// ── Reset Password ─────────────────────────────────────────────
+router.post("/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password || typeof token !== "string" || typeof password !== "string") {
+    res.status(400).json({ error: "validation_error", message: "Token and new password are required." });
+    return;
+  }
+  if (password.length < 6) {
+    res.status(400).json({ error: "weak_password", message: "Password must be at least 6 characters." });
+    return;
+  }
+
+  const [row] = await db.select().from(loginTokensTable).where(
+    and(eq(loginTokensTable.token, token), eq(loginTokensTable.nextUrl, "__password_reset__"))
+  );
+
+  if (!row || row.used || row.expiresAt < new Date()) {
+    res.status(400).json({ error: "invalid_token", message: "This reset link is invalid or has expired. Please request a new one." });
+    return;
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db.update(patientsTable).set({ passwordHash }).where(eq(patientsTable.id, row.patientId));
+  await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.token, token));
+
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, row.patientId));
+  const sessionToken = await createPatientSession(row.patientId);
+  res.cookie("patient_session", sessionToken, cookieOpts());
+  res.json({ success: true, patient: patient ? serializePatient(patient) : null });
 });
 
 // ── Me ─────────────────────────────────────────────────────────

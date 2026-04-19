@@ -21,6 +21,12 @@ export const patientApi = {
 
   logout: () => req("/logout", { method: "POST" }),
 
+  forgotPassword: (email: string) =>
+    req("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, password: string) =>
+    req("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+
   me: () => req("/me"),
 
   getAppointments: () => req("/appointments"),
