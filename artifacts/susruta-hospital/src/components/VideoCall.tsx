@@ -5,7 +5,7 @@ import {
   RoomAudioRenderer,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users } from "lucide-react";
+import { Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users, Paperclip, FileText, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -69,6 +69,103 @@ export function GuestLinkCard({ apptId }: { apptId: number; guestToken?: string 
           {copied ? "Copied!" : "Copy Link"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── In-Call Document Upload ────────────────────────────────────
+type UploadedDoc = { name: string; objectPath: string; contentType: string; size: number };
+
+export function CallDocumentUpload({ apptId }: { apptId: number }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploads, setUploads] = useState<UploadedDoc[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploading(true);
+    setErr("");
+    try {
+      // 1. Request upload URL from object storage
+      const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!urlRes.ok) throw new Error("Could not get upload URL");
+      const { uploadURL, objectPath } = await urlRes.json();
+
+      // 2. PUT file directly to storage
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error("Upload failed");
+
+      // 3. Register document on the appointment
+      const doc: UploadedDoc = { name: file.name, objectPath, contentType: file.type, size: file.size };
+      const saveRes = await fetch(`${BASE}/api/online-appointments/${apptId}/add-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(doc),
+      });
+      if (!saveRes.ok) throw new Error("Could not save document");
+
+      setUploads(prev => [...prev, doc]);
+    } catch (e: any) {
+      setErr(e.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function fmtSize(b: number) {
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="mt-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Paperclip size={14} className="text-[#1a3d2b]" />
+          <p className="text-xs font-bold text-gray-700">Share Documents with Doctor</p>
+        </div>
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#1a3d2b] text-white hover:bg-[#15322a] disabled:opacity-60 transition-colors">
+          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+          {uploading ? "Uploading…" : "Upload File"}
+        </button>
+        <input ref={fileRef} type="file" className="hidden" onChange={handleFile}
+          accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png" />
+      </div>
+
+      {err && <p className="text-xs text-red-600 mb-2">{err}</p>}
+
+      {uploads.length > 0 && (
+        <div className="space-y-1.5">
+          {uploads.map((doc, i) => (
+            <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5">
+              <FileText size={13} className="text-[#1a3d2b] shrink-0" />
+              <span className="text-xs text-gray-700 flex-1 truncate">{doc.name}</span>
+              <span className="text-[10px] text-gray-400 shrink-0">{fmtSize(doc.size)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {uploads.length === 0 && !uploading && (
+        <p className="text-[11px] text-gray-400">Upload reports, lab results or any relevant files for the doctor to review.</p>
+      )}
     </div>
   );
 }
@@ -223,19 +320,24 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
 
   if (step === "call" && creds) {
     return (
-      <div className="min-h-screen bg-gray-900" style={{ height: "100dvh" }}>
-        <LiveKitRoom
-          token={creds.token}
-          serverUrl={creds.serverUrl}
-          connect={true}
-          video={true}
-          audio={true}
-          onDisconnected={() => setEnded(true)}
-          data-lk-theme="default"
-          style={{ height: "100%" }}>
-          <VideoConference />
-          <RoomAudioRenderer />
-        </LiveKitRoom>
+      <div className="flex flex-col bg-gray-900" style={{ minHeight: "100dvh" }}>
+        <div className="flex-1" style={{ minHeight: 0 }}>
+          <LiveKitRoom
+            token={creds.token}
+            serverUrl={creds.serverUrl}
+            connect={true}
+            video={true}
+            audio={true}
+            onDisconnected={() => setEnded(true)}
+            data-lk-theme="default"
+            style={{ height: "100%" }}>
+            <VideoConference />
+            <RoomAudioRenderer />
+          </LiveKitRoom>
+        </div>
+        <div className="px-4 py-3 bg-gray-950 shrink-0">
+          <CallDocumentUpload apptId={apptId} />
+        </div>
       </div>
     );
   }

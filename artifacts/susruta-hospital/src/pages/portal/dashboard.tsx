@@ -11,7 +11,7 @@ import {
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
 import { BookingWizard } from "./BookingWizard";
-import { VideoCall, GuestLinkCard } from "@/components/VideoCall";
+import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -224,6 +224,7 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
           {isInCall ? (
             <>
               <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
+              <CallDocumentUpload apptId={onlineAppt!.id} />
               <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
             </>
           ) : canJoin ? (
@@ -316,6 +317,7 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded }: {
               {canJoin && videoCallApptId === onlineAppt!.id ? (
                 <>
                   <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
+                  <CallDocumentUpload apptId={onlineAppt!.id} />
                   <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
                 </>
               ) : canJoin ? (

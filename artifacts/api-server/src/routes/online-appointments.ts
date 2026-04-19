@@ -381,6 +381,27 @@ router.patch("/doctor/:id/notes", requireDoctor, async (req, res) => {
   }
 });
 
+// ── POST /api/online-appointments/:id/add-document — Upload during call ──
+// Accessible by patient (auth) or guest (no auth) when joinEnabled = true
+router.post("/:id/add-document", async (req: any, res) => {
+  const id = parseInt(req.params.id);
+  const parsed = z.object({
+    name: z.string(),
+    objectPath: z.string(),
+    contentType: z.string(),
+    size: z.number(),
+  }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_body" }); return; }
+
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  if (!appt.joinEnabled) { res.status(403).json({ error: "call_not_active" }); return; }
+
+  const updated = [...(appt.documents ?? []), parsed.data];
+  await db.update(onlineAppointmentsTable).set({ documents: updated }).where(eq(onlineAppointmentsTable.id, id));
+  res.json({ ok: true, documents: updated });
+});
+
 // ── DELETE /api/online-appointments/:id — Patient cancels ─────
 router.delete("/:id", requirePatient, async (req: any, res) => {
   const patient = req.patient;
