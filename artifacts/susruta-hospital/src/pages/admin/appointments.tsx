@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
   Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
-  Link, Edit2, Save, AlertCircle, FileText, MapPin, User
+  AlertCircle, FileText, MapPin, User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -268,75 +268,9 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
   );
 }
 
-// ── Meeting Link Bar ─────────────────────────────────────────────
-function MeetingLinkBar({ meetingLink, onSaved }: { meetingLink: string | null; onSaved: (link: string) => void }) {
-  const [editing, setEditing] = useState(!meetingLink);
-  const [value, setValue] = useState(meetingLink ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function save() {
-    const trimmed = value.trim();
-    if (!trimmed) { setErr("Please enter a valid meeting link"); return; }
-    setSaving(true); setErr("");
-    try {
-      await fetch(`${BASE}/api/admin/settings`, {
-        method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingLink: trimmed }),
-      });
-      onSaved(trimmed);
-      setEditing(false);
-    } catch { setErr("Failed to save. Try again."); }
-    finally { setSaving(false); }
-  }
-
-  if (editing) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-1.5 flex items-center gap-1.5">
-          <Link size={12} /> Default Meeting Link
-        </p>
-        <p className="text-xs text-amber-700 mb-3">
-          Enter your Google Meet or Zoom link once — it will be sent to all patients automatically when you click "Enable Join".
-        </p>
-        <div className="flex gap-2">
-          <input type="url" value={value} onChange={e => setValue(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && save()}
-            placeholder="https://meet.google.com/xxx-xxxx-xxx"
-            className="flex-1 text-sm border border-amber-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-white" />
-          <button onClick={save} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors shrink-0">
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
-          </button>
-          {meetingLink && <button onClick={() => { setEditing(false); setValue(meetingLink); }}
-            className="px-3 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 transition-colors">
-            <X size={13} />
-          </button>}
-        </div>
-        {err && <p className="text-xs text-red-600 mt-2 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-      <Link size={15} className="text-blue-600 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Active Meeting Link</p>
-        <p className="text-sm text-blue-800 font-medium truncate">{meetingLink}</p>
-      </div>
-      <button onClick={() => setEditing(true)}
-        className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors shrink-0" title="Edit">
-        <Edit2 size={13} />
-      </button>
-    </div>
-  );
-}
-
 // ── Online Appointment Card ──────────────────────────────────────
-function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescriptionUploaded }: {
-  appt: OnlineAppt; meetingLink: string | null;
+function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded }: {
+  appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onRenotify: (id: number) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
@@ -345,7 +279,6 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescri
   const [toggling, setToggling] = useState(false);
   const [renotifying, setRenotifying] = useState(false);
   const sc = ONLINE_STATUS_COLORS[appt.status] ?? ONLINE_STATUS_COLORS.confirmed;
-  const noLink = !meetingLink && !appt.joinEnabled;
 
   async function toggleJoin() {
     setToggling(true);
@@ -407,15 +340,12 @@ function OnlineApptCard({ appt, meetingLink, onJoinToggle, onRenotify, onPrescri
             )}
             <button
               onClick={e => { e.stopPropagation(); toggleJoin(); }}
-              disabled={toggling || noLink}
-              title={noLink ? "Set a meeting link above first" : ""}
+              disabled={toggling}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
                 appt.joinEnabled
                   ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                  : noLink
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                    : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
               )}>
               {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
               {appt.joinEnabled ? "End Session" : "Enable Join"}
@@ -483,7 +413,6 @@ export default function AdminAppointments() {
   const [onlineSubTab, setOnlineSubTab] = useState<"pending" | "completed">("pending");
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
-  const [meetingLink, setMeetingLink] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [onlineErr, setOnlineErr] = useState("");
   const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -506,7 +435,6 @@ export default function AdminAppointments() {
       }
       prevOnlineCountRef.current = appts.length;
       setOnlineAppts(appts);
-      setMeetingLink(settings.meetingLink ?? null);
       setLastRefresh(new Date());
     } catch { if (!silent) setOnlineErr("Failed to load online appointments"); }
     finally { if (!silent) setOnlineLoading(false); }
@@ -687,9 +615,6 @@ export default function AdminAppointments() {
             </div>
           )}
 
-          {/* Meeting link editor */}
-          <MeetingLinkBar meetingLink={meetingLink} onSaved={link => setMeetingLink(link)} />
-
           {/* Live session badge */}
           {onlineLiveCount > 0 && (
             <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3 flex items-center gap-3">
@@ -758,7 +683,7 @@ export default function AdminAppointments() {
               <div className="space-y-3">
                 {onlinePendingList.map(appt => (
                   <OnlineApptCard
-                    key={appt.id} appt={appt} meetingLink={meetingLink}
+                    key={appt.id} appt={appt}
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
@@ -776,7 +701,7 @@ export default function AdminAppointments() {
               <div className="space-y-3">
                 {onlineCompletedList.map(appt => (
                   <OnlineApptCard
-                    key={appt.id} appt={appt} meetingLink={meetingLink}
+                    key={appt.id} appt={appt}
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}

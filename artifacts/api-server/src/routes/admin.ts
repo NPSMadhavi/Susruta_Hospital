@@ -101,8 +101,6 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     doctorPortalConfigured: !!s.doctorPasswordHash,
     pharmacyPortalConfigured: !!s.pharmacyPasswordHash,
     phonepeQrObjectPath: s.phonepeQrObjectPath ?? null,
-    // Online consultation settings
-    meetingLink: s.meetingLink ?? null,
     patientIdPrefix: s.patientIdPrefix,
     patientIdCurrentNumber: s.patientIdCurrentNumber,
     // Computed: current patient ID display (last assigned)
@@ -136,10 +134,6 @@ router.patch("/settings", requireAdmin, async (req, res) => {
   // Handle PhonePe QR object path
   if (req.body.phonepeQrObjectPath !== undefined) {
     updates.phonepeQrObjectPath = req.body.phonepeQrObjectPath;
-  }
-  // Meeting link
-  if (req.body.meetingLink !== undefined) {
-    updates.meetingLink = req.body.meetingLink || null;
   }
   // Patient ID counter — admin can manually set prefix and current number
   if (req.body.patientIdPrefix !== undefined) {

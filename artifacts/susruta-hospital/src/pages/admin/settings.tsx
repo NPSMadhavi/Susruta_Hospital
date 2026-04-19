@@ -35,7 +35,6 @@ type Settings = {
   doctorPortalConfigured: boolean;
   pharmacyPortalConfigured: boolean;
   phonepeQrObjectPath: string | null;
-  meetingLink: string | null;
   patientIdPrefix: string;
   patientIdCurrentNumber: number;
   currentPatientId: string | null;

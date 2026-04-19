@@ -87,7 +87,6 @@ router.get("/mine", requirePatient, async (req: any, res) => {
     status: r.appt.status,
     reason: r.appt.reason,
     documents: r.appt.documents,
-    meetingLink: r.appt.meetingLink ?? null,
     joinEnabled: r.appt.joinEnabled,
     joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
     patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
@@ -146,7 +145,6 @@ router.get("/admin", requireAdmin, async (_req, res) => {
     status: r.appt.status,
     reason: r.appt.reason,
     documents: r.appt.documents,
-    meetingLink: r.appt.meetingLink ?? null,
     joinEnabled: r.appt.joinEnabled,
     joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
     patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
@@ -187,9 +185,8 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   if (rows.length === 0) { res.status(404).json({ error: "not_found" }); return; }
   const { appt, patient } = rows[0];
 
-  // Get the global meeting link from settings
+  // Get settings for PhonePe QR (used in session-ended notifications)
   const [settings] = await db.select().from(siteSettingsTable);
-  const meetingLink = settings?.meetingLink ?? null;
 
   // Disable join on any other currently-enabled appointments and notify their patients
   const prevEnabled = await db
