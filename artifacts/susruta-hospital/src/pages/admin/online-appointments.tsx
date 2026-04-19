@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Video, User, Calendar, Clock, RefreshCw, CheckCircle2, AlertCircle,
   Loader2, FileText, ChevronDown, ChevronUp, ImageIcon, Upload, Camera,
-  X, Play, Square
+  X, Play, Square, Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -143,19 +143,29 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 }
 
 // ── Appointment Card ────────────────────────────────────────────
-function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded }: {
+function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded, onDelete }: {
   appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
+  onDelete: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(appt.joinEnabled);
   const [toggling, setToggling] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const sc = STATUS_COLORS[appt.status] ?? STATUS_COLORS.confirmed;
 
   async function toggleJoin() {
     setToggling(true);
     await onJoinToggle(appt.id, !appt.joinEnabled);
     setToggling(false);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    await onDelete(appt.id);
+    setDeleting(false);
+    setConfirmDelete(false);
   }
 
   return (
@@ -200,19 +210,51 @@ function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded }: {
             </div>
           </div>
 
-          <button
-            onClick={e => { e.stopPropagation(); toggleJoin(); }}
-            disabled={toggling}
-            title={appt.joinEnabled ? "End session for this patient" : "Start LiveKit video room for this patient"}
-            className={cn(
-              "shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm",
-              appt.joinEnabled
-                ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
-            )}>
-            {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
-            {appt.joinEnabled ? "End Session" : "Enable Join"}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Enable/Disable Join */}
+            <button
+              onClick={e => { e.stopPropagation(); toggleJoin(); }}
+              disabled={toggling}
+              title={appt.joinEnabled ? "End session for this patient" : "Start LiveKit video room for this patient"}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm",
+                appt.joinEnabled
+                  ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+              )}>
+              {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+              {appt.joinEnabled ? "End Session" : "Enable Join"}
+            </button>
+
+            {/* Delete */}
+            {!confirmDelete ? (
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
+                title="Delete this appointment"
+                className="p-2.5 rounded-xl text-muted-foreground hover:text-red-600 hover:bg-red-50 border border-border hover:border-red-200 transition-all"
+              >
+                <Trash2 size={13} />
+              </button>
+            ) : (
+              <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-xl px-2 py-1.5">
+                <span className="text-[11px] text-red-700 font-semibold">Delete?</span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(); }}
+                  disabled={deleting}
+                  className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition-colors disabled:opacity-60"
+                >
+                  {deleting ? <Loader2 size={10} className="animate-spin" /> : "Yes"}
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); setConfirmDelete(false); }}
+                  disabled={deleting}
+                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-red-600 hover:bg-red-100 transition-colors disabled:opacity-60"
+                >
+                  No
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Reason */}
@@ -317,6 +359,15 @@ export default function AdminOnlineAppointments() {
     setAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a));
   }
 
+  async function deleteAppt(id: number) {
+    try {
+      await adminFetch(`/online-appointments/admin/${id}`, { method: "DELETE" });
+      setAppts(prev => prev.filter(a => a.id !== id));
+    } catch {
+      setErr("Failed to delete. Please try again.");
+    }
+  }
+
   const sorted = [...appts].sort((a, b) => {
     if (a.joinEnabled && !b.joinEnabled) return -1;
     if (!a.joinEnabled && b.joinEnabled) return 1;
@@ -397,6 +448,7 @@ export default function AdminOnlineAppointments() {
                 appt={appt}
                 onJoinToggle={toggleJoin}
                 onPrescriptionUploaded={handlePrescriptionUploaded}
+                onDelete={deleteAppt}
               />
             ))}
           </div>

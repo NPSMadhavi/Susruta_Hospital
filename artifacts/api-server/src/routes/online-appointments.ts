@@ -435,6 +435,28 @@ router.post("/:id/add-document", async (req: any, res) => {
   res.json({ ok: true, documents: updated });
 });
 
+// ── DELETE /api/online-appointments/admin/:id — Admin hard-deletes ──────
+router.delete("/admin/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  // Close any live room first (best effort)
+  if (appt.livekitRoomName) {
+    const { roomService } = await import("./livekit");
+    roomService.deleteRoom(appt.livekitRoomName).catch(() => {});
+  }
+
+  // Delete prescription, free the slot, then the appointment
+  await db.delete(prescriptionsTable).where(eq(prescriptionsTable.onlineAppointmentId, id));
+  await db.update(onlineSlotsTable).set({ isBooked: false }).where(eq(onlineSlotsTable.id, appt.slotId));
+  await db.delete(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+
+  res.json({ ok: true });
+});
+
 // ── DELETE /api/online-appointments/:id — Patient cancels ─────
 router.delete("/:id", requirePatient, async (req: any, res) => {
   const patient = req.patient;
