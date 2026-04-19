@@ -54,6 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
+const timeInputCls = "w-auto px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -184,11 +185,11 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <input type="time" value={form.startTime} onChange={set("startTime")} className={inputCls} />
+                <input type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <input type="time" value={form.endTime} onChange={set("endTime")} className={inputCls} />
+                <input type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
               </div>
             </div>
 
