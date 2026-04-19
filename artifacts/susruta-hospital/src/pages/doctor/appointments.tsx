@@ -729,7 +729,7 @@ export default function DoctorPortal() {
   const showPreview = previewDoc !== null && hasDetail;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none" style={{ fontSize: '103%' }}>
 
       {/* ── Header ────────────────────────────────────────────── */}
       <header className="bg-[#1a3d2b] h-13 flex items-center px-4 gap-3 shrink-0 z-40" style={{ height: 52 }}>
@@ -784,9 +784,6 @@ export default function DoctorPortal() {
               </button>
             ))}
           </nav>
-          <div className="px-4 py-3 border-t border-white/10">
-            <p className="text-white/25 text-[10px]">Auto-refreshes every 20s</p>
-          </div>
         </aside>
 
         {/* ── Middle List (resizable) ──────────────────────────── */}
