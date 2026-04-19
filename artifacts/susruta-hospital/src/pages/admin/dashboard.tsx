@@ -1,14 +1,26 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { useListAppointments } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Users, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { Users, Calendar as CalendarIcon, Clock, Video, ArrowRight } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function AdminDashboard() {
   const { data: appointments = [], isLoading } = useListAppointments();
+  const [onlineAppts, setOnlineAppts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setOnlineAppts(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const pending = appointments.filter(a => a.status === 'pending').length;
   const confirmed = appointments.filter(a => a.status === 'confirmed').length;
+  const liveOnline = onlineAppts.filter(a => a.joinEnabled).length;
+  const pendingOnline = onlineAppts.filter(a => a.status === 'pending').length;
 
   return (
     <AdminLayout>
@@ -17,30 +29,49 @@ export default function AdminDashboard() {
         <p className="text-muted-foreground">Welcome to Susruta Hospital Admin Panel.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-muted-foreground">Total Appointments</h3>
-            <div className="p-2 bg-primary/10 text-primary rounded-lg"><Users size={20}/></div>
+            <h3 className="font-semibold text-muted-foreground text-sm">Total In-Person</h3>
+            <div className="p-2 bg-primary/10 text-primary rounded-lg"><Users size={18}/></div>
           </div>
           <p className="text-4xl font-bold font-serif">{isLoading ? '-' : appointments.length}</p>
         </div>
         
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-muted-foreground">Pending Requests</h3>
-            <div className="p-2 bg-yellow-500/10 text-yellow-600 rounded-lg"><Clock size={20}/></div>
+            <h3 className="font-semibold text-muted-foreground text-sm">Pending In-Person</h3>
+            <div className="p-2 bg-yellow-500/10 text-yellow-600 rounded-lg"><Clock size={18}/></div>
           </div>
           <p className="text-4xl font-bold font-serif text-yellow-600">{isLoading ? '-' : pending}</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-muted-foreground">Confirmed</h3>
-            <div className="p-2 bg-green-500/10 text-green-600 rounded-lg"><CalendarIcon size={20}/></div>
+            <h3 className="font-semibold text-muted-foreground text-sm">Confirmed In-Person</h3>
+            <div className="p-2 bg-green-500/10 text-green-600 rounded-lg"><CalendarIcon size={18}/></div>
           </div>
           <p className="text-4xl font-bold font-serif text-green-600">{isLoading ? '-' : confirmed}</p>
         </div>
+
+        {/* Video Consultations quick link */}
+        <Link href="/admin/online-appointments">
+          <div className={`p-6 rounded-2xl border-2 shadow-sm cursor-pointer transition-all hover:shadow-md ${liveOnline > 0 ? 'bg-emerald-600 border-emerald-500' : 'bg-white border-border hover:border-blue-300'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`font-semibold text-sm ${liveOnline > 0 ? 'text-white/80' : 'text-muted-foreground'}`}>Video Consultations</h3>
+              <div className={`p-2 rounded-lg ${liveOnline > 0 ? 'bg-white/20' : 'bg-blue-500/10 text-blue-600'}`}>
+                <Video size={18} className={liveOnline > 0 ? 'text-white animate-pulse' : ''} />
+              </div>
+            </div>
+            <p className={`text-4xl font-bold font-serif ${liveOnline > 0 ? 'text-white' : 'text-blue-600'}`}>{onlineAppts.length}</p>
+            <div className="flex items-center justify-between mt-3">
+              <span className={`text-xs font-semibold ${liveOnline > 0 ? 'text-emerald-100' : 'text-muted-foreground'}`}>
+                {liveOnline > 0 ? `🟢 ${liveOnline} live now` : pendingOnline > 0 ? `${pendingOnline} pending` : 'Manage sessions'}
+              </span>
+              <ArrowRight size={14} className={liveOnline > 0 ? 'text-white/60' : 'text-muted-foreground/40'} />
+            </div>
+          </div>
+        </Link>
       </div>
 
       <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">

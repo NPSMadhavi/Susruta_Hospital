@@ -256,11 +256,11 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 80, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-        style={{ maxHeight: "92dvh" }}
+        className="bg-white w-full sm:max-w-xl md:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        style={{ maxHeight: "92dvh", fontSize: "107%" }}
       >
         {/* Modal header */}
-        <div className="bg-[#1a3d2b] px-5 py-4 flex items-center gap-3 shrink-0">
+        <div className="bg-[#1a3d2b] px-6 py-5 flex items-center gap-3 shrink-0">
           <div className="flex-1">
             <p className="text-white/60 text-xs font-medium uppercase tracking-wider">
               {wizType === null ? "Appointment" : wizType === "offline" ? "In-Person Visit" : "Online Consultation"}
@@ -276,7 +276,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8">
           <AnimatePresence mode="wait">
 
             {/* ── STEP 0: Type selection ──────────────────────── */}
@@ -288,34 +288,34 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 <div className="space-y-3">
                   {/* In-Person */}
                   <button onClick={() => handleTypeSelect("offline")}
-                    className="w-full bg-white border-2 border-gray-200 hover:border-[#1a3d2b] hover:bg-[#1a3d2b]/5 rounded-2xl p-5 text-left transition-all group">
-                    <div className="flex items-start gap-4">
-                      <div className="w-13 h-13 bg-green-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-green-200 transition-colors" style={{ width: 52, height: 52 }}>
-                        <MapPin size={24} className="text-green-700" />
+                    className="w-full bg-white border-2 border-gray-200 hover:border-[#1a3d2b] hover:bg-[#1a3d2b]/5 rounded-2xl p-6 text-left transition-all group">
+                    <div className="flex items-start gap-5">
+                      <div className="bg-green-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-green-200 transition-colors" style={{ width: 64, height: 64 }}>
+                        <MapPin size={30} className="text-green-700" />
                       </div>
                       <div>
-                        <p className="font-bold text-gray-900 text-lg">In-Person Visit</p>
-                        <p className="text-gray-500 text-sm mt-1 leading-relaxed">
+                        <p className="font-bold text-gray-900 text-xl">In-Person Visit</p>
+                        <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
                           Visit the clinic in Tirupati. Book a time slot and get hands-on Ayurvedic treatment.
                         </p>
-                        <p className="text-xs text-green-700 font-semibold mt-2">📍 119, Ramulavari North Mada Street</p>
+                        <p className="text-sm text-green-700 font-semibold mt-2.5">📍 119, Ramulavari North Mada Street</p>
                       </div>
                     </div>
                   </button>
 
                   {/* Online */}
                   <button onClick={() => handleTypeSelect("online")}
-                    className="w-full bg-white border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-2xl p-5 text-left transition-all group">
-                    <div className="flex items-start gap-4">
-                      <div className="w-13 h-13 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors" style={{ width: 52, height: 52 }}>
-                        <Video size={24} className="text-blue-700" />
+                    className="w-full bg-white border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-2xl p-6 text-left transition-all group">
+                    <div className="flex items-start gap-5">
+                      <div className="bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors" style={{ width: 64, height: 64 }}>
+                        <Video size={30} className="text-blue-700" />
                       </div>
                       <div>
-                        <p className="font-bold text-gray-900 text-lg">Online Consultation</p>
-                        <p className="text-gray-500 text-sm mt-1 leading-relaxed">
+                        <p className="font-bold text-gray-900 text-xl">Online Consultation</p>
+                        <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
                           Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.
                         </p>
-                        <p className="text-xs text-blue-700 font-semibold mt-2">🎥 Requires uploading medical reports</p>
+                        <p className="text-sm text-blue-700 font-semibold mt-2.5">🎥 Requires uploading medical reports</p>
                       </div>
                     </div>
                   </button>

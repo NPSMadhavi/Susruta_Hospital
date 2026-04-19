@@ -4,7 +4,7 @@ import {
   LogOut, RefreshCw, Video, MapPin, Users, ChevronRight, ChevronLeft,
   Calendar, Clock, Phone, FileText, ImageIcon, Camera, Upload,
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn,
-  StickyNote, Save, ChevronDown, ChevronUp, Mail
+  ChevronDown, ChevronUp, Mail
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -271,61 +271,11 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
   );
 }
 
-// ── Doctor Notes ───────────────────────────────────────────────
-function DoctorNotes({ apptId, initial, onSaved }: {
-  apptId: number; initial: string | null; onSaved: (notes: string) => void;
-}) {
-  const [value, setValue] = useState(initial ?? "");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [err, setErr] = useState("");
-  const dirty = value !== (initial ?? "");
-
-  async function save() {
-    setSaving(true); setErr(""); setSaved(false);
-    try {
-      await fetch(`${BASE}/api/online-appointments/doctor/${apptId}/notes`, {
-        method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: value }),
-      });
-      setSaved(true); onSaved(value);
-      setTimeout(() => setSaved(false), 2000);
-    } catch { setErr("Failed to save"); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <div className="space-y-2">
-      <textarea
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder="Add clinical notes, observations, follow-up instructions…"
-        rows={4}
-        className="w-full text-xs resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/30 transition-all"
-      />
-      <div className="flex items-center gap-2">
-        <button onClick={save} disabled={saving || !dirty}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-            dirty ? "bg-[#1a3d2b] text-white hover:bg-[#1a3d2b]/90" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-          )}>
-          {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
-          {saving ? "Saving…" : "Save Notes"}
-        </button>
-        {saved && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 size={11} /> Saved</span>}
-        {err && <span className="text-[11px] text-red-500">{err}</span>}
-      </div>
-    </div>
-  );
-}
-
 // ── Appointment Detail (right panel main content) ─────────────
-function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onNotesSaved }: {
+function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
   appt: OnlineAppt;
   onDocClick: (doc: DocFile) => void;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
-  onNotesSaved: (id: number, notes: string) => void;
 }) {
   return (
     <div className="flex flex-col divide-y divide-gray-100 overflow-auto h-full">
@@ -400,19 +350,6 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onNotesSaved }: 
             ))}
           </div>
         )}
-      </div>
-
-      {/* Doctor's Note */}
-      <div className="px-5 py-4 bg-white shrink-0">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-          <StickyNote size={11} /> Doctor's Notes
-          <span className="text-gray-300 font-normal normal-case tracking-normal">(optional)</span>
-        </p>
-        <DoctorNotes
-          apptId={appt.id}
-          initial={appt.prescription?.notes ?? null}
-          onSaved={notes => onNotesSaved(appt.id, notes)}
-        />
       </div>
 
       {/* Prescription */}
@@ -695,13 +632,6 @@ export default function DoctorPortal() {
   function handlePrescriptionUploaded(apptId: number, rx: Prescription) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
   }
-  function handleNotesSaved(apptId: number, notes: string) {
-    setOnline(prev => prev.map(a => a.id === apptId ? {
-      ...a,
-      prescription: a.prescription ? { ...a.prescription, notes } : { photoObjectPath: null, notes, updatedAt: new Date().toISOString() }
-    } : a));
-  }
-
   // Derived data
   const upcomingOnline = online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
   const upcomingOffline = offline.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
@@ -841,7 +771,6 @@ export default function DoctorPortal() {
                     appt={selectedAppt}
                     onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }}
                     onPrescriptionUploaded={handlePrescriptionUploaded}
-                    onNotesSaved={handleNotesSaved}
                   />
                 )}
                 {selectedPatientInfo && (
@@ -870,7 +799,6 @@ export default function DoctorPortal() {
                   appt={selectedAppt}
                   onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }}
                   onPrescriptionUploaded={handlePrescriptionUploaded}
-                  onNotesSaved={handleNotesSaved}
                 />
               )}
               {selectedPatientInfo && (

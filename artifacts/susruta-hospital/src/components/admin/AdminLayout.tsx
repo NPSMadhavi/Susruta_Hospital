@@ -34,10 +34,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/settings", icon: <Settings size={20}/>, label: "Settings" },
   ];
 
+  const mobileNavItems = navItems.slice(0, 6);
+
   return (
     <div className="min-h-screen flex bg-muted/30">
       {/* Sidebar */}
-      <aside className="w-64 bg-foreground text-white flex flex-col hidden md:flex shrink-0">
+      <aside className="w-64 bg-foreground text-white flex-col hidden md:flex shrink-0">
         <div className="px-5 py-4 border-b border-white/10">
           <img src={logoImg} alt="Susruta Hospital" className="h-8 w-auto max-w-[160px] object-contain brightness-0 invert" />
           <p className="text-white/45 text-xs font-semibold uppercase tracking-widest mt-1">Admin Panel</p>
@@ -72,15 +74,34 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Mobile Header */}
-        <header className="md:hidden bg-foreground text-white p-4 flex justify-between items-center">
-          <span className="font-serif font-bold">Admin Panel</span>
-          <Button variant="ghost" size="sm" onClick={handleLogout}><LogOut size={16}/></Button>
+        <header className="md:hidden bg-foreground text-white px-4 py-3 flex justify-between items-center shrink-0">
+          <img src={logoImg} alt="Susruta Hospital" className="h-7 w-auto object-contain brightness-0 invert" />
+          <Button variant="ghost" size="sm" className="text-white/70 hover:text-white" onClick={handleLogout}>
+            <LogOut size={16} className="mr-1.5" /> Logout
+          </Button>
         </header>
-        
-        <div className="flex-1 overflow-auto p-6 md:p-10">
+
+        <div className="flex-1 overflow-auto p-4 md:p-10 pb-20 md:pb-10">
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1a3d2b] border-t border-white/10 flex z-50 safe-area-bottom">
+        {mobileNavItems.map(item => {
+          const isActive = location === item.href;
+          return (
+            <Link key={item.href} href={item.href}
+              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-semibold transition-colors ${isActive ? 'text-white' : 'text-white/40 hover:text-white/70'}`}
+            >
+              <span className={`${isActive ? 'text-white' : 'text-white/40'}`}>
+                {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18 })}
+              </span>
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

@@ -483,6 +483,7 @@ export default function PatientDashboard() {
   const prescriptions = onlineAppts.filter(a => a.prescription?.photoObjectPath);
   const hasLiveAppt = onlineAppts.some(a => a.joinEnabled);
   const liveAppt = onlineAppts.find(a => a.joinEnabled);
+  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
 
   return (
     <div className="min-h-screen bg-[#f4f7f5]">
@@ -622,109 +623,162 @@ export default function PatientDashboard() {
           </div>
 
           {/* ── MAIN CONTENT ───────────────────────────────────── */}
-          <div className="space-y-6">
+          <div>
+            {/* Tab bar */}
+            <div className="flex gap-1 bg-white rounded-2xl border border-gray-200 p-1 shadow-sm mb-5">
+              <button
+                onClick={() => setMainTab("appointments")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+                  mainTab === "appointments"
+                    ? "bg-[#1a3d2b] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                )}
+              >
+                <Calendar size={15} /> My Appointments
+                {upcomingCount > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    mainTab === "appointments" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                  )}>{upcomingCount}</span>
+                )}
+              </button>
+              <button
+                onClick={() => setMainTab("prescriptions")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+                  mainTab === "prescriptions"
+                    ? "bg-[#1a3d2b] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                )}
+              >
+                <ImageIcon size={15} /> Prescriptions
+                {prescriptions.length > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    mainTab === "prescriptions" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                  )}>{prescriptions.length}</span>
+                )}
+              </button>
+            </div>
 
-            {/* Next appointment hero */}
-            {nextUpcoming && (
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <Calendar size={12} /> Your Next Appointment
-                </p>
-                <HeroAppointment
-                  appt={nextUpcoming.data}
-                  type={nextUpcoming.type}
-                  joinMeetingLink={joinMeetingLink}
-                  onJoin={() => {
-                    if (nextUpcoming.type === "online") {
-                      handlePatientJoined((nextUpcoming.data as any).id);
-                      setJoinPopup(null);
-                    }
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Upcoming appointments */}
-            {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 1 && (
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <Clock size={12} /> Other Upcoming Appointments
-                </p>
-                <div className="space-y-3">
-                  {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
-                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
-                      onJoin={() => {
-                        if (item.type === "online") {
-                          handlePatientJoined((item.data as any).id);
-                          setJoinPopup(null);
-                        }
-                      }} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* No upcoming */}
-            {upcomingCount === 0 && (
-              <div className="bg-white rounded-3xl border border-gray-200 px-6 py-10 text-center shadow-sm">
-                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                  <Calendar size={28} className="text-gray-300" />
-                </div>
-                <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
-                <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
-                <button onClick={() => setShowBooking(true)}
-                  className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
-                  <Calendar size={16} /> Book an Appointment
-                </button>
-              </div>
-            )}
-
-            {/* Prescriptions */}
-            {prescriptions.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <ImageIcon size={12} /> Your Prescriptions
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {prescriptions.map((appt, i) => (
-                    <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                      <img
-                        src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                        alt="Prescription"
-                        className="w-full h-32 object-cover bg-gray-50"
+            <AnimatePresence mode="wait">
+              {mainTab === "appointments" ? (
+                <motion.div key="appts" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-6">
+                  {/* Next appointment hero */}
+                  {nextUpcoming && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Calendar size={12} /> Your Next Appointment
+                      </p>
+                      <HeroAppointment
+                        appt={nextUpcoming.data}
+                        type={nextUpcoming.type}
+                        joinMeetingLink={joinMeetingLink}
+                        onJoin={() => {
+                          if (nextUpcoming.type === "online") {
+                            handlePatientJoined((nextUpcoming.data as any).id);
+                            setJoinPopup(null);
+                          }
+                        }}
                       />
-                      <div className="px-3 py-2.5">
-                        <p className="text-xs font-semibold text-gray-700 truncate">{fmtDateShort(appt.slot.date)}</p>
-                        <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`} download target="_blank" rel="noopener noreferrer"
-                          className="mt-1.5 flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
-                          <Download size={11} /> Download
-                        </a>
+                    </div>
+                  )}
+
+                  {/* Other upcoming */}
+                  {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 1 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Clock size={12} /> Other Upcoming
+                      </p>
+                      <div className="space-y-3">
+                        {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
+                          <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
+                            onJoin={() => {
+                              if (item.type === "online") {
+                                handlePatientJoined((item.data as any).id);
+                                setJoinPopup(null);
+                              }
+                            }} />
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  )}
 
-            {/* Past appointments */}
-            {pastAppts.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <CheckCircle2 size={12} /> Past Appointments
-                </p>
-                <div className="space-y-3">
-                  {pastAppts.map((item, i) => (
-                    <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
-                      onJoin={() => {
-                        if (item.type === "online") {
-                          handlePatientJoined((item.data as any).id);
-                          setJoinPopup(null);
-                        }
-                      }} />
-                  ))}
-                </div>
-              </div>
-            )}
+                  {/* No upcoming */}
+                  {upcomingCount === 0 && (
+                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-10 text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <Calendar size={28} className="text-gray-300" />
+                      </div>
+                      <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
+                      <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
+                      <button onClick={() => setShowBooking(true)}
+                        className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
+                        <Calendar size={16} /> Book an Appointment
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Past appointments */}
+                  {pastAppts.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <CheckCircle2 size={12} /> Past Appointments
+                      </p>
+                      <div className="space-y-3">
+                        {pastAppts.map((item, i) => (
+                          <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
+                            onJoin={() => {
+                              if (item.type === "online") {
+                                handlePatientJoined((item.data as any).id);
+                                setJoinPopup(null);
+                              }
+                            }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div key="rx" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                  {prescriptions.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <ImageIcon size={28} className="text-gray-300" />
+                      </div>
+                      <p className="text-lg font-bold text-gray-500 mb-1">No prescriptions yet</p>
+                      <p className="text-sm text-gray-400">Prescriptions from your online consultations will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {prescriptions.map((appt, i) => (
+                        <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                          <img
+                            src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                            alt="Prescription"
+                            className="w-full h-36 object-cover bg-gray-50"
+                          />
+                          <div className="px-3 py-3">
+                            <p className="text-xs font-semibold text-gray-700 truncate">
+                              {fmtDateShort(appt.slot.date)}
+                            </p>
+                            {appt.prescription?.notes && (
+                              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{appt.prescription.notes}</p>
+                            )}
+                            <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                              download target="_blank" rel="noopener noreferrer"
+                              className="mt-2 flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
+                              <Download size={11} /> Download
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
