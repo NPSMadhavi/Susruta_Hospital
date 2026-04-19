@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
+import { notifyPatientSessionEnded } from "./patient";
 
 const router = Router();
 const COOKIE = "doctor_session";
@@ -195,6 +196,32 @@ router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) =
     .returning();
 
   res.json({ ...updated, createdAt: updated.createdAt?.toISOString() });
+});
+
+// ── POST /api/doctor/online-appointments/:id/complete ─────────
+// Called by doctor portal when video call ends — marks appointment completed
+router.post("/online-appointments/:id/complete", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  const [appt] = await db
+    .select({ appt: onlineAppointmentsTable })
+    .from(onlineAppointmentsTable)
+    .where(eq(onlineAppointmentsTable.id, id))
+    .then(r => r.map(x => x.appt));
+
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  if (appt.status === "completed") { res.json({ ok: true, alreadyDone: true }); return; }
+
+  const [settings] = await db.select().from(siteSettingsTable);
+
+  await db
+    .update(onlineAppointmentsTable)
+    .set({ joinEnabled: false, status: "completed" })
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
+
+  res.json({ ok: true });
 });
 
 function fmtTime(t: string) {

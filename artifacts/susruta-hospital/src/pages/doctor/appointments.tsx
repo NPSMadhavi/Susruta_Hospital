@@ -63,6 +63,13 @@ const STATUS_PILL: Record<string, string> = {
   completed: "bg-emerald-100 text-emerald-700 border border-emerald-200",
   cancelled: "bg-gray-100 text-gray-400 border border-gray-200",
 };
+const STATUS_LABEL: Record<string, string> = {
+  pending:   "Pending",
+  confirmed: "Confirmed",
+  arrived:   "Arrived",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
 
 // ── Drag-resize hook (pointer-capture based — works inside iframes) ──
 function useDragResize(initial: number, min: number, max: number) {
@@ -275,10 +282,11 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 }
 
 // ── Appointment Detail (right panel main content) ─────────────
-function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
+function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
   appt: OnlineAppt;
   onDocClick: (doc: DocFile) => void;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
+  onCallEnded: (id: number) => void;
 }) {
   return (
     <div className="flex flex-col divide-y divide-gray-100 overflow-auto h-full">
@@ -299,7 +307,7 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
               <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">Online</span>
               {appt.joinEnabled
                 ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
-                : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{appt.status}</span>
+                : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
               }
             </div>
           </div>
@@ -332,7 +340,7 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
             <Video size={11} /> Video Consultation — Active
           </p>
-          <VideoCall apptId={appt.id} role="doctor" />
+          <VideoCall apptId={appt.id} role="doctor" onCallEnded={() => onCallEnded(appt.id)} />
         </div>
       )}
 
@@ -633,7 +641,7 @@ function ApptRow({ appt, selected, onClick }: { appt: AnyAppt; selected: boolean
         <div className="flex items-center justify-between gap-1.5">
           <p className={cn("text-sm font-semibold truncate", selected ? "text-[#1a3d2b]" : "text-gray-800")}>{appt.patient.name}</p>
           <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0 border", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>
-            {appt.status}
+            {STATUS_LABEL[appt.status] ?? appt.status}
           </span>
         </div>
         <p className="text-[11px] text-gray-500 mt-0.5">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
@@ -714,6 +722,17 @@ export default function DoctorPortal() {
 
   function handlePrescriptionUploaded(apptId: number, rx: Prescription) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
+  }
+
+  async function handleCallEnded(apptId: number) {
+    setOnline(prev => prev.map(a =>
+      a.id === apptId ? { ...a, joinEnabled: false, status: "completed" } : a
+    ));
+    try {
+      await doctorFetch(`/online-appointments/${apptId}/complete`, { method: "POST" });
+    } catch {
+      // Best-effort — auto-refresh will sync DB state
+    }
   }
   // Derived data
   const upcomingOnline = online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
@@ -854,6 +873,7 @@ export default function DoctorPortal() {
                     appt={selectedAppt}
                     onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }}
                     onPrescriptionUploaded={handlePrescriptionUploaded}
+                    onCallEnded={handleCallEnded}
                   />
                 )}
                 {selectedPatientInfo && (
@@ -882,6 +902,7 @@ export default function DoctorPortal() {
                   appt={selectedAppt}
                   onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }}
                   onPrescriptionUploaded={handlePrescriptionUploaded}
+                  onCallEnded={handleCallEnded}
                 />
               )}
               {selectedPatientInfo && (
