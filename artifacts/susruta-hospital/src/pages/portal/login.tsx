@@ -32,6 +32,17 @@ const COUNTRIES = [
 
 const defaultForm = { name: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
 
+async function detectCountryCode(): Promise<string> {
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    return data.country_code ?? "IN";
+  } catch {
+    return "IN";
+  }
+}
+
 export default function PortalLogin() {
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -49,6 +60,10 @@ export default function PortalLogin() {
 
   useEffect(() => {
     patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
+    detectCountryCode().then(code => {
+      const match = COUNTRIES.find(c => c.code === code);
+      if (match) setForm(f => ({ ...f, countryCode: match.code }));
+    });
   }, []);
 
   useEffect(() => {

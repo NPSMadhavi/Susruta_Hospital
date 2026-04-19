@@ -50,6 +50,17 @@ const COUNTRIES = [
 
 const defaultForm = { name: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
 
+async function detectCountryCode(): Promise<string> {
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    return data.country_code ?? "IN";
+  } catch {
+    return "IN";
+  }
+}
+
 export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
   const [mode, setMode] = useState<Mode>("login");
   const [showPw, setShowPw] = useState(false);
@@ -58,6 +69,13 @@ export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
   const [error, setError] = useState("");
   const [form, setForm] = useState(defaultForm);
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    detectCountryCode().then(code => {
+      const match = COUNTRIES.find(c => c.code === code);
+      if (match) setForm(f => ({ ...f, countryCode: match.code }));
+    });
+  }, []);
 
   const selectedCountry = COUNTRIES.find(c => c.code === form.countryCode) ?? COUNTRIES[0];
 
