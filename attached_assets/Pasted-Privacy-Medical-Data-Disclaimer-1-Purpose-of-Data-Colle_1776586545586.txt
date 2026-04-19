@@ -1,0 +1,51 @@
+Privacy & Medical Data Disclaimer
+1. Purpose of Data Collection
+This platform allows patients to securely submit their personal details and medical reports for the purpose of consultation with Dr. Murali Krishna Parasaram.
+The information collected is used only to:
+•	Review medical history and reports 
+•	Provide consultation guidance and recommendations 
+•	Maintain records for future follow-up consultations 
+2. Nature of Data Collected
+The platform may collect and store:
+•	Name and contact details 
+•	Basic personal information 
+•	Medical history and uploaded reports 
+•	Consultation notes and prescriptions 
+This information is treated as confidential medical data.
+3. Consent
+By registering on this website and uploading your information, you:
+•	Consent to the collection and use of your data for consultation purposes 
+•	Confirm that the information provided is accurate to the best of your knowledge 
+•	Understand that your data will be reviewed by the doctor for medical guidance 
+4. Confidentiality & Data Protection
+We take reasonable steps to protect your personal and medical information from unauthorized access, misuse, or disclosure.
+Your data will:
+•	Not be shared with third parties for marketing purposes 
+•	Not be sold or commercially distributed 
+•	Be accessible only to authorised personnel involved in your consultation 
+
+
+5. Data Storage & Access
+•	Your records will be stored securely within the system 
+•	You may access your own records through your login account 
+•	Data will be retained only for as long as necessary for consultation and follow-up purposes 
+6. Cross-Border Use
+As this service is accessible internationally, your data may be accessed by the doctor from India and by authorised coordinators from other locations solely for consultation support.
+By using this platform, you acknowledge and accept such cross-border access.
+7. Medical Disclaimer
+This platform provides consultation support based on Ayurvedic principles.
+•	It does not replace emergency or critical medical care 
+•	Patients are advised to consult local licensed medical practitioners where necessary 
+•	No guarantee of outcomes or results is provided 
+8. Limitation of Liability
+While every effort is made to provide appropriate guidance, the organisers and the platform are not liable for:
+•	Individual health outcomes 
+•	Interpretation or misuse of medical advice 
+•	Decisions taken without proper consultation 
+9. Updates to Policy
+This disclaimer may be updated from time to time to reflect improvements in the platform or changes in regulatory requirements.
+10. Contact
+For any questions regarding your data or privacy, please contact:
+[Email Address]
+Add a checkbox during registration:
+☑ I have read and agree to the Privacy & Medical Data Disclaimer

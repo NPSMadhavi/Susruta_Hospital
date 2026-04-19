@@ -378,6 +378,42 @@ router.patch("/doctor/:id/notes", requireDoctor, async (req, res) => {
   }
 });
 
+// ── DELETE /api/online-appointments/:id/documents — Remove a document ──
+router.delete("/:id/documents", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id);
+  const { objectPath } = req.body;
+
+  if (!objectPath || typeof objectPath !== "string") {
+    res.status(400).json({ error: "invalid_body", message: "objectPath is required." });
+    return;
+  }
+
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  const currentDocs: DocumentFile[] = (appt.documents ?? []) as DocumentFile[];
+  const newDocs = currentDocs.filter((d: DocumentFile) => d.objectPath !== objectPath);
+
+  if (newDocs.length === currentDocs.length) {
+    res.status(404).json({ error: "document_not_found", message: "Document not found in this appointment." });
+    return;
+  }
+
+  await db.update(onlineAppointmentsTable).set({ documents: newDocs }).where(eq(onlineAppointmentsTable.id, id));
+
+  // Best-effort: delete the file from object storage
+  try {
+    const { ObjectStorageService } = await import("../lib/objectStorage");
+    const storageService = new ObjectStorageService();
+    const file = await storageService.getObjectEntityFile(objectPath);
+    await file.delete();
+  } catch { /* non-critical — DB record is already updated */ }
+
+  res.json({ ok: true, documents: newDocs });
+});
+
 // ── POST /api/online-appointments/:id/add-document — Upload during call ──
 // Accessible by patient (auth) or guest (no auth) when joinEnabled = true
 router.post("/:id/add-document", async (req: any, res) => {

@@ -6,7 +6,7 @@ import {
   RefreshCw, CheckCircle2, XCircle, MapPin,
   Download, Heart, QrCode, X, Plus,
   Stethoscope, AlertCircle, Phone, ChevronDown, ChevronUp,
-  Bell, ImageIcon
+  Bell, ImageIcon, Loader2, Trash2
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -386,12 +386,27 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded }: {
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Documents</p>
                   <div className="flex flex-wrap gap-2">
                     {onlineAppt!.documents.map((d, i) => (
-                      <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-sm bg-white border border-gray-200 text-gray-700 rounded-xl px-3 py-2 font-medium hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors">
-                        <FileText size={13} /> {d.name}
-                      </a>
+                      <div key={i} className="flex items-center gap-0 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <a href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-sm text-gray-700 px-3 py-2 font-medium hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                          <FileText size={13} className="shrink-0" />
+                          <span className="max-w-[160px] truncate">{d.name}</span>
+                        </a>
+                        <button
+                          onClick={() => deleteDocument(onlineAppt!.id, d.objectPath)}
+                          disabled={deletingDoc === d.objectPath}
+                          title="Delete this document"
+                          className="px-2 py-2 text-gray-300 hover:text-red-500 hover:bg-red-50 border-l border-gray-200 transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          {deletingDoc === d.objectPath
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : <Trash2 size={12} />
+                          }
+                        </button>
+                      </div>
                     ))}
                   </div>
+                  <p className="text-xs text-gray-400 mt-1.5">Click the document name to view · trash icon to delete</p>
                 </div>
               )}
               {isOnline && onlineAppt!.prescription?.photoObjectPath && (
@@ -434,6 +449,7 @@ export default function PatientDashboard() {
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
   const [verifyResending, setVerifyResending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
@@ -482,6 +498,23 @@ export default function PatientDashboard() {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
     if (r.status === 401) { nav("/portal"); return null; }
     return r.json();
+  }
+
+  async function deleteDocument(apptId: number, objectPath: string) {
+    setDeletingDoc(objectPath);
+    try {
+      const r = await fetch(`${BASE}/api/online-appointments/${apptId}/documents`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath }),
+      });
+      if (r.ok) {
+        const { documents } = await r.json();
+        setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents } : a));
+      }
+    } catch {}
+    setDeletingDoc(null);
   }
 
   async function resendVerificationEmail() {
