@@ -7,7 +7,6 @@ import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { BookingLoginModal } from "@/components/BookingLoginModal";
-import { BookingWizard } from "@/pages/portal/BookingWizard";
 import { patientApi } from "@/lib/patient-api";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -18,19 +17,18 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const [activeSection, setActiveSection] = React.useState("home");
   const langDropRef = React.useRef<HTMLDivElement>(null);
   const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
-  const [showBookingWizard, setShowBookingWizard] = React.useState(false);
-  const [loggedInPatient, setLoggedInPatient] = React.useState<{ id: number; name: string; phone?: string } | null>(null);
+  const [isPatientLoggedIn, setIsPatientLoggedIn] = React.useState(false);
   const [, navigate] = useLocation();
 
   React.useEffect(() => {
-    patientApi.me().then((data: any) => setLoggedInPatient({ id: data.id, name: data.name, phone: data.phone ?? undefined })).catch(() => {});
+    patientApi.me().then(() => setIsPatientLoggedIn(true)).catch(() => {});
   }, []);
 
   React.useEffect(() => {
     const handler = () => handleBookClick({ preventDefault: () => {} } as any);
     window.addEventListener("open-booking-modal", handler);
     return () => window.removeEventListener("open-booking-modal", handler);
-  }, [loggedInPatient]);
+  }, [isPatientLoggedIn]);
 
   React.useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -71,8 +69,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const handleBookClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsMobileMenuOpen(false);
-    if (loggedInPatient) {
-      setShowBookingWizard(true);
+    if (isPatientLoggedIn) {
+      navigate("/portal/dashboard");
     } else {
       setBookingModalOpen(true);
     }
@@ -184,21 +182,12 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      {/* ── Booking Login Modal (for guests / unauthenticated) ── */}
+      {/* ── Booking Login Modal ── */}
       <BookingLoginModal
         open={bookingModalOpen}
         onClose={() => setBookingModalOpen(false)}
         onContinueAsGuest={() => { setBookingModalOpen(false); navigate("/appointments"); }}
       />
-
-      {/* ── BookingWizard popup for already-logged-in patients ── */}
-      {showBookingWizard && (
-        <BookingWizard
-          patient={loggedInPatient}
-          onClose={() => setShowBookingWizard(false)}
-          onSuccess={() => setShowBookingWizard(false)}
-        />
-      )}
 
       {/* ── Page content ── */}
       <main className="flex-1 flex flex-col">{children}</main>
