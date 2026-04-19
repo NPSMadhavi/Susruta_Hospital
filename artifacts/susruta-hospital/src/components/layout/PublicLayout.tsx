@@ -356,10 +356,17 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="w-full px-4 sm:px-8 lg:px-14 mt-10 pt-6 border-t border-white/10 text-center text-base text-white/40 relative z-10">
-          <p>
+        <div className="w-full px-4 sm:px-8 lg:px-14 mt-10 pt-6 border-t border-white/10 relative z-10 flex flex-col items-center gap-3">
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-white/45">
+            <a href={`${BASE}/terms`} className="hover:text-white transition-colors">Terms &amp; Conditions</a>
+            <span className="opacity-25">·</span>
+            <a href={`${BASE}/medical-disclaimer`} className="hover:text-white transition-colors">Medical Disclaimer</a>
+            <span className="opacity-25">·</span>
+            <a href={`${BASE}/privacy-policy`} className="hover:text-white transition-colors">Privacy Policy</a>
+          </div>
+          <p className="text-xs text-white/30 text-center">
             © {new Date().getFullYear()} Susruta Hospital, Tirupati. All rights reserved. &nbsp;·&nbsp; Designed with Gratitude from{" "}
-            <a href="https://myrsv.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white underline underline-offset-2 transition-colors">
+            <a href="https://myrsv.com" target="_blank" rel="noopener noreferrer" className="text-white/50 hover:text-white underline underline-offset-2 transition-colors">
               RSV Infotech Pte. Ltd.
             </a>
           </p>
