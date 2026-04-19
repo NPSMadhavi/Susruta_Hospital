@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Video, User, Calendar, Clock, RefreshCw, CheckCircle2, AlertCircle,
   Loader2, FileText, ChevronDown, ChevronUp, ImageIcon, Upload, Camera,
-  ExternalLink, X, Play, Square, Link, Edit2, Save
+  X, Play, Square
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -143,8 +143,8 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
 }
 
 // ── Appointment Card ────────────────────────────────────────────
-function ApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
-  appt: OnlineAppt; meetingLink: string | null;
+function ApptCard({ appt, onJoinToggle, onPrescriptionUploaded }: {
+  appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
 }) {
@@ -157,8 +157,6 @@ function ApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
     await onJoinToggle(appt.id, !appt.joinEnabled);
     setToggling(false);
   }
-
-  const noLink = !meetingLink && !appt.joinEnabled;
 
   return (
     <div className={cn(
@@ -204,15 +202,13 @@ function ApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
 
           <button
             onClick={e => { e.stopPropagation(); toggleJoin(); }}
-            disabled={toggling || noLink}
-            title={noLink ? "Set a meeting link above first" : appt.joinEnabled ? "End session for this patient" : "Enable join for this patient"}
+            disabled={toggling}
+            title={appt.joinEnabled ? "End session for this patient" : "Start LiveKit video room for this patient"}
             className={cn(
               "shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm",
               appt.joinEnabled
                 ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                : noLink
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
             )}>
             {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
             {appt.joinEnabled ? "End Session" : "Enable Join"}
@@ -274,89 +270,10 @@ function ApptCard({ appt, meetingLink, onJoinToggle, onPrescriptionUploaded }: {
   );
 }
 
-// ── Inline Meeting Link Editor ──────────────────────────────────
-function MeetingLinkBar({ meetingLink, onSaved }: { meetingLink: string | null; onSaved: (link: string) => void }) {
-  const [editing, setEditing] = useState(!meetingLink);
-  const [value, setValue] = useState(meetingLink ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function save() {
-    const trimmed = value.trim();
-    if (!trimmed) { setErr("Enter a valid meeting link"); return; }
-    setSaving(true); setErr("");
-    try {
-      await adminFetch("/admin/settings", {
-        method: "PATCH",
-        body: JSON.stringify({ meetingLink: trimmed }),
-      });
-      onSaved(trimmed);
-      setEditing(false);
-    } catch {
-      setErr("Failed to save. Try again.");
-    } finally { setSaving(false); }
-  }
-
-  if (editing) {
-    return (
-      <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-2 flex items-center gap-1.5">
-          <Link size={12} /> Default Meeting Link
-        </p>
-        <p className="text-xs text-muted-foreground mb-3">
-          Set your Google Meet or Zoom link once — it will be sent to patients automatically when you click "Enable Join".
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && save()}
-            placeholder="https://meet.google.com/xxx-xxxx-xxx"
-            className="flex-1 text-sm border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/50 bg-muted/20"
-          />
-          <button onClick={save} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors shrink-0">
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-            Save
-          </button>
-          {meetingLink && (
-            <button onClick={() => { setEditing(false); setValue(meetingLink); }}
-              className="px-3 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 transition-colors">
-              <X size={13} />
-            </button>
-          )}
-        </div>
-        {err && <p className="text-xs text-red-600 mt-2 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-2xl border border-blue-200 shadow-sm px-4 py-3.5 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-        <Link size={16} className="text-blue-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Active Meeting Link</p>
-        <a href={meetingLink!} target="_blank" rel="noopener noreferrer"
-          className="text-sm text-blue-700 font-medium hover:underline truncate block flex items-center gap-1">
-          {meetingLink} <ExternalLink size={11} className="inline shrink-0" />
-        </a>
-      </div>
-      <button onClick={() => setEditing(true)}
-        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-xl transition-colors shrink-0"
-        title="Edit meeting link">
-        <Edit2 size={14} />
-      </button>
-    </div>
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function AdminOnlineAppointments() {
   const [appts, setAppts] = useState<OnlineAppt[]>([]);
-  const [meetingLink, setMeetingLink] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -366,12 +283,8 @@ export default function AdminOnlineAppointments() {
     if (!silent) setLoading(true);
     setErr("");
     try {
-      const [list, settings] = await Promise.all([
-        adminFetch("/online-appointments/admin"),
-        adminFetch("/admin/settings"),
-      ]);
+      const list = await adminFetch("/online-appointments/admin");
       setAppts(list);
-      setMeetingLink(settings.meetingLink ?? null);
       setLastRefresh(new Date());
     } catch {
       if (!silent) setErr("Failed to load appointments");
@@ -432,9 +345,6 @@ export default function AdminOnlineAppointments() {
           </button>
         </div>
 
-        {/* Meeting link editor */}
-        <MeetingLinkBar meetingLink={meetingLink} onSaved={link => setMeetingLink(link)} />
-
         {/* Live session indicator */}
         {liveCount > 0 && (
           <div className="bg-emerald-600 text-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-lg shadow-emerald-100">
@@ -485,7 +395,6 @@ export default function AdminOnlineAppointments() {
               <ApptCard
                 key={appt.id}
                 appt={appt}
-                meetingLink={meetingLink}
                 onJoinToggle={toggleJoin}
                 onPrescriptionUploaded={handlePrescriptionUploaded}
               />

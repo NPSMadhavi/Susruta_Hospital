@@ -283,20 +283,16 @@ export default function AdminSettings() {
         {/* ── Consultations Tab ── */}
         {activeTab === "consultation" && (
           <div className="space-y-5">
-            <Card title="Meeting Link" subtitle="Google Meet or Zoom link sent to patients when you enable 'Join Meeting'." icon={LinkIcon}>
-              <input
-                type="url"
-                placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                value={(form as any).meetingLink ?? ""}
-                onChange={e => setForm(f => ({ ...f, meetingLink: e.target.value || null }))}
-                className={inputCls}
-              />
-              <p className="text-xs text-muted-foreground">All active online appointments share this single link. Update it before each session if your link changes daily.</p>
-              {(form as any).meetingLink && (
-                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
-                  <CheckCircle2 size={13} /> Meeting link is active — patients will be sent here when you enable join
+            <Card title="Video Calls (LiveKit)" subtitle="Built-in video consultation — no external meeting link required." icon={LinkIcon}>
+              <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5">
+                <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-emerald-800 space-y-1">
+                  <p className="font-semibold">LiveKit video rooms are active</p>
+                  <p className="text-xs text-emerald-700">When you click "Enable Join" on an appointment, a private video room is created instantly. The patient joins directly from their dashboard — no external app needed.</p>
+                  <p className="text-xs text-emerald-700">Caregivers can join via a shareable guest link shown to the patient. Up to 3 participants per call.</p>
                 </div>
-              )}
+              </div>
+              <p className="text-xs text-muted-foreground">To receive an admin chime when a call ends, configure the LiveKit webhook in your LiveKit Cloud dashboard pointing to <span className="font-mono bg-muted/40 px-1 rounded">/api/livekit/webhook</span>.</p>
             </Card>
 
             <Card title="Patient ID Counter" subtitle="Auto-assigned on registration (A001, A002…). Rolls from A→B→C when 999 is reached." icon={Hash}>
