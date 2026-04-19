@@ -54,7 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
-const timeInputCls = "w-full pl-3.5 pr-9 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
+const timeInputCls = "px-3.5 py-2.5 text-sm outline-none bg-transparent w-[120px]";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -185,16 +185,16 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <div className="relative">
+                <div className="inline-flex items-center border border-border rounded-xl bg-white pr-3 gap-1 focus-within:ring-2 focus-within:ring-[#1a3d2b]/20 focus-within:border-[#1a3d2b] transition-all">
                   <input type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
-                  <Clock size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <Clock size={14} className="text-gray-400 shrink-0 pointer-events-none" />
                 </div>
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <div className="relative">
+                <div className="inline-flex items-center border border-border rounded-xl bg-white pr-3 gap-1 focus-within:ring-2 focus-within:ring-[#1a3d2b]/20 focus-within:border-[#1a3d2b] transition-all">
                   <input type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
-                  <Clock size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <Clock size={14} className="text-gray-400 shrink-0 pointer-events-none" />
                 </div>
               </div>
             </div>
