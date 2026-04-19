@@ -575,7 +575,7 @@ export default function PatientDashboard() {
       </AnimatePresence>
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="bg-[#1a3d2b] sticky top-0 z-30 shadow-md">
+      <header className="bg-[#1a3d2b] sticky top-0 z-30 shadow-none sm:shadow-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
           <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain shrink-0 brightness-0 invert" />
           <div className="hidden sm:block h-5 w-px bg-white/20" />
@@ -613,7 +613,7 @@ export default function PatientDashboard() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-6 sm:py-6 lg:py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-0 pb-6 sm:py-6 lg:py-8">
         <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 space-y-6 lg:space-y-0">
 
           {/* ── LEFT SIDEBAR ──────────────────────────────────── */}
