@@ -18,7 +18,12 @@ export default function AdminLogin() {
         window.location.href = "/admin";
       },
       onError: (err: any) => {
-        setError(err.message || "Invalid credentials");
+        const status = err?.status ?? err?.response?.status;
+        if (status === 401) {
+          setError("Incorrect username or password. Please try again.");
+        } else {
+          setError("Unable to sign in. Please check your connection and try again.");
+        }
       }
     });
   };
