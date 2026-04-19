@@ -54,7 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
-const timeInputCls = "w-full pl-3.5 pr-10 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
+const timeInputCls = "w-[155px] pl-3.5 pr-9 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -191,7 +191,7 @@ export default function AdminOnlineSlots() {
                 <div className="relative">
                   <input ref={startTimeRef} type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
-                    onClick={() => (startTimeRef.current as any)?.showPicker?.()}
+                    onClick={() => { try { (startTimeRef.current as any)?.showPicker?.(); } catch { startTimeRef.current?.focus(); } }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1a3d2b] transition-colors">
                     <Clock size={15} />
                   </button>
@@ -202,7 +202,7 @@ export default function AdminOnlineSlots() {
                 <div className="relative">
                   <input ref={endTimeRef} type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
-                    onClick={() => (endTimeRef.current as any)?.showPicker?.()}
+                    onClick={() => { try { (endTimeRef.current as any)?.showPicker?.(); } catch { endTimeRef.current?.focus(); } }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1a3d2b] transition-colors">
                     <Clock size={15} />
                   </button>
