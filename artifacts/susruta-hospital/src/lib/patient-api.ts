@@ -27,6 +27,8 @@ export const patientApi = {
   resetPassword: (token: string, password: string) =>
     req("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
 
+  resendVerification: () => req("/auth/resend-verification", { method: "POST" }),
+
   me: () => req("/me"),
 
   getAppointments: () => req("/appointments"),

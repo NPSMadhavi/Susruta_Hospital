@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
+import { EmailVerificationGate } from "@/components/EmailVerificationGate";
+import { MathCaptcha } from "@/components/MathCaptcha";
 
 import {
   useListOpenMonths,
@@ -98,6 +100,9 @@ export default function PortalBook() {
   const [success, setSuccess] = useState(false);
   const [phone, setPhone] = useState("");
 
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [captchaOk, setCaptchaOk] = useState(false);
+
   const { data: openMonthsRaw = [] } = useListOpenMonths();
   const openMonths = openMonthsRaw.filter((m: any) => m.isOpen).map((m: any) => m.month as string);
   const currentMonth: string = openMonths[monthIdx] ?? "";
@@ -109,6 +114,7 @@ export default function PortalBook() {
     patientApi.me()
       .then(async (p) => {
         setPatient(p);
+        setEmailVerified(p.emailVerified);
         // Check if there are available online slots
         try {
           const r = await fetch(`${BASE_URL}/api/online-slots/available`, { credentials: "include" });
@@ -153,6 +159,10 @@ export default function PortalBook() {
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  if (emailVerified === false) {
+    return <EmailVerificationGate email={patient?.email ?? ""} onBack={() => navigate("/portal/dashboard")} />;
   }
 
   if (success) {
@@ -427,9 +437,11 @@ export default function PortalBook() {
                     </div>
                   )}
 
+                  <MathCaptcha onVerified={setCaptchaOk} />
+
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !captchaOk}
                     className="w-full bg-[#1a3d2b] text-white font-bold py-3.5 rounded-2xl hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                   >
                     {submitting ? (

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import logoImg from "@assets/logo_1773840200056.png";
+import { EmailVerificationGate } from "@/components/EmailVerificationGate";
+import { MathCaptcha } from "@/components/MathCaptcha";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -42,11 +44,16 @@ export default function OnlineBook() {
   const [uploading, setUploading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState("");
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [patientEmail, setPatientEmail] = useState("");
+  const [captchaOk, setCaptchaOk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Verify patient is logged in
-    patientApi.me().catch(() => navigate("/portal?next=/portal/online-book"));
+    // Verify patient is logged in and check email verification
+    patientApi.me()
+      .then(p => { setEmailVerified(p.emailVerified); setPatientEmail(p.email); })
+      .catch(() => navigate("/portal?next=/portal/online-book"));
 
     fetch(`${BASE}/api/online-slots/available`, { credentials: "include" })
       .then(r => r.json())
@@ -118,6 +125,10 @@ export default function OnlineBook() {
   }
 
   const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white";
+
+  if (emailVerified === false) {
+    return <EmailVerificationGate email={patientEmail} onBack={() => navigate("/portal/dashboard")} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50/40 via-white to-white">
@@ -369,12 +380,14 @@ export default function OnlineBook() {
                   <p>After the slot, Dr. Murali Krishna will issue your Ayurvedic prescription. You can view it in your Patient Dashboard.</p>
                 </div>
 
+                <MathCaptcha onVerified={setCaptchaOk} />
+
                 <div className="flex items-center gap-3">
                   <button onClick={() => setStep("upload-docs")}
                     className="flex items-center gap-1.5 px-4 py-2.5 border border-border rounded-xl text-sm font-semibold text-foreground hover:bg-muted transition-colors">
                     <ChevronLeft size={15} /> Back
                   </button>
-                  <button onClick={confirmBooking} disabled={booking}
+                  <button onClick={confirmBooking} disabled={booking || !captchaOk}
                     className="flex items-center gap-2 px-7 py-2.5 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-lg shadow-primary/20 text-sm">
                     {booking ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
                     {booking ? "Booking…" : "Confirm Booking"}
