@@ -70,7 +70,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/admin", icon: <LayoutDashboard size={20}/>, label: "Dashboard" },
     { href: "/admin/appointments", icon: <Calendar size={20}/>, label: "Appointments" },
-    { href: "/admin/availability", icon: <Clock size={20}/>, label: "Availability" },
+    { href: "/admin/availability", icon: <Clock size={20}/>, label: "Offline Slots" },
     { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
     { href: "/admin/patients", icon: <UserCheck size={20}/>, label: "Patients" },
     { href: "/admin/testimonials", icon: <MessageSquare size={20}/>, label: "Testimonials" },
