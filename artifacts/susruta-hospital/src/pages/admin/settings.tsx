@@ -134,7 +134,14 @@ export default function AdminSettings() {
     setForm(f => ({ ...f, [k]: e.target.value }));
     if (k === "smtpPass") setPassChanged(true);
   };
-  const setChecked = (k: keyof Settings) => (v: boolean) => setForm(f => ({ ...f, [k]: v }));
+  const setChecked = (k: keyof Settings) => (v: boolean) => setForm(f => {
+    const updates: Partial<Settings> = { [k]: v };
+    // Auto-adjust SMTP port when toggling SSL
+    if (k === "smtpSecure") {
+      updates.smtpPort = v ? 465 : 587;
+    }
+    return { ...f, ...updates };
+  });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -390,7 +397,7 @@ export default function AdminSettings() {
                 checked={!!form.smtpSecure}
                 onChange={setChecked("smtpSecure")}
                 label="Use SSL/TLS (port 465)"
-                description="Enable for port 465. Leave off for port 587 STARTTLS (recommended)."
+                description="Auto-sets port to 465 (SSL) or 587 (STARTTLS). If you get authentication errors on port 587, try enabling this."
               />
 
               <div>
@@ -435,13 +442,23 @@ export default function AdminSettings() {
                   {testing ? "Sending…" : "Send Test"}
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Uses your saved settings. If you just changed the password above, click <strong>Save Settings</strong> first, then test.
+              </p>
               {testResult && (
                 <div className={cn(
-                  "flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm",
+                  "rounded-xl px-3 py-2.5 text-sm space-y-1",
                   testResult.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
                 )}>
-                  {testResult.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                  {testResult.msg}
+                  <div className="flex items-center gap-2">
+                    {testResult.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                    <span>{testResult.msg}</span>
+                  </div>
+                  {!testResult.ok && testResult.msg.toLowerCase().includes("auth") && (
+                    <p className="text-xs pl-5 opacity-80">
+                      Authentication failed — try enabling <strong>SSL/TLS (port 465)</strong> above, save, and test again. Or verify the password in your cPanel / hosting control panel.
+                    </p>
+                  )}
                 </div>
               )}
             </Card>

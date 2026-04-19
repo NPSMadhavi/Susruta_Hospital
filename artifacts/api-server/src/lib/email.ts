@@ -51,12 +51,16 @@ export async function getSmtpConfig(): Promise<SmtpConfig | null> {
 }
 
 function buildTransport(cfg: SmtpConfig) {
+  const isSTARTTLS = !cfg.secure && (cfg.port === 587 || cfg.port === 25);
   return nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
+    requireTLS: isSTARTTLS,
     auth: { user: cfg.user, pass: cfg.pass },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: false, minVersion: "TLSv1" as any },
+    socketTimeout: 15000,
+    connectionTimeout: 15000,
   });
 }
 

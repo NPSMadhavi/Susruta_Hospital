@@ -161,16 +161,27 @@ router.patch("/settings", requireAdmin, async (req, res) => {
 // ── SMTP Test ─────────────────────────────────────────────────
 router.post("/smtp-test", requireAdmin, async (req, res) => {
   const { host, port, user, pass, secure, fromName, fromEmail, subscriberFrom, testTo } = req.body;
-  if (!host || !user || !pass || !testTo) {
-    res.status(400).json({ error: "missing_fields", message: "Host, username, password and test recipient email are required." });
+  if (!host || !user || !testTo) {
+    res.status(400).json({ error: "missing_fields", message: "Host, username, and test recipient email are required." });
     return;
+  }
+
+  // If the password is the masked placeholder, use the stored password from DB
+  let resolvedPass = pass;
+  if (!resolvedPass || resolvedPass === "••••••••") {
+    const settings = await getOrCreateSettings();
+    resolvedPass = settings.smtpPass;
+    if (!resolvedPass) {
+      res.status(400).json({ error: "missing_password", message: "No SMTP password saved yet. Please enter your password and save settings first." });
+      return;
+    }
   }
 
   const cfg: SmtpConfig = {
     host,
     port: parseInt(port) || 587,
     user,
-    pass,
+    pass: resolvedPass,
     secure: !!secure,
     fromName: fromName || "Susruta Hospital",
     fromEmail: fromEmail || "noreply@susrutahospital.com",
