@@ -648,7 +648,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <textarea rows={3} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
-                    placeholder="Describe your main health concern…"
+                    placeholder="Please provide a brief summary of your health concerns in bullet points so we can review your case in advance."
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
                 </div>
 
