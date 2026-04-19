@@ -3,10 +3,9 @@ import {
   LiveKitRoom,
   VideoConference,
   RoomAudioRenderer,
-  useRoomContext,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { X, Video, Loader2, AlertCircle, Users, Copy, CheckCircle2, Link } from "lucide-react";
+import { Video, Loader2, AlertCircle, Copy, CheckCircle2, Link } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -75,20 +74,13 @@ export function GuestLinkCard({ apptId }: { apptId: number; guestToken?: string 
 }
 
 // ── VideoCall Room Inner ───────────────────────────────────────
-function RoomInner({ onLeave }: { onLeave: () => void }) {
+// VideoConference includes its own control bar (mic/cam/screen share/leave)
+// so we don't add a separate Leave button — disconnect fires onDisconnected on LiveKitRoom
+function RoomInner() {
   return (
-    <div className="flex flex-col h-full">
+    <div className="h-full">
       <RoomAudioRenderer />
-      <div className="flex-1 overflow-hidden">
-        <VideoConference />
-      </div>
-      <div className="flex justify-center py-3 bg-gray-900 border-t border-gray-700 shrink-0">
-        <button
-          onClick={onLeave}
-          className="flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors text-sm">
-          <X size={16} /> Leave Call
-        </button>
-      </div>
+      <VideoConference />
     </div>
   );
 }
@@ -153,7 +145,7 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className, au
           audio={true}
           onDisconnected={handleDisconnect}
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <RoomInner onLeave={() => handleDisconnect()} />
+          <RoomInner />
         </LiveKitRoom>
       </div>
     );
