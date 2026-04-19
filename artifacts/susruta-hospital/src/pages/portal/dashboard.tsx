@@ -436,6 +436,7 @@ export default function PatientDashboard() {
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
   const phonepeQrRef = useRef<string | null>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
 
   function startChiming() {
     shouldChimeRef.current = true;
@@ -458,13 +459,20 @@ export default function PatientDashboard() {
     stopChiming();
     setVideoCallApptId(apptId);
     setJoinPopup(null);
+    setMainTab("appointments");
     fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
       method: "POST", credentials: "include",
     }).catch(() => {});
+    // Scroll to the video call section (critical on mobile where it's below the sidebar)
+    setTimeout(() => {
+      mainContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
   }
 
   function handleCallEnded(apptId: number) {
     setVideoCallApptId(null);
+    // Immediately clear joinEnabled locally so the sidebar Live card disappears
+    setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, joinEnabled: false } : a));
     setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
   }
 
@@ -571,11 +579,13 @@ export default function PatientDashboard() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
           <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto object-contain shrink-0 brightness-0 invert" />
           <div className="hidden sm:block h-5 w-px bg-white/20" />
-          <div className="hidden sm:block flex-1 min-w-0">
+          <div className="hidden sm:block min-w-0">
             <p className="text-white/50 text-[10px] font-medium uppercase tracking-wider leading-none">Patient Portal</p>
             <p className="text-white font-bold text-sm truncate">{patient?.name}</p>
           </div>
-          <div className="flex-1 sm:flex-none" />
+
+          {/* Spacer */}
+          <div className="flex-1" />
 
           {/* Patient ID badge */}
           {patient?.patientCode && (
@@ -585,11 +595,11 @@ export default function PatientDashboard() {
             </div>
           )}
 
-          {/* Live indicator */}
+          {/* Live indicator — desktop only; on mobile the sidebar card shows this */}
           {hasLiveAppt && (
-            <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-lg px-2.5 py-1.5 shrink-0">
+            <div className="hidden sm:flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-lg px-2.5 py-1.5 shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-emerald-300 text-xs font-bold hidden sm:inline">Live</span>
+              <span className="text-emerald-300 text-xs font-bold">Live</span>
             </div>
           )}
 
@@ -646,7 +656,7 @@ export default function PatientDashboard() {
                 </div>
                 <p className="text-emerald-100 text-sm mb-4">Dr. Murali Krishna is waiting for you right now.</p>
                 <button
-                  onClick={() => { handlePatientJoined(liveAppt.id); setJoinPopup(null); setMainTab("appointments"); }}
+                  onClick={() => handlePatientJoined(liveAppt.id)}
                   className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
                   <Video size={18} /> Join Video Call →
                 </button>
@@ -703,7 +713,7 @@ export default function PatientDashboard() {
           </div>
 
           {/* ── MAIN CONTENT ───────────────────────────────────── */}
-          <div>
+          <div ref={mainContentRef}>
             {/* Tab bar */}
             <div className="flex gap-1 bg-white rounded-2xl border border-gray-200 p-1 shadow-sm mb-5">
               <button
