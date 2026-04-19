@@ -86,6 +86,10 @@ function serializePatient(p: any) {
 }
 
 function getFrontendUrl(req: any) {
+  // In a deployed environment, REPLIT_DEPLOYMENT=1 — never use the dev preview URL
+  if (process.env.REPLIT_DEPLOYMENT === "1") {
+    return process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  }
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}`;
   return `${req.protocol}://${req.get("host")}`;

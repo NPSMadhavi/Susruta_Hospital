@@ -237,8 +237,13 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   await db.insert(loginTokensTable).values({ token, patientId: id, nextUrl: "/portal/dashboard", expiresAt, used: false });
 
-  const domain = process.env.REPLIT_DEV_DOMAIN;
-  const frontendUrl = domain ? `https://${domain}` : process.env.APP_URL || "https://susrutahospital.com";
+  let frontendUrl: string;
+  if (process.env.REPLIT_DEPLOYMENT === "1") {
+    frontendUrl = process.env.APP_URL || "https://susrutahospital.com";
+  } else {
+    const domain = process.env.REPLIT_DEV_DOMAIN;
+    frontendUrl = domain ? `https://${domain}` : (process.env.APP_URL || "https://susrutahospital.com");
+  }
   const verifyUrl = `${frontendUrl}/api/patient/auth/verify?token=${token}`;
 
   sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});

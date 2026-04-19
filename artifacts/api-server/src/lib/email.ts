@@ -70,6 +70,10 @@ function senderStr(name: string, email: string) {
 
 // ── Base URL (for unsubscribe links) ─────────────────────────
 function getBaseUrl(): string {
+  // In a deployed environment, never use the dev preview URL
+  if (process.env.REPLIT_DEPLOYMENT === "1") {
+    return process.env.APP_URL || "https://susrutahospital.com";
+  }
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}`;
   return process.env.APP_URL || "https://susrutahospital.com";
