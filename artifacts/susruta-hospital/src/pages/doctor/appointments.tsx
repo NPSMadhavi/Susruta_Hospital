@@ -4,7 +4,7 @@ import {
   LogOut, RefreshCw, Video, MapPin, Users, ChevronRight, ChevronLeft,
   Calendar, Clock, Phone, FileText, ImageIcon, Camera, Upload,
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn,
-  ChevronDown, ChevronUp, Mail
+  ChevronDown, ChevronUp, Mail, StickyNote, Save
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -352,6 +352,14 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
         )}
       </div>
 
+      {/* Doctor's Notes */}
+      <div className="px-5 py-4 bg-white shrink-0">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+          <StickyNote size={11} /> Doctor&apos;s Notes
+        </p>
+        <NotesEditor apptId={appt.id} initialNotes={appt.prescription?.notes ?? ""} onSaved={rx => onPrescriptionUploaded(appt.id, rx)} />
+      </div>
+
       {/* Prescription */}
       <div className="px-5 py-4 bg-white">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
@@ -366,6 +374,68 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
           onUploaded={rx => onPrescriptionUploaded(appt.id, rx)}
         />
       </div>
+    </div>
+  );
+}
+
+// ── Notes Editor ───────────────────────────────────────────────
+function NotesEditor({ apptId, initialNotes, onSaved }: {
+  apptId: number;
+  initialNotes: string;
+  onSaved: (rx: Prescription) => void;
+}) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => { setNotes(initialNotes); }, [initialNotes]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    try {
+      const r = await fetch(`${BASE}/api/online-appointments/doctor/${apptId}/notes`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      if (!r.ok) throw new Error("Save failed");
+      const rx = await r.json();
+      onSaved(rx);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError("Could not save notes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        placeholder="Write clinical notes, observations, or follow-up instructions..."
+        rows={4}
+        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/40 bg-amber-50 placeholder-gray-400 text-gray-700"
+      />
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+          saved
+            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            : "bg-[#1a3d2b] text-white hover:bg-[#1a3d2b]/90 disabled:opacity-50"
+        )}
+      >
+        {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <CheckCircle2 size={12} /> : <Save size={12} />}
+        {saving ? "Saving…" : saved ? "Saved!" : "Save Notes"}
+      </button>
     </div>
   );
 }

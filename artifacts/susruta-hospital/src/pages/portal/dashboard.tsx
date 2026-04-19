@@ -369,6 +369,7 @@ export default function PatientDashboard() {
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [joinMeetingLink, setJoinMeetingLink] = useState<string | null>(null);
   const [showBooking, setShowBooking] = useState(false);
+  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
@@ -483,7 +484,6 @@ export default function PatientDashboard() {
   const prescriptions = onlineAppts.filter(a => a.prescription?.photoObjectPath);
   const hasLiveAppt = onlineAppts.some(a => a.joinEnabled);
   const liveAppt = onlineAppts.find(a => a.joinEnabled);
-  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
 
   return (
     <div className="min-h-screen bg-[#f4f7f5]">
