@@ -109,19 +109,29 @@ router.post("/auth/register", async (req, res) => {
     res.status(400).json({ error: "validation_error", message: "Name, valid email, and a password (min 6 chars) are required." });
     return;
   }
-  const { name, email, phone, password } = parsed.data;
+  const { name, password } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
+  const phone = parsed.data.phone?.trim() || null;
 
-  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
-  if (existing) {
+  const [existingEmail] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
+  if (existingEmail) {
     res.status(409).json({ error: "email_taken", message: "An account with this email already exists. Please sign in." });
     return;
+  }
+
+  if (phone) {
+    const [existingPhone] = await db.select().from(patientsTable).where(eq(patientsTable.phone, phone));
+    if (existingPhone) {
+      res.status(409).json({ error: "phone_taken", message: "An account with this phone number already exists. Please sign in." });
+      return;
+    }
   }
 
   const passwordHash = await hashPassword(password);
   const patientCode = await assignPatientCode();
 
   const [patient] = await db.insert(patientsTable).values({
-    name, email, phone: phone ?? null, passwordHash, emailVerified: false,
+    name, email, phone, passwordHash, emailVerified: false,
     patientCode: patientCode ?? undefined,
   }).returning();
 
@@ -150,7 +160,8 @@ router.post("/auth/login", async (req, res) => {
     res.status(400).json({ error: "validation_error", message: "Email and password are required." });
     return;
   }
-  const { email, password } = parsed.data;
+  const { password } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
 
   const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
   if (!patient || !patient.passwordHash) {
