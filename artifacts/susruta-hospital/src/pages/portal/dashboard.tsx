@@ -585,10 +585,10 @@ export default function PatientDashboard() {
             <p className="text-white font-bold text-sm truncate">{patient?.name}</p>
           </div>
 
-          {/* Patient ID badge — ml-auto snaps it right on mobile (since name div is hidden) */}
+          {/* Patient ID badge — only on desktop; sidebar card shows it on mobile */}
           {patient?.patientCode && (
-            <div className="ml-auto sm:ml-0 bg-white/15 border border-white/20 text-white px-3 py-1.5 rounded-xl text-center shrink-0">
-              <p className="text-white/60 text-[9px] font-bold uppercase tracking-widest leading-none hidden sm:block">Patient ID</p>
+            <div className="hidden sm:block ml-auto bg-white/15 border border-white/20 text-white px-3 py-1.5 rounded-xl text-center shrink-0">
+              <p className="text-white/60 text-[9px] font-bold uppercase tracking-widest leading-none">Patient ID</p>
               <p className="font-black text-base leading-tight font-mono tracking-wide">{patient.patientCode}</p>
             </div>
           )}
@@ -602,7 +602,7 @@ export default function PatientDashboard() {
           )}
 
           <button onClick={loadData} title="Refresh"
-            className="p-2.5 text-white/50 hover:text-white rounded-xl hover:bg-white/10 transition-colors shrink-0">
+            className="ml-auto sm:ml-0 p-2.5 text-white/50 hover:text-white rounded-xl hover:bg-white/10 transition-colors shrink-0">
             <RefreshCw size={16} />
           </button>
           <button onClick={logout} title="Logout"
@@ -613,7 +613,7 @@ export default function PatientDashboard() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-6 sm:py-6 lg:py-8">
         <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 space-y-6 lg:space-y-0">
 
           {/* ── LEFT SIDEBAR ──────────────────────────────────── */}
