@@ -211,14 +211,20 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   try {
     await roomService.createRoom({ name: roomName, emptyTimeout: 10 * 60, maxParticipants: 5 });
   } catch (err) {
-    console.error("[livekit] room create failed:", err);
+    console.error("[livekit] room create failed (may already exist):", err);
     // Continue even if room already exists
   }
 
-  // Generate guest token for caregiver sharing
-  const guestToken = await createGuestToken(id);
+  // Generate guest token for caregiver sharing (best-effort)
+  let guestToken: string | null = null;
+  try {
+    guestToken = await createGuestToken(id);
+  } catch (err) {
+    console.error("[livekit] guest token generation failed:", err);
+    // Continue — token can be generated on demand by guests
+  }
 
-  // Enable join for this appointment
+  // Enable join for this appointment — always save livekitRoomName even if guestToken failed
   const [updated] = await db
     .update(onlineAppointmentsTable)
     .set({

@@ -73,13 +73,14 @@ router.get("/patient-token/:apptId", async (req: any, res) => {
     res.status(404).json({ error: "not_found" });
     return;
   }
-  if (!appt.joinEnabled || !appt.livekitRoomName) {
+  if (!appt.joinEnabled) {
     res.status(403).json({ error: "call_not_started", message: "Doctor has not started the call yet." });
     return;
   }
 
+  const roomName = appt.livekitRoomName || makeRoomName(apptId);
   const token = await createPatientToken(apptId, patient.name, patient.id);
-  res.json({ token, roomName: appt.livekitRoomName, serverUrl: LK_URL });
+  res.json({ token, roomName, serverUrl: LK_URL });
 });
 
 // ── GET /api/livekit/doctor-token/:apptId ────────────────────
@@ -94,13 +95,14 @@ router.get("/doctor-token/:apptId", async (req: any, res) => {
   const [appt] = await db.select().from(onlineAppointmentsTable)
     .where(eq(onlineAppointmentsTable.id, apptId));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
-  if (!appt.joinEnabled || !appt.livekitRoomName) {
-    res.status(403).json({ error: "call_not_started" });
+  if (!appt.joinEnabled) {
+    res.status(403).json({ error: "call_not_started", message: "Call has not been started yet." });
     return;
   }
 
+  const roomName = appt.livekitRoomName || makeRoomName(apptId);
   const token = await createDoctorToken(apptId);
-  res.json({ token, roomName: appt.livekitRoomName, serverUrl: LK_URL });
+  res.json({ token, roomName, serverUrl: LK_URL });
 });
 
 // ── GET /api/livekit/guest-token/:apptId ─────────────────────
@@ -110,14 +112,15 @@ router.get("/guest-token/:apptId", async (req, res) => {
   const [appt] = await db.select().from(onlineAppointmentsTable)
     .where(eq(onlineAppointmentsTable.id, apptId));
 
-  if (!appt || !appt.joinEnabled || !appt.livekitRoomName) {
+  if (!appt || !appt.joinEnabled) {
     res.status(403).json({ error: "call_not_active" });
     return;
   }
 
+  const roomName = appt.livekitRoomName || makeRoomName(apptId);
   // Issue a fresh guest token each time (short TTL)
   const token = await createGuestToken(apptId, (req.query.name as string) || "Guest");
-  res.json({ token, roomName: appt.livekitRoomName, serverUrl: LK_URL });
+  res.json({ token, roomName, serverUrl: LK_URL });
 });
 
 // ── POST /api/livekit/webhook ─────────────────────────────────
