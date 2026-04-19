@@ -10,6 +10,7 @@ import {
   AlertCircle, FileText, MapPin, User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -56,11 +57,12 @@ type OnlineAppt = {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
+const IST = "Asia/Kolkata";
 function fmt(date: string) {
-  return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return new Date(date + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "short", day: "numeric", month: "short" });
 }
 function fmtFull(date: string) {
-  return new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  return new Date(date + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -129,7 +131,7 @@ function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; 
 function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: () => void; onProposed: (a: Appt) => void }) {
   const [dates, setDates] = useState<string[]>(["", "", ""]);
   const [loading, setLoading] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   async function propose() {
     const valid = dates.filter(Boolean);
     if (!valid.length) return;
@@ -166,7 +168,7 @@ function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: (
 function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => void; onSet: (a: Appt) => void }) {
   const [date, setDate] = useState(appt.followUpDate || "");
   const [loading, setLoading] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   async function save() {
     if (!date) return;
     setLoading(true);
@@ -502,7 +504,7 @@ export default function AdminAppointments() {
   async function cancel(id: number) { if (!confirm("Cancel this appointment?")) return; mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "cancelled" }) })); }
   async function arrive(id: number) { mutate(await apiFetch(`/appointments/${id}/arrive`, { method: "PATCH" })); }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const pendingCount = appts.filter(a => a.status === "pending").length;
   const onlinePendingCount = onlineAppts.filter(a => ["pending", "confirmed"].includes(a.status) || a.joinEnabled).length;
   const onlineCompletedCount = onlineAppts.filter(a => ["completed", "cancelled"].includes(a.status) && !a.joinEnabled).length;
@@ -830,7 +832,7 @@ export default function AdminAppointments() {
                     <div className="border-t border-border bg-muted/30 p-4 space-y-2.5 text-sm">
                       {a.reason && <div><span className="font-medium">Reason: </span>{a.reason}</div>}
                       {a.patientEmail && <div><span className="font-medium">Email: </span>{a.patientEmail}</div>}
-                      {a.arrivedAt && <div className="text-teal-700"><span className="font-medium">Arrived: </span>{new Date(a.arrivedAt).toLocaleTimeString("en-IN")}</div>}
+                      {a.arrivedAt && <div className="text-teal-700"><span className="font-medium">Arrived: </span>{fmtTimeIST(a.arrivedAt)}</div>}
                       {a.paymentStatus === "paid" && <div className="text-green-700"><span className="font-medium">Payment: </span>Paid via {a.paymentMode?.toUpperCase()}</div>}
                       {a.followUpDate && <div className="text-amber-700"><span className="font-medium">Follow-up: </span>{fmt(a.followUpDate)} {a.followUpConfirmed ? "✓ Patient confirmed" : "⏳ Awaiting"}</div>}
                       {reschedDates.length > 0 && (
@@ -839,7 +841,7 @@ export default function AdminAppointments() {
                         </div>
                       )}
                       {a.notes && <div><span className="font-medium">Notes: </span>{a.notes}</div>}
-                      <div className="text-xs text-muted-foreground">Booked: {new Date(a.createdAt).toLocaleString("en-IN")}</div>
+                      <div className="text-xs text-muted-foreground">Booked: {fmtTimestamp(a.createdAt)}</div>
                     </div>
                   )}
                 </div>

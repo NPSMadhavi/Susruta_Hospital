@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
+import { todayIST } from "@/lib/ist";
 import { BookingWizard } from "./BookingWizard";
 import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
 
@@ -38,14 +39,15 @@ function fmtTime(t: string) {
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
+const IST = "Asia/Kolkata";
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 function fmtDateShort(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" });
 }
 function isUpcoming(date: string, status: string) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   return date >= today && !["cancelled", "completed"].includes(status);
 }
 

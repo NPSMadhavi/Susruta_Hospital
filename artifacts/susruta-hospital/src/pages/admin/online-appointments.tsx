@@ -7,6 +7,7 @@ import {
   X, Play, Square, Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fmtTimeIST } from "@/lib/ist";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -50,7 +51,7 @@ type OnlineAppt = {
 };
 
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -387,7 +388,7 @@ export default function AdminOnlineAppointments() {
             <p className="text-sm text-muted-foreground mt-0.5">
               {appts.length} total · {liveCount > 0 ? `${liveCount} live` : "none live"} ·{" "}
               <span className="text-[11px] text-muted-foreground/70">
-                refreshes every 20s · last at {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                refreshes every 20s · last at {fmtTimeIST(lastRefresh, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
             </p>
           </div>

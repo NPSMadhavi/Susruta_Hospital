@@ -9,6 +9,7 @@ import {
 import { VideoCall } from "@/components/VideoCall";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
+import { todayIST, fmtDateFromTs, fmtTimeIST } from "@/lib/ist";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -42,14 +43,15 @@ type AnyAppt = OnlineAppt | OfflineAppt;
 type Section = "online" | "offline" | "patients";
 
 // ── Helpers ────────────────────────────────────────────────────
+const IST = "Asia/Kolkata";
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 function fmtDateShort(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short" });
 }
 function isUpcoming(date: string, status: string) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   return date >= today && !["cancelled", "completed"].includes(status);
 }
 function isImage(f: DocFile) { return f.contentType.startsWith("image/"); }
@@ -229,7 +231,7 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
             className="w-full max-h-40 object-contain bg-gray-50" />
           <div className="flex justify-between items-center px-3 py-1.5 bg-white border-t border-gray-100">
             <span className="text-[11px] text-gray-400">
-              {new Date(prescription.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+              {fmtDateFromTs(prescription.updatedAt, { day: "numeric", month: "short" })}
             </span>
             <a href={`${BASE}/api/storage${prescription.photoObjectPath}`} download
               className="text-[11px] text-[#1a3d2b] font-semibold flex items-center gap-1 hover:underline">
@@ -758,7 +760,7 @@ export default function DoctorPortal() {
           </div>
         )}
         <p className="text-white/40 text-[12px] hidden md:block font-medium">
-          {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+          {fmtTimeIST(lastRefresh, { hour: "2-digit", minute: "2-digit" })}
         </p>
         <button onClick={() => load()} className="p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Refresh">
           <RefreshCw size={14} />
