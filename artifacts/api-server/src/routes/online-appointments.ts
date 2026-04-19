@@ -24,7 +24,7 @@ const BookBody = z.object({
     objectPath: z.string(),
     contentType: z.string(),
     size: z.number(),
-  })).min(1, "At least one document must be uploaded"),
+  })).default([]),
 });
 
 router.post("/", requirePatient, async (req: any, res) => {
