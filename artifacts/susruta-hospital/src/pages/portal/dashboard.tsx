@@ -400,6 +400,7 @@ export default function PatientDashboard() {
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
+  const phonepeQrRef = useRef<string | null>(null);
 
   function startChiming() {
     shouldChimeRef.current = true;
@@ -429,9 +430,7 @@ export default function PatientDashboard() {
 
   function handleCallEnded(apptId: number) {
     setVideoCallApptId(null);
-    // Donation popup will be shown when session_ended SSE fires with QR code
-    // But show it immediately with null QR as fallback if SSE is slow
-    setDonationPopup(prev => prev ?? { apptId, qrObjectPath: null });
+    setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
   }
 
   async function patientFetch(path: string) {
@@ -452,7 +451,7 @@ export default function PatientDashboard() {
     setPatient(me);
     setOnlineAppts(myOnline ?? []);
     setPhysicalAppts(myPhysical ?? []);
-    // meetingLink is no longer used — LiveKit is the call system
+    phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
     setLoading(false);
   }, []);
 
