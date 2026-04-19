@@ -211,7 +211,7 @@ export default function AdminSettings() {
 
       <form onSubmit={save} className="max-w-2xl">
         {/* Tab bar */}
-        <div className="flex items-center gap-0 border-b border-border mb-6 overflow-x-auto">
+        <div className="flex items-center justify-center gap-0 border-b border-border mb-6 overflow-x-auto">
           {TABS.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;

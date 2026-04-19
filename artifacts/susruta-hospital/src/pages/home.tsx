@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { SubscribePopup } from "@/components/SubscribePopup";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useLanguage } from "@/store/use-language";
@@ -138,7 +137,6 @@ export default function Home() {
   const { lang } = useLanguage();
   return (
     <>
-    <SubscribePopup />
     <PublicLayout>
       <HeroSection lang={lang} />
       <AboutSection lang={lang} />
