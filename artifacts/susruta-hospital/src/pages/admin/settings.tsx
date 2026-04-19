@@ -591,8 +591,9 @@ export default function AdminSettings() {
                       setQrUploading(true);
                       setSaveResult(null);
                       try {
-                        const urlRes = await apiFetch(`${BASE}/api/storage/uploads/request-url`.replace(`${API}`, "").replace(`${BASE}/api/admin`, `${BASE}/api`), {
+                        const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
                           method: "POST",
+                          credentials: "include",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ contentType: file.type, folder: "qr-codes" }),
                         });
