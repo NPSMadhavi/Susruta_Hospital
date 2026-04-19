@@ -227,7 +227,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
   async function submitOnline() {
     if (!onlineSlot) return;
-    if (docs.length === 0) { setOnlineError("Please upload at least one document."); return; }
     setBooking(true); setOnlineError("");
     try {
       const r = await fetch(`${BASE}/api/online-appointments`, {
@@ -595,8 +594,8 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800 mb-4">
-                  <p className="font-semibold mb-1">Why documents are required</p>
-                  <p className="leading-relaxed text-xs">Dr. Murali Krishna reviews your medical history and reports before the consultation to provide the best Ayurvedic guidance.</p>
+                  <p className="font-semibold mb-1">Why documents help</p>
+                  <p className="leading-relaxed text-xs">Dr. Murali Krishna reviews your medical history and reports before the consultation to provide the best Ayurvedic guidance. You can also upload them later from your dashboard.</p>
                 </div>
 
                 {/* Drop zone */}
@@ -608,6 +607,16 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
                     className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
                 </div>
+
+                {/* Skip option */}
+                {docs.length === 0 && !uploading && (
+                  <div className="flex items-center justify-center mb-3">
+                    <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                      className="text-sm text-gray-500 underline underline-offset-2 hover:text-gray-700 transition-colors">
+                      I don't have documents right now — I'll upload them later
+                    </button>
+                  </div>
+                )}
 
                 {uploading && (
                   <div className="flex items-center gap-2 text-blue-600 text-sm mb-3">
@@ -649,7 +658,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <ArrowLeft size={15} /> Back
                   </button>
                   <button disabled={uploading} onClick={() => {
-                    if (docs.length === 0) { setOnlineError("Please upload at least one document."); return; }
                     setOnlineError(""); setOnlineStep("confirm");
                   }}
                     className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
@@ -676,7 +684,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   <p className="text-sm font-semibold text-gray-700 ml-6">
                     {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
                   </p>
-                  <p className="text-xs text-gray-500 ml-6">{docs.length} document(s) uploaded</p>
+                  <p className="text-xs text-gray-500 ml-6">
+                    {docs.length > 0 ? `${docs.length} document(s) uploaded` : "No documents — you can upload them from your dashboard later"}
+                  </p>
                 </div>
 
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3 text-sm text-emerald-800 flex items-start gap-2 mb-4">
