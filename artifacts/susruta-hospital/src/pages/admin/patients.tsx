@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2 } from "lucide-react";
+import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api/admin`;
@@ -23,6 +23,8 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
+const POLL_INTERVAL_MS = 20_000;
+
 export default function AdminPatients() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,22 +32,36 @@ export default function AdminPatients() {
   const [actionLoading, setActionLoading] = useState<Record<number, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<Patient | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
   }
 
-  function loadPatients() {
-    setLoading(true);
-    apiFetch("/patients")
-      .then(r => r.json())
-      .then(data => { setPatients(Array.isArray(data) ? data : []); })
-      .catch(() => setPatients([]))
-      .finally(() => setLoading(false));
-  }
+  const fetchPatients = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    if (silent) setRefreshing(true);
+    try {
+      const r = await apiFetch("/patients");
+      const data = await r.json();
+      setPatients(Array.isArray(data) ? data : []);
+      setLastUpdated(new Date());
+    } catch {
+      if (!silent) setPatients([]);
+    } finally {
+      if (!silent) setLoading(false);
+      if (silent) setRefreshing(false);
+    }
+  }, []);
 
-  useEffect(() => { loadPatients(); }, []);
+  useEffect(() => {
+    fetchPatients(false);
+    pollRef.current = setInterval(() => fetchPatients(true), POLL_INTERVAL_MS);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchPatients]);
 
   const filtered = patients.filter(p => {
     const q = search.toLowerCase();
@@ -128,19 +144,41 @@ export default function AdminPatients() {
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Registered Patients</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {loading ? "Loading…" : `${patients.length} patient${patients.length !== 1 ? "s" : ""} registered`}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-muted-foreground text-sm">
+              {loading ? "Loading…" : `${patients.length} patient${patients.length !== 1 ? "s" : ""} registered`}
+            </p>
+            {lastUpdated && !loading && (
+              <span className="text-xs text-muted-foreground/60">
+                · Updated {lastUpdated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </span>
+            )}
+            {refreshing && (
+              <RefreshCw size={12} className="text-muted-foreground/60 animate-spin" />
+            )}
+          </div>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, ID, email, phone…"
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Manual refresh */}
+          <button
+            onClick={() => fetchPatients(true)}
+            disabled={refreshing || loading}
+            title="Refresh now"
+            className="p-2 border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-40 shrink-0"
+          >
+            <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
+          </button>
+
+          {/* Search */}
+          <div className="relative flex-1 sm:w-72">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, ID, email, phone…"
+              className="w-full pl-9 pr-4 py-2 border border-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+            />
+          </div>
         </div>
       </div>
 

@@ -16,6 +16,7 @@ const SETTINGS_FIELDS = [
   "clinicPhone2", "clinicEmail", "clinicAddress", "workingHours",
   "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpSecure",
   "smtpFromName", "smtpFromEmail", "smtpSubscriberFrom",
+  "meetingLink",
 ] as const;
 
 router.post("/login", async (req, res) => {
@@ -101,6 +102,7 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     smtpConfigured: !!(s.smtpHost && s.smtpUser && s.smtpPass),
     doctorPortalConfigured: !!s.doctorPasswordHash,
     pharmacyPortalConfigured: !!s.pharmacyPasswordHash,
+    meetingLink: s.meetingLink ?? null,
     phonepeQrObjectPath: s.phonepeQrObjectPath ?? null,
     patientIdPrefix: s.patientIdPrefix,
     patientIdCurrentNumber: s.patientIdCurrentNumber,

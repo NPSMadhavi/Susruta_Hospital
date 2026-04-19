@@ -34,6 +34,7 @@ type Settings = {
   smtpConfigured: boolean;
   doctorPortalConfigured: boolean;
   pharmacyPortalConfigured: boolean;
+  meetingLink: string | null;
   phonepeQrObjectPath: string | null;
   patientIdPrefix: string;
   patientIdCurrentNumber: number;
@@ -297,6 +298,20 @@ export default function AdminSettings() {
                   <p className="text-xs text-emerald-700">When you click "Enable Join" on an appointment, a private video room is created instantly. The patient joins directly from their dashboard — no external app needed.</p>
                   <p className="text-xs text-emerald-700">Caregivers can join via a shareable guest link shown to the patient. Up to 3 participants per call.</p>
                 </div>
+              </div>
+              <div>
+                <label className={labelCls}>
+                  Fallback Meeting Link <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <input
+                  className={inputCls}
+                  value={(form as any).meetingLink ?? ""}
+                  onChange={e => setForm(f => ({ ...f, meetingLink: e.target.value || null }))}
+                  placeholder="https://meet.google.com/xxx-yyyy-zzz or Zoom link"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  If set, this link is shown to patients as an alternative if the built-in video room has issues.
+                </p>
               </div>
               <p className="text-xs text-muted-foreground">To receive an admin chime when a call ends, configure the LiveKit webhook in your LiveKit Cloud dashboard pointing to <span className="font-mono bg-muted/40 px-1 rounded">/api/livekit/webhook</span>.</p>
             </Card>
