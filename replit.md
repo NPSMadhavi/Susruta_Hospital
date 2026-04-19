@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, an **Online Consultation System** with weekly Sunday slot booking, doctor portal with prescription notepad, and patient document uploads. Also includes a **Pharmacy/Medicine Ordering System** with a dedicated pharmacist portal, multi-step patient order flow, PhonePe QR payment, and shipping tracking.
+A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, an **Online Consultation System** with weekly Sunday slot booking, **built-in LiveKit video calling** (patient + doctor + guest caregiver, 3-person rooms), doctor portal with prescription photo upload, and patient document uploads.
 
 ## Stack
 
@@ -125,17 +125,19 @@ artifacts-monorepo/
   - Save prescription → marks appointment Completed
   - Save notes independently
 
-### Online Consultation System
+### Online Consultation System + LiveKit Video Calling
 - **Patient booking** (`/portal/online-book`) — 3-step wizard: Select Slot → Upload Documents → Confirm
   - Slots grouped by date (Sundays); each slot card shows time range
-  - Document upload: files go to GCS via presigned URL (request-url → PUT); minimum 1 required
+  - Document upload: files go to GCS via presigned URL; minimum 1 required
   - Reason for consultation (optional textarea)
-  - Booking marks slot as taken, creates appointment with `confirmed` status
-- **Patient dashboard** — Shows Online Consultations section with each booking card (expandable):
-  - Status badge (confirmed/completed/cancelled)
-  - Prescription shown when available (medicines + instructions)
-  - List of uploaded documents (downloadable links)
-- **Prescriptions** — `medicines[]` (array of { medicine, instructions }) visible to patient; `doctorNotes` private
+- **LiveKit video rooms** — Admin enables join → LiveKit room created → patient gets SSE chime
+  - Patient: joins from dashboard inline (no redirect); `VideoCall` component embedded directly in appointment card
+  - Doctor: "Start Call" button in appointment detail panel; LiveKit `VideoConference` UI
+  - Guest/caregiver: shareable link `/guest-call/:apptId` — name prompt → joins call; no auth required
+  - Token TTL: 3 hours; room auto-closes when all leave (LiveKit webhook → admin SSE chime)
+  - Room name format: `susruta-appt-{id}`; tokens generated server-side via `livekit-server-sdk`
+- **Patient dashboard** — SSE `join_enabled` fires chime + popup; `session_ended` shows donation popup (PhonePe QR)
+- **Prescriptions** — Photo upload (camera/file) + doctor's notes text; visible to patient on dashboard
 
 ### Language Support
 - English default; Telugu translations exist but language selector hidden pending translation quality review

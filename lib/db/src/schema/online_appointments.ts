@@ -19,6 +19,10 @@ export const onlineAppointmentsTable = pgTable("online_appointments", {
   joinEnabledAt: timestamp("join_enabled_at"),
   // Set when patient clicks "Join" — confirms they entered the call
   patientJoinedAt: timestamp("patient_joined_at"),
+  // LiveKit room name (created when admin enables join)
+  livekitRoomName: varchar("livekit_room_name", { length: 255 }),
+  // Pre-generated guest token for caregiver sharing
+  guestToken: text("guest_token"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

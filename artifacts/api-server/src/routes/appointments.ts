@@ -18,6 +18,13 @@ export function notifyNewAppointment(appt: any) {
   }
 }
 
+export function notifyAdminCallEnded(apptId: number) {
+  const payload = JSON.stringify({ type: "call_ended", apptId });
+  for (const client of sseClients) {
+    try { client.write(`data: ${payload}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
 router.get("/notifications", requireAdmin, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");

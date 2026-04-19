@@ -11,6 +11,7 @@ import {
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
 import { BookingWizard } from "./BookingWizard";
+import { VideoCall, GuestLinkCard } from "@/components/VideoCall";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -19,6 +20,7 @@ type DocFile = { name: string; objectPath: string; contentType: string; size: nu
 type OnlineAppt = {
   id: number; status: string; reason?: string; createdAt: string;
   joinEnabled: boolean; joinEnabledAt: string | null;
+  liveKitRoomName: string | null; guestToken: string | null;
   documents: DocFile[];
   slot: { id: number; date: string; startTime: string; endTime: string };
   prescription: { photoObjectPath: string | null; notes: string | null; updatedAt: string } | null;
@@ -87,8 +89,8 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
 };
 
 // ── Join Popup ──────────────────────────────────────────────────
-function JoinPopup({ apptId, meetingLink, onJoin, onClose }: {
-  apptId: number; meetingLink: string;
+function JoinPopup({ apptId, onJoin, onClose }: {
+  apptId: number;
   onJoin: (id: number) => void; onClose: () => void;
 }) {
   function handleJoin() {
@@ -109,10 +111,10 @@ function JoinPopup({ apptId, meetingLink, onJoin, onClose }: {
         <p className="text-gray-500 text-sm mb-6 leading-relaxed">
           Dr. P. Murali Krishna is waiting for you. Your consultation session has begun.
         </p>
-        <a href={meetingLink} target="_blank" rel="noopener noreferrer" onClick={handleJoin}
+        <button onClick={handleJoin}
           className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg">
-          Join Consultation Now →
-        </a>
+          Join Video Call →
+        </button>
       </motion.div>
     </div>
   );
@@ -160,11 +162,12 @@ function DonationPopup({ qrObjectPath, onClose }: { qrObjectPath: string | null;
 }
 
 // ── Hero Next Appointment ────────────────────────────────────────
-function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
+function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
   appt: OnlineAppt | PhysicalAppt;
   type: "online" | "physical";
-  joinMeetingLink: string | null;
+  videoCallApptId: number | null;
   onJoin: () => void;
+  onCallEnded: () => void;
 }) {
   const isOnline = type === "online";
   const onlineAppt = isOnline ? appt as OnlineAppt : null;
@@ -174,7 +177,8 @@ function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
     ? `${fmtTime(onlineAppt!.slot.startTime)} – ${fmtTime(onlineAppt!.slot.endTime)}`
     : physicalAppt!.timeSlot;
   const status = appt.status;
-  const canJoin = isOnline && onlineAppt!.joinEnabled && !!joinMeetingLink;
+  const canJoin = isOnline && onlineAppt!.joinEnabled;
+  const isInCall = canJoin && videoCallApptId === onlineAppt!.id;
   // Online bookings are always auto-confirmed — show "Booked" not "Awaiting Approval"
   const sm = (status === "pending" && isOnline)
     ? { label: "Booked", cls: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" }
@@ -218,11 +222,19 @@ function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
 
         {/* Action */}
         <div className="mt-5">
-          {canJoin ? (
-            <a href={joinMeetingLink!} target="_blank" rel="noopener noreferrer" onClick={onJoin}
-              className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-lg transition-colors shadow-lg">
-              <Video size={20} /> Join Consultation Now →
-            </a>
+          {isInCall ? (
+            <>
+              <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} />
+              <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
+            </>
+          ) : canJoin ? (
+            <>
+              <button onClick={onJoin}
+                className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-lg transition-colors shadow-lg">
+                <Video size={20} /> Join Video Call →
+              </button>
+              <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
+            </>
           ) : isOnline && (status === "confirmed" || status === "pending") ? (
             <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
               <Clock size={18} className="text-blue-500 mt-0.5 shrink-0" />
@@ -246,10 +258,11 @@ function HeroAppointment({ appt, type, joinMeetingLink, onJoin }: {
 }
 
 // ── Appointment Card (history list) ─────────────────────────────
-function ApptCard({ item, joinMeetingLink, onJoin }: {
+function ApptCard({ item, videoCallApptId, onJoin, onCallEnded }: {
   item: { type: "online" | "physical"; date: string; data: OnlineAppt | PhysicalAppt };
-  joinMeetingLink: string | null;
+  videoCallApptId: number | null;
   onJoin: () => void;
+  onCallEnded: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const { type, data } = item;
@@ -261,7 +274,7 @@ function ApptCard({ item, joinMeetingLink, onJoin }: {
     ? `${fmtTime(onlineAppt!.slot.startTime)} – ${fmtTime(onlineAppt!.slot.endTime)}`
     : physicalAppt!.timeSlot;
   const status = data.status;
-  const canJoin = isOnline && onlineAppt!.joinEnabled && !!joinMeetingLink;
+  const canJoin = isOnline && onlineAppt!.joinEnabled;
   const sm = (status === "pending" && isOnline)
     ? { label: "Booked", cls: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" }
     : (STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed);
@@ -301,12 +314,20 @@ function ApptCard({ item, joinMeetingLink, onJoin }: {
         {open && (
           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
             <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50">
-              {canJoin && (
-                <a href={joinMeetingLink!} target="_blank" rel="noopener noreferrer" onClick={onJoin}
-                  className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-base transition-colors">
-                  <Video size={16} /> Join Consultation Now →
-                </a>
-              )}
+              {canJoin && videoCallApptId === onlineAppt!.id ? (
+                <>
+                  <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} />
+                  <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
+                </>
+              ) : canJoin ? (
+                <>
+                  <button onClick={onJoin}
+                    className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-base transition-colors">
+                    <Video size={16} /> Join Video Call →
+                  </button>
+                  <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
+                </>
+              ) : null}
               {isOnline && upcoming && !canJoin && status === "confirmed" && (
                 <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
                   <Clock size={14} className="shrink-0" />
@@ -370,9 +391,9 @@ export default function PatientDashboard() {
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [physicalAppts, setPhysicalAppts] = useState<PhysicalAppt[]>([]);
   const [loading, setLoading] = useState(true);
-  const [joinPopup, setJoinPopup] = useState<{ apptId: number; meetingLink: string } | null>(null);
+  const [joinPopup, setJoinPopup] = useState<{ apptId: number } | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
-  const [joinMeetingLink, setJoinMeetingLink] = useState<string | null>(null);
+  const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
   const sseRef = useRef<EventSource | null>(null);
@@ -397,17 +418,19 @@ export default function PatientDashboard() {
   }
 
   function handlePatientJoined(apptId: number) {
-    // Stop all audio immediately
     stopChiming();
-    // Optimistically mark as joined locally — kills hasLiveAppt, hides all join buttons,
-    // and prevents any future chime from re-triggering for this session
-    setOnlineAppts(prev => prev.map(a =>
-      a.id === apptId ? { ...a, joinEnabled: false, patientJoinedAt: new Date().toISOString() } : a
-    ));
+    setVideoCallApptId(apptId);
     setJoinPopup(null);
     fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
       method: "POST", credentials: "include",
     }).catch(() => {});
+  }
+
+  function handleCallEnded(apptId: number) {
+    setVideoCallApptId(null);
+    // Donation popup will be shown when session_ended SSE fires with QR code
+    // But show it immediately with null QR as fallback if SSE is slow
+    setDonationPopup(prev => prev ?? { apptId, qrObjectPath: null });
   }
 
   async function patientFetch(path: string) {
@@ -428,7 +451,7 @@ export default function PatientDashboard() {
     setPatient(me);
     setOnlineAppts(myOnline ?? []);
     setPhysicalAppts(myPhysical ?? []);
-    setJoinMeetingLink((settings as any)?.meetingLink ?? null);
+    // meetingLink is no longer used — LiveKit is the call system
     setLoading(false);
   }, []);
 
@@ -439,9 +462,12 @@ export default function PatientDashboard() {
       const data = JSON.parse((e as MessageEvent).data);
       playChime();
       startChiming();
-      setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: true } : a));
-      setJoinMeetingLink(data.meetingLink);
-      setJoinPopup({ apptId: data.apptId, meetingLink: data.meetingLink });
+      setOnlineAppts(prev => prev.map(a =>
+        a.id === data.apptId
+          ? { ...a, joinEnabled: true, liveKitRoomName: data.roomName ?? a.liveKitRoomName, guestToken: data.guestToken ?? a.guestToken }
+          : a
+      ));
+      setJoinPopup({ apptId: data.apptId });
     });
     es.addEventListener("session_ended", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
@@ -494,7 +520,7 @@ export default function PatientDashboard() {
     <div className="min-h-screen bg-[#f4f7f5]">
       {/* Popups */}
       <AnimatePresence>
-        {joinPopup && <JoinPopup apptId={joinPopup.apptId} meetingLink={joinPopup.meetingLink} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
+        {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
         {showBooking && (
           <BookingWizard
@@ -584,13 +610,11 @@ export default function PatientDashboard() {
                   <p className="text-white font-black text-base">Doctor is Ready!</p>
                 </div>
                 <p className="text-emerald-100 text-sm mb-4">Dr. Murali Krishna is waiting for you right now.</p>
-                {joinMeetingLink && (
-                  <a href={joinMeetingLink} target="_blank" rel="noopener noreferrer"
-                    onClick={() => { handlePatientJoined(liveAppt.id); setJoinPopup(null); }}
-                    className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
-                    <Video size={18} /> Join Now →
-                  </a>
-                )}
+                <button
+                  onClick={() => { handlePatientJoined(liveAppt.id); setJoinPopup(null); setMainTab("appointments"); }}
+                  className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
+                  <Video size={18} /> Join Video Call →
+                </button>
               </motion.div>
             )}
 
@@ -679,13 +703,13 @@ export default function PatientDashboard() {
                       <HeroAppointment
                         appt={nextUpcoming.data}
                         type={nextUpcoming.type}
-                        joinMeetingLink={joinMeetingLink}
+                        videoCallApptId={videoCallApptId}
                         onJoin={() => {
                           if (nextUpcoming.type === "online") {
                             handlePatientJoined((nextUpcoming.data as any).id);
-                            setJoinPopup(null);
                           }
                         }}
+                        onCallEnded={() => handleCallEnded((nextUpcoming.data as any).id)}
                       />
                     </div>
                   )}
@@ -698,13 +722,9 @@ export default function PatientDashboard() {
                       </p>
                       <div className="space-y-3">
                         {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
-                          <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
-                            onJoin={() => {
-                              if (item.type === "online") {
-                                handlePatientJoined((item.data as any).id);
-                                setJoinPopup(null);
-                              }
-                            }} />
+                          <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                            onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                            onCallEnded={() => handleCallEnded((item.data as any).id)} />
                         ))}
                       </div>
                     </div>
@@ -733,13 +753,9 @@ export default function PatientDashboard() {
                       </p>
                       <div className="space-y-3">
                         {pastAppts.map((item, i) => (
-                          <ApptCard key={i} item={item} joinMeetingLink={joinMeetingLink}
-                            onJoin={() => {
-                              if (item.type === "online") {
-                                handlePatientJoined((item.data as any).id);
-                                setJoinPopup(null);
-                              }
-                            }} />
+                          <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                            onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                            onCallEnded={() => handleCallEnded((item.data as any).id)} />
                         ))}
                       </div>
                     </div>

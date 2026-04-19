@@ -76,7 +76,10 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.2.0",
     "canvas-confetti": "^1.9.4",
+    "livekit-client": "^2.18.3",
     "zustand": "^5.0.12"
   }
 }

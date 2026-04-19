@@ -6,6 +6,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn,
   ChevronDown, ChevronUp, Mail, StickyNote, Save
 } from "lucide-react";
+import { VideoCall } from "@/components/VideoCall";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
 
@@ -322,6 +323,16 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded }: {
           </div>
         )}
       </div>
+
+      {/* Video Call — shown when admin has enabled join */}
+      {appt.joinEnabled && (
+        <div className="px-5 py-4 bg-white border-b border-gray-100 shrink-0">
+          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+            <Video size={11} /> Video Consultation — Active
+          </p>
+          <VideoCall apptId={appt.id} role="doctor" />
+        </div>
+      )}
 
       {/* Documents */}
       <div className="px-5 py-4 bg-white shrink-0">

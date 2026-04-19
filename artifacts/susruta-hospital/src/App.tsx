@@ -30,6 +30,9 @@ import OnlineBook from "./pages/portal/online-book";
 import DoctorLogin from "./pages/doctor/login";
 import DoctorAppointments from "./pages/doctor/appointments";
 
+// Guest Video Call
+import GuestCall from "./pages/guest-call";
+
 // Pharmacy Portal Pages (hidden — enable from code when needed)
 // import PharmacyLogin from "./pages/pharmacy/login";
 // import PharmacyOrders from "./pages/pharmacy/orders";
@@ -55,6 +58,9 @@ function Router() {
       <Route path="/portal/dashboard" component={PatientDashboard} />
       <Route path="/portal/book" component={PortalBook} />
       <Route path="/portal/online-book" component={OnlineBook} />
+
+      {/* Guest Video Call — public, no auth required */}
+      <Route path="/guest-call/:apptId" component={GuestCall} />
 
       {/* Doctor Portal Routes */}
       <Route path="/doctor" component={DoctorLogin} />

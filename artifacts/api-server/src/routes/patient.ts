@@ -16,8 +16,8 @@ const router = Router();
 type PatientSseClient = { patientId: number; res: Response };
 export const patientSseClients = new Set<PatientSseClient>();
 
-export function notifyPatientJoinEnabled(patientId: number, apptId: number, meetingLink: string) {
-  const payload = `event: join_enabled\ndata: ${JSON.stringify({ apptId, meetingLink })}\n\n`;
+export function notifyPatientJoinEnabled(patientId: number, apptId: number, roomName: string, guestToken?: string) {
+  const payload = `event: join_enabled\ndata: ${JSON.stringify({ apptId, roomName, guestToken: guestToken ?? null })}\n\n`;
   for (const client of patientSseClients) {
     if (client.patientId === patientId) {
       try { client.res.write(payload); } catch { patientSseClients.delete(client); }

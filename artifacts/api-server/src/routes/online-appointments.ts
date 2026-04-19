@@ -11,6 +11,7 @@ import { requireDoctor } from "../lib/doctor-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
 import type { DocumentFile } from "@workspace/db";
 import { notifyPatientJoinEnabled, notifyPatientSessionEnded } from "./patient";
+import { roomService, makeRoomName, createGuestToken } from "./livekit";
 
 const router = Router();
 
@@ -90,6 +91,8 @@ router.get("/mine", requirePatient, async (req: any, res) => {
     joinEnabled: r.appt.joinEnabled,
     joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
     patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
+    livekitRoomName: r.appt.livekitRoomName ?? null,
+    guestToken: r.appt.guestToken ?? null,
     createdAt: r.appt.createdAt.toISOString(),
     slot: {
       id: r.slot.id,
@@ -203,19 +206,36 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
     notifyPatientSessionEnded(prev.appt.patientId, prev.appt.id, settings?.phonepeQrObjectPath ?? null);
   }
 
+  // Create LiveKit room for this appointment
+  const roomName = makeRoomName(id);
+  try {
+    await roomService.createRoom({ name: roomName, emptyTimeout: 10 * 60, maxParticipants: 5 });
+  } catch (err) {
+    console.error("[livekit] room create failed:", err);
+    // Continue even if room already exists
+  }
+
+  // Generate guest token for caregiver sharing
+  const guestToken = await createGuestToken(id);
+
   // Enable join for this appointment
   const [updated] = await db
     .update(onlineAppointmentsTable)
-    .set({ joinEnabled: true, joinEnabledAt: new Date(), patientJoinedAt: null, status: "confirmed" })
+    .set({
+      joinEnabled: true,
+      joinEnabledAt: new Date(),
+      patientJoinedAt: null,
+      status: "confirmed",
+      livekitRoomName: roomName,
+      guestToken,
+    })
     .where(eq(onlineAppointmentsTable.id, id))
     .returning();
 
-  // Notify this patient via SSE
-  if (meetingLink) {
-    notifyPatientJoinEnabled(patient.id, id, meetingLink);
-  }
+  // Notify this patient via SSE — include roomName + guestToken so frontend can skip re-fetching
+  notifyPatientJoinEnabled(patient.id, id, roomName, guestToken);
 
-  res.json({ ok: true, joinEnabled: true, meetingLink, apptId: id });
+  res.json({ ok: true, joinEnabled: true, roomName, apptId: id });
 });
 
 // ── POST /api/online-appointments/admin/:id/disable-join ──────
@@ -230,6 +250,13 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   await db.update(onlineAppointmentsTable)
     .set({ joinEnabled: false, status: "completed" })
     .where(eq(onlineAppointmentsTable.id, id));
+
+  // Close the LiveKit room if it exists
+  if (appt.livekitRoomName) {
+    roomService.deleteRoom(appt.livekitRoomName).catch(err =>
+      console.error("[livekit] delete room failed:", err)
+    );
+  }
 
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
 

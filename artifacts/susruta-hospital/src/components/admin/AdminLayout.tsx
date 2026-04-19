@@ -54,6 +54,23 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [admin, checkNewAppts]);
 
+  // SSE — listen for call_ended so admin gets an immediate chime
+  useEffect(() => {
+    if (!admin) return;
+    const es = new EventSource(`${API}/appointments/notifications`, { withCredentials: true });
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "call_ended") {
+          notify("Video Call Ended", "The consultation call has finished. You can now review the appointment.");
+        } else if (data.type === "new_appointment") {
+          // Handled by polling but also surfaces here for immediacy
+        }
+      } catch { /* ignore parse errors */ }
+    };
+    return () => es.close();
+  }, [admin, notify]);
+
   // Protect route
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
   if (isError || !admin) {

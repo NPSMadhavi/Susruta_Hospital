@@ -12,10 +12,12 @@ import onlineAppointmentsRouter from "./online-appointments";
 import storageRouter from "./storage";
 import pharmacyRouter from "./pharmacy";
 import medicineOrdersRouter from "./medicine-orders";
+import livekitRouter from "./livekit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use("/livekit", livekitRouter);
 router.use("/appointments", appointmentsRouter);
 router.use("/availability", availabilityRouter);
 router.use("/testimonials", testimonialsRouter);
