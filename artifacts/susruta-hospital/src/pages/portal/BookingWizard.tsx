@@ -191,7 +191,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [savedDocs, setSavedDocs] = useState<SavedDoc[]>([]);
   const [savedDocsLoading, setSavedDocsLoading] = useState(false);
-  const [selectedSavedPaths, setSelectedSavedPaths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (wizType === "online" && onlineStep === "docs") {
@@ -203,15 +202,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         .finally(() => setSavedDocsLoading(false));
     }
   }, [wizType, onlineStep]);
-
-  function toggleSavedDoc(objectPath: string) {
-    setSelectedSavedPaths(prev => {
-      const next = new Set(prev);
-      if (next.has(objectPath)) next.delete(objectPath);
-      else next.add(objectPath);
-      return next;
-    });
-  }
 
   function handleTypeSelect(type: WizardType) {
     setWizType(type);
@@ -227,7 +217,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   async function uploadFiles(files: FileList) {
     setUploading(true);
     setOnlineError("");
-    const newDocs: UploadedDoc[] = [];
     for (const file of Array.from(files)) {
       try {
         const r = await fetch(`${BASE}/api/storage/uploads/request-url`, {
@@ -239,12 +228,20 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         const { uploadURL, objectPath } = await r.json();
         const up = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
         if (!up.ok) throw new Error("Upload failed");
-        newDocs.push({ name: file.name, objectPath, contentType: file.type, size: file.size });
+        // Save to patient's document library so doctor can see it anytime
+        const saveRes = await fetch(`${BASE}/api/patient/documents`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
+        });
+        const saved = await saveRes.json().catch(() => null);
+        if (saved?.id) {
+          setSavedDocs(prev => [...prev, { id: saved.id, name: file.name, objectPath, contentType: file.type, size: file.size }]);
+        }
       } catch {
         setOnlineError(`Failed to upload "${file.name}". Please try again.`);
       }
     }
-    setDocs(prev => [...prev, ...newDocs]);
     setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -253,14 +250,10 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
     if (!onlineSlot) return;
     setBooking(true); setOnlineError("");
     try {
-      const selectedSaved = savedDocs
-        .filter(d => selectedSavedPaths.has(d.objectPath))
-        .map(d => ({ name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size }));
-      const allDocs = [...selectedSaved, ...docs];
       const r = await fetch(`${BASE}/api/online-appointments`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: onlineSlot.id, reason: onlineReason.trim() || undefined, documents: allDocs }),
+        body: JSON.stringify({ slotId: onlineSlot.id, reason: onlineReason.trim() || undefined, documents: [] }),
       });
       const data = await r.json();
       if (!r.ok) throw data;
@@ -611,127 +604,149 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               </motion.div>
             )}
 
-            {/* ONLINE: Upload docs */}
+            {/* ONLINE: Docs step */}
             {wizType === "online" && onlineStep === "docs" && (
               <motion.div key="online-docs" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col h-full">
-                <StepBar steps={["Choose Slot", "Add Documents", "Confirm"]} current={1} />
+                <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={1} />
                 <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
                   <FileText size={20} className="text-blue-600" /> Medical Documents
                 </p>
-                <p className="text-sm text-gray-500 mb-4">Attach records so Dr. Murali Krishna can review them before your consultation. You can skip and upload later from your dashboard.</p>
 
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
-                {/* Saved docs library */}
                 {savedDocsLoading ? (
-                  <div className="flex items-center gap-2 text-gray-400 text-sm py-3 mb-3">
-                    <Loader2 size={14} className="animate-spin" /> Loading your saved documents…
+                  <div className="flex items-center gap-2 text-gray-400 text-sm py-6">
+                    <Loader2 size={14} className="animate-spin" /> Loading your documents…
                   </div>
-                ) : savedDocs.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <CheckCircle2 size={12} className="text-emerald-500" /> Your Saved Documents — tap to select
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {savedDocs.map(doc => {
-                        const selected = selectedSavedPaths.has(doc.objectPath);
-                        return (
-                          <button key={doc.id} onClick={() => toggleSavedDoc(doc.objectPath)}
-                            className={[
-                              "flex items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left transition-all",
-                              selected
-                                ? "bg-blue-50 border-blue-500 shadow-sm"
-                                : "bg-white border-gray-200 hover:border-blue-300",
-                            ].join(" ")}>
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-500" : "bg-gray-100"}`}>
-                              <FileText size={14} className={selected ? "text-white" : "text-gray-400"} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-xs font-semibold truncate ${selected ? "text-blue-900" : "text-gray-800"}`}>{doc.name}</p>
-                              <p className={`text-[10px] ${selected ? "text-blue-600" : "text-gray-400"}`}>{fmtBytes(doc.size)}</p>
-                            </div>
-                            <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${selected ? "bg-blue-500 border-blue-500" : "border-gray-300"}`}>
-                              {selected && <CheckCircle2 size={12} className="text-white" />}
-                            </div>
-                          </button>
-                        );
-                      })}
+                ) : savedDocs.length > 0 ? (
+                  /* ── Has existing docs ── */
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {/* Info banner */}
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 mb-4 flex items-start gap-3">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-800">Dr. Murali Krishna can already see these</p>
+                        <p className="text-xs text-emerald-600 mt-0.5">All your uploaded documents are always visible to the doctor — no need to do anything.</p>
+                      </div>
                     </div>
-                  </div>
-                )}
 
-                {/* New file upload */}
-                <div className="mb-3">
-                  {savedDocs.length > 0 && (
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Upload New Files</p>
-                  )}
-                  <div onClick={() => fileRef.current?.click()}
-                    className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer">
-                    <Upload size={24} className="mx-auto mb-1.5 text-gray-300" />
-                    <p className="font-semibold text-gray-600 text-sm">Tap to upload</p>
-                    <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
-                    <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                      className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                  </div>
-                  {uploading && (
-                    <div className="flex items-center gap-2 text-blue-600 text-sm mt-2">
-                      <Loader2 size={14} className="animate-spin" /> Uploading…
-                    </div>
-                  )}
-                  {docs.length > 0 && (
-                    <div className="space-y-1.5 mt-2">
-                      {docs.map((doc, i) => (
-                        <div key={i} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                          <FileText size={13} className="text-emerald-600 shrink-0" />
-                          <p className="flex-1 text-xs font-medium text-gray-800 truncate">{doc.name}</p>
-                          <p className="text-[10px] text-gray-400 shrink-0">{fmtBytes(doc.size)}</p>
-                          <button onClick={() => setDocs(d => d.filter((_, idx) => idx !== i))}
-                            className="p-1 text-red-400 hover:text-red-600 rounded transition-colors">
-                            <Trash2 size={11} />
-                          </button>
+                    {/* Doc list */}
+                    <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                      {savedDocs.map(doc => (
+                        <div key={doc.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-3 py-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                            <FileText size={14} className="text-blue-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{doc.name}</p>
+                            <p className="text-[10px] text-gray-400">{fmtBytes(doc.size)}</p>
+                          </div>
+                          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
 
-                {/* Reason */}
-                <div className="mb-4">
-                  <label className="text-sm font-semibold text-gray-700 block mb-1.5">
-                    Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
-                    placeholder="Brief summary of your health concerns…"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
-                </div>
+                    {/* Add more */}
+                    <div className="mb-4">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Add More (optional)</p>
+                      <div onClick={() => fileRef.current?.click()}
+                        className="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-pointer">
+                        {uploading
+                          ? <div className="flex items-center justify-center gap-2 text-blue-600 text-sm"><Loader2 size={14} className="animate-spin" /> Uploading…</div>
+                          : <><Upload size={18} className="mx-auto mb-1 text-gray-300" /><p className="text-xs text-gray-400">Tap to upload more documents</p></>}
+                        <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
+                          className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
+                      </div>
+                    </div>
 
-                <div className="flex items-center justify-between gap-3 mt-auto">
-                  <button onClick={() => setOnlineStep("slots")}
-                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                    <ArrowLeft size={15} /> Back
-                  </button>
-                  <div className="flex items-center gap-2">
-                    {(selectedSavedPaths.size + docs.length) === 0 && !uploading && (
-                      <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                        className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
-                        Upload Later
+                    {/* Reason */}
+                    <div className="mb-4">
+                      <label className="text-sm font-semibold text-gray-700 block mb-1.5">Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
+                        placeholder="Brief summary of your health concerns…"
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 mt-auto">
+                      <button onClick={() => setOnlineStep("slots")} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                        <ArrowLeft size={15} /> Back
                       </button>
-                    )}
-                    <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
-                      {(selectedSavedPaths.size + docs.length) > 0
-                        ? <><CheckCircle2 size={15} /> Attach {selectedSavedPaths.size + docs.length} & Review</>
-                        : <>Review Booking <ArrowRight size={15} /></>}
-                    </button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                          className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
+                          Skip
+                        </button>
+                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
+                          Continue <ArrowRight size={15} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* ── No docs yet ── */
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <p className="text-sm text-gray-500 mb-4">You haven't uploaded any documents yet. Adding your reports or test results helps the doctor prepare for your consultation — you can also skip this now.</p>
+
+                    {/* Upload zone */}
+                    <div onClick={() => fileRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer mb-3 flex-1 flex flex-col items-center justify-center">
+                      {uploading
+                        ? <div className="flex items-center gap-2 text-blue-600 text-sm"><Loader2 size={16} className="animate-spin" /> Uploading…</div>
+                        : <>
+                            <Upload size={32} className="mx-auto mb-2.5 text-gray-300" />
+                            <p className="font-semibold text-gray-600 text-sm mb-0.5">Tap to upload documents</p>
+                            <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
+                          </>}
+                      <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
+                        className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
+                    </div>
+
+                    {/* Newly added this session */}
+                    {savedDocs.length > 0 && (
+                      <div className="space-y-1.5 mb-3">
+                        {savedDocs.map(doc => (
+                          <div key={doc.id} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                            <FileText size={13} className="text-emerald-600 shrink-0" />
+                            <p className="flex-1 text-xs font-medium text-gray-800 truncate">{doc.name}</p>
+                            <p className="text-[10px] text-gray-400 shrink-0">{fmtBytes(doc.size)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Reason */}
+                    <div className="mb-4">
+                      <label className="text-sm font-semibold text-gray-700 block mb-1.5">Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
+                        placeholder="Brief summary of your health concerns…"
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 mt-auto">
+                      <button onClick={() => setOnlineStep("slots")} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                        <ArrowLeft size={15} /> Back
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                          className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                          Skip
+                        </button>
+                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
+                          Continue <ArrowRight size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
             {/* ONLINE: Confirm */}
             {wizType === "online" && onlineStep === "confirm" && onlineSlot && (
               <motion.div key="online-confirm" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
-                <StepBar steps={["Choose Slot", "Upload Docs", "Confirm"]} current={2} />
+                <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={2} />
                 <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <CheckCircle2 size={20} className="text-blue-600" /> Confirm Booking
                 </p>
@@ -746,9 +761,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
                   </p>
                   <p className="text-xs text-gray-500 ml-6">
-                    {(selectedSavedPaths.size + docs.length) > 0
-                      ? `${selectedSavedPaths.size + docs.length} document(s) attached`
-                      : "No documents — you can upload them from your dashboard later"}
+                    {savedDocs.length > 0
+                      ? `${savedDocs.length} document(s) on file — visible to doctor`
+                      : "No documents — you can upload them from your dashboard"}
                   </p>
                 </div>
 

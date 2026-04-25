@@ -662,16 +662,17 @@ function ApptRow({ appt, selected, onClick }: { appt: OnlineAppt; selected: bool
   const hasRx = !!appt.prescription?.photoObjectPath;
   return (
     <button onClick={onClick} className={cn("w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-start gap-2.5", selected && "bg-[#1a3d2b]/5 border-l-[3px] border-l-[#1a3d2b]")}>
-      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5", appt.patient.patientCode ? "bg-[#1a3d2b]/8 border border-[#1a3d2b]/15" : "bg-blue-50")}>
-        {appt.patient.patientCode ? <span className="font-black text-[#1a3d2b] text-[10px] font-mono">{appt.patient.patientCode}</span> : <Video size={14} className="text-blue-500" />}
-      </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-1.5">
-          <p className={cn("text-sm font-semibold truncate", selected ? "text-[#1a3d2b]" : "text-gray-800")}>{appt.patient.name}</p>
+        <div className="flex items-center justify-between gap-1.5 mb-1">
+          <p className={cn("text-sm font-bold truncate", selected ? "text-[#1a3d2b]" : "text-gray-800")}>{appt.patient.name}</p>
           <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0 border", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
         </div>
-        <p className="text-[11px] text-gray-500 mt-0.5">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
+        {appt.patient.patientCode && (
+          <p className="text-base font-black text-[#1a3d2b] font-mono tracking-widest leading-none mb-1">{appt.patient.patientCode}</p>
+        )}
+        <p className="text-[11px] text-gray-500">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
         {hasRx && <p className="text-[10px] text-emerald-500 mt-0.5 flex items-center gap-1"><CheckCircle2 size={9} />Rx uploaded</p>}
+        {appt.joinEnabled && <p className="text-[10px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1 animate-pulse">🟢 Live</p>}
       </div>
     </button>
   );
