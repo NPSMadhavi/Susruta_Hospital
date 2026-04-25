@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
@@ -412,6 +412,54 @@ router.patch("/appointments/:id/choose-reschedule", requirePatient, async (req, 
     .where(eq(appointmentsTable.id, id))
     .returning();
   res.json({ ...updated, createdAt: updated.createdAt?.toISOString() ?? null });
+});
+
+// ── GET /api/patient/documents — list saved documents ─────────
+router.get("/documents", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const docs = await db
+    .select()
+    .from(patientDocumentsTable)
+    .where(eq(patientDocumentsTable.patientId, patient.id))
+    .orderBy(desc(patientDocumentsTable.createdAt));
+  res.json(docs.map(d => ({
+    id: d.id,
+    name: d.name,
+    objectPath: d.objectPath,
+    contentType: d.contentType,
+    size: d.size,
+    createdAt: d.createdAt?.toISOString() ?? null,
+  })));
+});
+
+// ── POST /api/patient/documents — save a document reference ───
+router.post("/documents", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const { name, objectPath, contentType, size } = req.body;
+  if (!name || !objectPath || !contentType || typeof size !== "number") {
+    res.status(400).json({ error: "missing_fields" }); return;
+  }
+  const [doc] = await db.insert(patientDocumentsTable).values({
+    patientId: patient.id,
+    name,
+    objectPath,
+    contentType,
+    size,
+  }).returning();
+  res.json({ id: doc.id, name: doc.name, objectPath: doc.objectPath, contentType: doc.contentType, size: doc.size, createdAt: doc.createdAt?.toISOString() ?? null });
+});
+
+// ── DELETE /api/patient/documents/:id — delete a saved doc ────
+router.delete("/documents/:id", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id);
+  const [doc] = await db
+    .select()
+    .from(patientDocumentsTable)
+    .where(and(eq(patientDocumentsTable.id, id), eq(patientDocumentsTable.patientId, patient.id)));
+  if (!doc) { res.status(404).json({ error: "not_found" }); return; }
+  await db.delete(patientDocumentsTable).where(eq(patientDocumentsTable.id, id));
+  res.json({ ok: true });
 });
 
 export default router;

@@ -19,6 +19,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type OnlineSlot = { id: number; date: string; startTime: string; endTime: string; intervalMinutes: number };
 type DateGroup = { date: string; slots: OnlineSlot[] };
 type UploadedDoc = { name: string; objectPath: string; contentType: string; size: number };
+type SavedDoc = { id: number; name: string; objectPath: string; contentType: string; size: number; createdAt: string };
 
 // ── Helpers ──────────────────────────────────────────────────────
 function fmtTime(t: string) {
@@ -188,6 +189,29 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [booking, setBooking] = useState(false);
   const [onlineError, setOnlineError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [savedDocs, setSavedDocs] = useState<SavedDoc[]>([]);
+  const [savedDocsLoading, setSavedDocsLoading] = useState(false);
+  const [selectedSavedPaths, setSelectedSavedPaths] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (wizType === "online" && onlineStep === "docs") {
+      setSavedDocsLoading(true);
+      fetch(`${BASE}/api/patient/documents`, { credentials: "include" })
+        .then(r => r.json())
+        .then(data => { setSavedDocs(Array.isArray(data) ? data : []); })
+        .catch(() => {})
+        .finally(() => setSavedDocsLoading(false));
+    }
+  }, [wizType, onlineStep]);
+
+  function toggleSavedDoc(objectPath: string) {
+    setSelectedSavedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(objectPath)) next.delete(objectPath);
+      else next.add(objectPath);
+      return next;
+    });
+  }
 
   function handleTypeSelect(type: WizardType) {
     setWizType(type);
@@ -229,10 +253,14 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
     if (!onlineSlot) return;
     setBooking(true); setOnlineError("");
     try {
+      const selectedSaved = savedDocs
+        .filter(d => selectedSavedPaths.has(d.objectPath))
+        .map(d => ({ name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size }));
+      const allDocs = [...selectedSaved, ...docs];
       const r = await fetch(`${BASE}/api/online-appointments`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: onlineSlot.id, reason: onlineReason.trim() || undefined, documents: docs }),
+        body: JSON.stringify({ slotId: onlineSlot.id, reason: onlineReason.trim() || undefined, documents: allDocs }),
       });
       const data = await r.json();
       if (!r.ok) throw data;
@@ -255,8 +283,8 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 80, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="bg-white w-full sm:max-w-xl md:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-        style={{ maxHeight: "90vh" }}
+        className="bg-white w-full max-w-3xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        style={{ height: "90vh", maxHeight: "90vh" }}
       >
         {/* Modal header */}
         <div className="bg-[#1a3d2b] px-6 py-5 flex items-center gap-3 shrink-0">
@@ -585,84 +613,117 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* ONLINE: Upload docs */}
             {wizType === "online" && onlineStep === "docs" && (
-              <motion.div key="online-docs" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
-                <StepBar steps={["Choose Slot", "Upload Docs", "Confirm"]} current={1} />
-                <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Upload size={20} className="text-blue-600" /> Upload Medical Documents
+              <motion.div key="online-docs" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col h-full">
+                <StepBar steps={["Choose Slot", "Add Documents", "Confirm"]} current={1} />
+                <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                  <FileText size={20} className="text-blue-600" /> Medical Documents
                 </p>
+                <p className="text-sm text-gray-500 mb-4">Attach records so Dr. Murali Krishna can review them before your consultation. You can skip and upload later from your dashboard.</p>
 
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800 mb-4">
-                  <p className="font-semibold mb-1">Why documents help</p>
-                  <p className="leading-relaxed text-xs">Dr. Murali Krishna reviews your medical history and reports before the consultation to provide the best Ayurvedic guidance. You can also upload them later from your dashboard.</p>
-                </div>
-
-                {/* Drop zone */}
-                <div onClick={() => fileRef.current?.click()}
-                  className="border-2 border-dashed border-gray-200 rounded-2xl p-7 text-center bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer mb-4">
-                  <Upload size={30} className="mx-auto mb-2 text-gray-300" />
-                  <p className="font-semibold text-gray-700 text-sm mb-1">Tap to upload files</p>
-                  <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
-                  <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                    className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                </div>
-
-                {/* Skip option */}
-                {docs.length === 0 && !uploading && (
-                  <div className="flex items-center justify-center mb-3">
-                    <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                      className="text-sm text-gray-500 underline underline-offset-2 hover:text-gray-700 transition-colors">
-                      I don't have documents right now — I'll upload them later
-                    </button>
+                {/* Saved docs library */}
+                {savedDocsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-400 text-sm py-3 mb-3">
+                    <Loader2 size={14} className="animate-spin" /> Loading your saved documents…
+                  </div>
+                ) : savedDocs.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <CheckCircle2 size={12} className="text-emerald-500" /> Your Saved Documents — tap to select
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {savedDocs.map(doc => {
+                        const selected = selectedSavedPaths.has(doc.objectPath);
+                        return (
+                          <button key={doc.id} onClick={() => toggleSavedDoc(doc.objectPath)}
+                            className={[
+                              "flex items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left transition-all",
+                              selected
+                                ? "bg-blue-50 border-blue-500 shadow-sm"
+                                : "bg-white border-gray-200 hover:border-blue-300",
+                            ].join(" ")}>
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-500" : "bg-gray-100"}`}>
+                              <FileText size={14} className={selected ? "text-white" : "text-gray-400"} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-semibold truncate ${selected ? "text-blue-900" : "text-gray-800"}`}>{doc.name}</p>
+                              <p className={`text-[10px] ${selected ? "text-blue-600" : "text-gray-400"}`}>{fmtBytes(doc.size)}</p>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${selected ? "bg-blue-500 border-blue-500" : "border-gray-300"}`}>
+                              {selected && <CheckCircle2 size={12} className="text-white" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
-                {uploading && (
-                  <div className="flex items-center gap-2 text-blue-600 text-sm mb-3">
-                    <Loader2 size={14} className="animate-spin" /> Uploading…
+                {/* New file upload */}
+                <div className="mb-3">
+                  {savedDocs.length > 0 && (
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Upload New Files</p>
+                  )}
+                  <div onClick={() => fileRef.current?.click()}
+                    className="border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer">
+                    <Upload size={24} className="mx-auto mb-1.5 text-gray-300" />
+                    <p className="font-semibold text-gray-600 text-sm">Tap to upload</p>
+                    <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
+                    <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
+                      className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
                   </div>
-                )}
-
-                {docs.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {docs.map((doc, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                        <FileText size={14} className="text-emerald-600 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{doc.name}</p>
-                          <p className="text-xs text-gray-400">{fmtBytes(doc.size)}</p>
+                  {uploading && (
+                    <div className="flex items-center gap-2 text-blue-600 text-sm mt-2">
+                      <Loader2 size={14} className="animate-spin" /> Uploading…
+                    </div>
+                  )}
+                  {docs.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      {docs.map((doc, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                          <FileText size={13} className="text-emerald-600 shrink-0" />
+                          <p className="flex-1 text-xs font-medium text-gray-800 truncate">{doc.name}</p>
+                          <p className="text-[10px] text-gray-400 shrink-0">{fmtBytes(doc.size)}</p>
+                          <button onClick={() => setDocs(d => d.filter((_, idx) => idx !== i))}
+                            className="p-1 text-red-400 hover:text-red-600 rounded transition-colors">
+                            <Trash2 size={11} />
+                          </button>
                         </div>
-                        <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                        <button onClick={() => setDocs(d => d.filter((_, idx) => idx !== i))}
-                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
 
+                {/* Reason */}
                 <div className="mb-4">
                   <label className="text-sm font-semibold text-gray-700 block mb-1.5">
                     Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
-                  <textarea rows={3} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
-                    placeholder="Please provide a brief summary of your health concerns in bullet points so we can review your case in advance."
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
+                  <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
+                    placeholder="Brief summary of your health concerns…"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 mt-auto">
                   <button onClick={() => setOnlineStep("slots")}
                     className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
                     <ArrowLeft size={15} /> Back
                   </button>
-                  <button disabled={uploading} onClick={() => {
-                    setOnlineError(""); setOnlineStep("confirm");
-                  }}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
-                    Review Booking <ArrowRight size={15} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {(selectedSavedPaths.size + docs.length) === 0 && !uploading && (
+                      <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                        className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
+                        Upload Later
+                      </button>
+                    )}
+                    <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
+                      {(selectedSavedPaths.size + docs.length) > 0
+                        ? <><CheckCircle2 size={15} /> Attach {selectedSavedPaths.size + docs.length} & Review</>
+                        : <>Review Booking <ArrowRight size={15} /></>}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -685,7 +746,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
                   </p>
                   <p className="text-xs text-gray-500 ml-6">
-                    {docs.length > 0 ? `${docs.length} document(s) uploaded` : "No documents — you can upload them from your dashboard later"}
+                    {(selectedSavedPaths.size + docs.length) > 0
+                      ? `${selectedSavedPaths.size + docs.length} document(s) attached`
+                      : "No documents — you can upload them from your dashboard later"}
                   </p>
                 </div>
 

@@ -15,3 +15,4 @@ export * from "./doctor_sessions";
 export * from "./medicine_orders";
 export * from "./medicine_order_items";
 export * from "./pharmacy_sessions";
+export * from "./patient_documents";

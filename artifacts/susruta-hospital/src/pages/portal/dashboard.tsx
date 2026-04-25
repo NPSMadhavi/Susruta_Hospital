@@ -6,7 +6,7 @@ import {
   RefreshCw, CheckCircle2, XCircle, MapPin,
   Download, Heart, QrCode, X, Plus,
   Stethoscope, AlertCircle, Phone, ChevronDown, ChevronUp,
-  Bell, ImageIcon, Loader2, Trash2
+  Bell, ImageIcon, Loader2, Trash2, Upload, FolderOpen,
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -31,8 +31,14 @@ type PhysicalAppt = {
   reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
 };
 type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string; emailVerified: boolean };
+type PatientDoc = { id: number; name: string; objectPath: string; contentType: string; size: number; createdAt: string };
 
 // ── Helpers ─────────────────────────────────────────────────────
+function fmtBytes(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
 function fmtTime(t: string) {
   if (!t) return t;
   const [h, m] = t.split(":").map(Number);
@@ -467,7 +473,12 @@ export default function PatientDashboard() {
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
   const [showBooking, setShowBooking] = useState(false);
-  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
+  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions" | "documents">("appointments");
+  const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsUploading, setDocsUploading] = useState(false);
+  const [docsError, setDocsError] = useState("");
+  const docFileRef = useRef<HTMLInputElement>(null);
   const [verifyResending, setVerifyResending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
@@ -529,6 +540,48 @@ export default function PatientDashboard() {
     setVerifyResending(false);
   }
 
+  async function loadPatientDocs() {
+    setDocsLoading(true);
+    try {
+      const data = await patientFetch("/documents");
+      setPatientDocs(Array.isArray(data) ? data : []);
+    } catch {}
+    setDocsLoading(false);
+  }
+
+  async function uploadPatientDoc(files: FileList) {
+    setDocsUploading(true);
+    setDocsError("");
+    for (const file of Array.from(files)) {
+      try {
+        const r = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
+        });
+        if (!r.ok) throw new Error("Upload URL error");
+        const { uploadURL, objectPath } = await r.json();
+        const up = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+        if (!up.ok) throw new Error("Upload failed");
+        const saved = await patientFetch("/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
+        });
+        if (saved) setPatientDocs(prev => [saved, ...prev]);
+      } catch {
+        setDocsError(`Failed to upload "${file.name}". Please try again.`);
+      }
+    }
+    if (docFileRef.current) docFileRef.current.value = "";
+    setDocsUploading(false);
+  }
+
+  async function deletePatientDoc(id: number) {
+    await patientFetch(`/documents/${id}`, { method: "DELETE" });
+    setPatientDocs(prev => prev.filter(d => d.id !== id));
+  }
+
   const loadData = useCallback(async () => {
     setLoading(true);
     const [me, myOnline, myPhysical, settings] = await Promise.all([
@@ -570,6 +623,7 @@ export default function PatientDashboard() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { if (mainTab === "documents" && patientDocs.length === 0) loadPatientDocs(); }, [mainTab]);
 
   async function logout() {
     await fetch(`${BASE}/api/patient/logout`, { method: "POST", credentials: "include" });
@@ -826,6 +880,23 @@ export default function PatientDashboard() {
                   )}>{prescriptions.length}</span>
                 )}
               </button>
+              <button
+                onClick={() => setMainTab("documents")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+                  mainTab === "documents"
+                    ? "bg-[#1a3d2b] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                )}
+              >
+                <FolderOpen size={15} /> My Docs
+                {patientDocs.length > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    mainTab === "documents" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                  )}>{patientDocs.length}</span>
+                )}
+              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -900,7 +971,7 @@ export default function PatientDashboard() {
                     </div>
                   )}
                 </motion.div>
-              ) : (
+              ) : mainTab === "prescriptions" ? (
                 <motion.div key="rx" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
                   {prescriptions.length === 0 ? (
                     <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
@@ -932,6 +1003,74 @@ export default function PatientDashboard() {
                               <Download size={11} /> Download
                             </a>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div key="docs" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-base font-bold text-gray-800">My Medical Documents</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Upload reports, test results, and health records. They'll be available to attach during consultations.</p>
+                    </div>
+                    <button onClick={() => docFileRef.current?.click()}
+                      className="flex items-center gap-2 bg-[#1a3d2b] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#1a3d2b]/90 transition-colors shrink-0 ml-3">
+                      <Upload size={14} /> Upload
+                    </button>
+                  </div>
+                  <input ref={docFileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
+                    className="hidden" onChange={e => e.target.files && uploadPatientDoc(e.target.files)} />
+
+                  {docsError && (
+                    <div className="flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm mb-4">
+                      <AlertCircle size={15} className="shrink-0" /> {docsError}
+                    </div>
+                  )}
+                  {docsUploading && (
+                    <div className="flex items-center gap-2 text-[#1a3d2b] text-sm mb-3">
+                      <Loader2 size={14} className="animate-spin" /> Uploading…
+                    </div>
+                  )}
+
+                  {docsLoading ? (
+                    <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
+                      <Loader2 size={16} className="animate-spin" /> Loading documents…
+                    </div>
+                  ) : patientDocs.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <FolderOpen size={28} className="text-gray-300" />
+                      </div>
+                      <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
+                      <p className="text-sm text-gray-400 mb-5">Upload your medical records here — they'll be ready to share when you book an online consultation.</p>
+                      <button onClick={() => docFileRef.current?.click()}
+                        className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
+                        <Upload size={16} /> Upload Document
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {patientDocs.map(doc => (
+                        <div key={doc.id} className="bg-white rounded-2xl border border-gray-200 flex items-center gap-3 px-4 py-3.5 shadow-sm">
+                          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                            <FileText size={16} className="text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{doc.name}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {fmtBytes(doc.size)} · {new Date(doc.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          </div>
+                          <a href={`${BASE}/api/storage${doc.objectPath}`} download target="_blank" rel="noopener noreferrer"
+                            className="p-2 text-gray-400 hover:text-[#1a3d2b] hover:bg-gray-100 rounded-lg transition-colors" title="Download">
+                            <Download size={14} />
+                          </a>
+                          <button onClick={() => deletePatientDoc(doc.id)}
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
                     </div>
