@@ -597,6 +597,9 @@ export default function PatientDashboard() {
   const chimeCountRef = useRef(0);
   const phonepeQrRef = useRef<string | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
+  // True when the server has already ended the session (session_ended SSE received).
+  // Prevents handleCallEnded (LiveKit disconnect) from showing a duplicate donation popup.
+  const sessionEndedRef = useRef(false);
 
   function startChiming() {
     shouldChimeRef.current = true;
@@ -624,6 +627,7 @@ export default function PatientDashboard() {
 
   function handlePatientJoined(apptId: number) {
     stopChiming();
+    sessionEndedRef.current = false;
     setVideoCallApptId(apptId);
     setJoinPopup(null);
     setMainTab("appointments");
@@ -635,9 +639,12 @@ export default function PatientDashboard() {
 
   function handleCallEnded(apptId: number) {
     setVideoCallApptId(null);
-    // Immediately clear joinEnabled locally so the sidebar Live card disappears
     setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, joinEnabled: false } : a));
-    setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
+    if (!sessionEndedRef.current) {
+      // Patient left voluntarily — doctor hasn't ended the session yet
+      setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
+    }
+    sessionEndedRef.current = false;
   }
 
   async function patientFetch(path: string, opts?: RequestInit) {
@@ -730,9 +737,13 @@ export default function PatientDashboard() {
     es.addEventListener("session_ended", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       stopChiming();
+      sessionEndedRef.current = true;
       setOnlineAppts(prev => prev.map(a => a.id === data.apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
       setJoinPopup(null);
-      setDonationPopup({ apptId: data.apptId, qrObjectPath: data.qrObjectPath });
+      // Close the call overlay immediately — LiveKit will also disconnect shortly
+      setVideoCallApptId(prev => prev === data.apptId ? null : prev);
+      // Show donation popup exactly once; LiveKit's onCallEnded will be suppressed by sessionEndedRef
+      setDonationPopup(prev => prev ?? { apptId: data.apptId, qrObjectPath: data.qrObjectPath });
     });
     return () => { es.close(); stopChiming(); };
   }, []);
