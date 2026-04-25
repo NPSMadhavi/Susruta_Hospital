@@ -5,11 +5,14 @@ import { join } from "path";
 import { db, siteSettingsTable } from "@workspace/db";
 
 // ── Inline logo for emails (base64 — always visible, never blocked) ───
+// Use process.cwd() — reliable in both CJS and ESM with tsx
 const LOGO_BASE64 = (() => {
   try {
-    const buf = readFileSync(join(__dirname, "assets", "logo.png"));
+    const logoPath = join(process.cwd(), "src", "lib", "assets", "logo.png");
+    const buf = readFileSync(logoPath);
     return buf.toString("base64");
-  } catch {
+  } catch (e) {
+    console.warn("[email] Logo not loaded for emails:", (e as Error).message);
     return null;
   }
 })();

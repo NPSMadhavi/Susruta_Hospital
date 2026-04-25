@@ -880,6 +880,10 @@ export default function DoctorPortal() {
           : d
       ));
     });
+    es.addEventListener("new_donation", (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as DonationRow;
+      setDonations(prev => [d, ...prev]);
+    });
     return () => es.close();
   }, []);
 

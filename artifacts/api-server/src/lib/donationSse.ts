@@ -20,3 +20,10 @@ export function broadcastDonationUpdate(payload: {
     try { client.res.write(data); } catch { clients.delete(client); }
   }
 }
+
+export function broadcastNewDonation(donation: Record<string, unknown>) {
+  const data = `event: new_donation\ndata: ${JSON.stringify(donation)}\n\n`;
+  for (const client of clients) {
+    try { client.res.write(data); } catch { clients.delete(client); }
+  }
+}

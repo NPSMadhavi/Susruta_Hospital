@@ -6,6 +6,7 @@ import {
   hashPassword, verifyPassword,
 } from "../lib/patient-auth";
 import { sendMagicLink, sendPasswordResetEmail } from "../lib/email";
+import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment } from "./appointments";
@@ -487,6 +488,12 @@ router.post("/donations", requirePatient, async (req: any, res) => {
     status: "pending",
     thankYouSent: false,
   }).returning();
+
+  // Notify doctor and admin portals in real time
+  broadcastNewDonation({
+    ...donation,
+    createdAt: donation.createdAt?.toISOString() ?? new Date().toISOString(),
+  });
 
   res.json(donation);
 });

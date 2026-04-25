@@ -60,6 +60,10 @@ export default function AdminDonations() {
           : d
       ));
     });
+    es.addEventListener("new_donation", (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as Donation;
+      setDonations(prev => [d, ...prev]);
+    });
     return () => es.close();
   }, []);
 
