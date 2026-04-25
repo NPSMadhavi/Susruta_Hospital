@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, an **Online Consultation System** with weekly Sunday slot booking, **built-in LiveKit video calling** (patient + doctor + guest caregiver, 3-person rooms), doctor portal with prescription photo upload, and patient document uploads.
+A complete Ayurvedic hospital SPA for Susruta Hospital, Tirupati, India. Features Dr. P. Murali Krishna's profile, calendar appointment booking, patient portal with email+password auth, appointment tracking with full lifecycle, admin panel with approval workflow, real-time SSE notifications, newsletter subscription management, an **Online Consultation System** with weekly Sunday slot booking, **built-in LiveKit video calling** (patient + doctor + guest caregiver, 3-person rooms), doctor portal with prescription photo upload, patient document uploads, and a **Donation Tracking System** (3-screen popup with UPI QR + self-reported UTR, admin donations module with verify + thank-you email).
 
 ## Stack
 

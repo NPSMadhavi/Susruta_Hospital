@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
@@ -460,6 +460,35 @@ router.delete("/documents/:id", requirePatient, async (req: any, res) => {
   if (!doc) { res.status(404).json({ error: "not_found" }); return; }
   await db.delete(patientDocumentsTable).where(eq(patientDocumentsTable.id, id));
   res.json({ ok: true });
+});
+
+// ── POST /api/patient/donations — record a donation ───────────
+router.post("/donations", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const { amount, lastSixDigits, appointmentId } = req.body;
+
+  if (!amount || typeof amount !== "string" || amount.trim() === "") {
+    res.status(400).json({ error: "amount_required" }); return;
+  }
+  if (!lastSixDigits || typeof lastSixDigits !== "string" || lastSixDigits.trim().length < 4) {
+    res.status(400).json({ error: "last_six_required" }); return;
+  }
+
+  const apptId = appointmentId ? parseInt(appointmentId) : null;
+
+  const [donation] = await db.insert(donationsTable).values({
+    patientId: patient.id,
+    appointmentId: apptId && !isNaN(apptId) ? apptId : null,
+    patientCode: patient.patientCode ?? null,
+    patientName: patient.name,
+    patientEmail: patient.email,
+    amount: amount.trim(),
+    lastSixDigits: lastSixDigits.trim().slice(-6),
+    status: "pending",
+    thankYouSent: false,
+  }).returning();
+
+  res.json(donation);
 });
 
 export default router;

@@ -639,6 +639,78 @@ export async function sendOnlineMeetingLinkEmail(opts: {
   });
 }
 
+// ── Donation Thank-You Email ──────────────────────────────────
+export async function sendDonationThankYou({ to, name, patientCode, amount, lastSixDigits, donationDate }: {
+  to: string; name: string; patientCode?: string | null; amount: string; lastSixDigits: string; donationDate: string;
+}): Promise<void> {
+  const cfg = await getSmtpConfig();
+  if (!cfg) throw new Error("SMTP not configured");
+
+  const subject = "Susruta Hospital — Thank You for Your Generous Donation 🙏";
+
+  const bodyHtml = `
+    <tr><td style="padding:32px 36px 24px;">
+      <h2 style="color:#1a3d2b;font-size:20px;font-weight:bold;margin:0 0 16px;font-family:Arial,sans-serif;">Thank You, ${name}! 🙏</h2>
+      <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 14px;font-family:Arial,sans-serif;">
+        We are deeply touched by your generous donation to Susruta Hospital. Your kindness means more than words can express.
+      </p>
+      <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 20px;font-family:Arial,sans-serif;">
+        Every contribution helps Dr. P. Murali Krishna continue providing Ayurvedic care to those who cannot afford treatment, sustaining a mission rooted in compassion and healing.
+      </p>
+      <table role="presentation" width="100%" style="background:#f0f7f4;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <tr><td style="padding:4px 0;">
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:13px;color:#888;">Donation Receipt</p>
+        </td></tr>
+        <tr><td style="padding:4px 0;">
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;color:#333;"><strong>Name:</strong> ${name}</p>
+        </td></tr>
+        ${patientCode ? `<tr><td style="padding:4px 0;"><p style="margin:0;font-family:Arial,sans-serif;font-size:14px;color:#333;"><strong>Patient ID:</strong> ${patientCode}</p></td></tr>` : ""}
+        <tr><td style="padding:4px 0;">
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;color:#333;"><strong>Amount:</strong> ₹${amount}</p>
+        </td></tr>
+        <tr><td style="padding:4px 0;">
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;color:#333;"><strong>Transaction (last 6):</strong> xxxxxx${lastSixDigits}</p>
+        </td></tr>
+        <tr><td style="padding:4px 0;">
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;color:#333;"><strong>Date:</strong> ${donationDate}</p>
+        </td></tr>
+      </table>
+      <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 14px;font-family:Arial,sans-serif;">
+        May your good deed return to you and your loved ones in the form of health, prosperity, and happiness. 🌿
+      </p>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin:0;font-family:Arial,sans-serif;font-style:italic;">
+        With gratitude,<br>Dr. P. Murali Krishna &amp; Team Susruta Hospital
+      </p>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Thank You, ${name}!`,
+    "",
+    "We are deeply touched by your generous donation to Susruta Hospital.",
+    "",
+    "Donation Receipt:",
+    `  Name: ${name}`,
+    patientCode ? `  Patient ID: ${patientCode}` : "",
+    `  Amount: Rs. ${amount}`,
+    `  Transaction (last 6): xxxxxx${lastSixDigits}`,
+    `  Date: ${donationDate}`,
+    "",
+    "With gratitude,",
+    "Dr. P. Murali Krishna & Team Susruta Hospital",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].filter(Boolean).join("\n");
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+  });
+}
+
 // ── SMTP connection test ──────────────────────────────────────
 export async function testSmtpConnection(cfg: SmtpConfig, testTo: string): Promise<void> {
   const transport = buildTransport(cfg);

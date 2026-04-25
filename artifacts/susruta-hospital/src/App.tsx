@@ -19,6 +19,7 @@ import AdminSubscribers from "./pages/admin/subscribers";
 import AdminOnlineSlots from "./pages/admin/online-slots";
 import AdminOnlineAppointments from "./pages/admin/online-appointments";
 import AdminPatients from "./pages/admin/patients";
+import AdminDonations from "./pages/admin/donations";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />
       <Route path="/admin/online-appointments" component={AdminOnlineAppointments} />
       <Route path="/admin/patients" component={AdminPatients} />
+      <Route path="/admin/donations" component={AdminDonations} />
       <Route path="/admin/settings" component={AdminSettings} />
 
       <Route component={NotFound} />

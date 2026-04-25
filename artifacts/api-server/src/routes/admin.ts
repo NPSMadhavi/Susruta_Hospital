@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable } from "@workspace/db";
+import { eq, desc, inArray, and, gte, lte } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
-import { sendMagicLink, testSmtpConnection, type SmtpConfig } from "../lib/email";
+import { sendMagicLink, testSmtpConnection, sendDonationThankYou, type SmtpConfig } from "../lib/email";
 
 const router = Router();
 
@@ -274,6 +274,72 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
   await db.delete(patientsTable).where(eq(patientsTable.id, id));
 
   res.json({ success: true });
+});
+
+// ── GET /admin/donations ───────────────────────────────────────
+router.get("/donations", requireAdmin, async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    let query = db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+
+    if (month && year) {
+      const y = parseInt(year as string);
+      const m = parseInt(month as string);
+      if (!isNaN(y) && !isNaN(m)) {
+        const from = new Date(y, m - 1, 1);
+        const to = new Date(y, m, 1);
+        query = db.select().from(donationsTable)
+          .where(and(gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .orderBy(desc(donationsTable.createdAt)) as any;
+      }
+    }
+
+    const rows = await query;
+    res.json(rows);
+  } catch (err) {
+    console.error("Admin donations list error:", err);
+    res.status(500).json({ error: "Failed to fetch donations" });
+  }
+});
+
+// ── PATCH /admin/donations/:id/verify ─────────────────────────
+router.patch("/donations/:id/verify", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const { verified } = req.body;
+  await db.update(donationsTable)
+    .set({ status: verified ? "verified" : "pending" })
+    .where(eq(donationsTable.id, id));
+  res.json({ success: true });
+});
+
+// ── POST /admin/donations/:id/thank-you ────────────────────────
+router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  const [donation] = await db.select().from(donationsTable).where(eq(donationsTable.id, id));
+  if (!donation) { res.status(404).json({ error: "not_found" }); return; }
+  if (!donation.patientEmail) { res.status(400).json({ error: "no_email" }); return; }
+
+  try {
+    const donationDate = new Date(donation.createdAt).toLocaleDateString("en-IN", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+    await sendDonationThankYou({
+      to: donation.patientEmail,
+      name: donation.patientName || "Patient",
+      patientCode: donation.patientCode,
+      amount: donation.amount,
+      lastSixDigits: donation.lastSixDigits,
+      donationDate,
+    });
+    await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Thank you email error:", err);
+    res.status(500).json({ error: "email_failed", message: "Failed to send email. Check SMTP settings." });
+  }
 });
 
 export default router;

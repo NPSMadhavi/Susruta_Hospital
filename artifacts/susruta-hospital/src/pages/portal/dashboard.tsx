@@ -122,76 +122,182 @@ function JoinPopup({ apptId, onJoin, onClose }: {
 }
 
 // ── Donation Popup ──────────────────────────────────────────────
-function DonationPopup({ qrObjectPath, onClose }: { qrObjectPath: string | null; onClose: () => void }) {
+function DonationPopup({
+  qrObjectPath, apptId, patientCode, onClose,
+}: {
+  qrObjectPath: string | null; apptId: number; patientCode?: string | null; onClose: () => void;
+}) {
+  const [screen, setScreen] = useState<"appeal" | "donate" | "receipt">("appeal");
+  const [amount, setAmount] = useState("");
+  const [lastSix, setLastSix] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleDonate() {
+    setError("");
+    if (!amount.trim()) { setError("Please enter the amount you donated."); return; }
+    if (lastSix.trim().length < 4) { setError("Please enter at least the last 4 digits of your transaction."); return; }
+    setSubmitting(true);
+    try {
+      await fetch(`${BASE}/api/patient/donations`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amount.trim(), lastSixDigits: lastSix.trim(), appointmentId: apptId || null }),
+      });
+      setScreen("receipt");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    }
+    setSubmitting(false);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
       <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="bg-white rounded-3xl shadow-2xl max-w-md w-full relative my-4">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors z-10">
-          <X size={18} />
-        </button>
 
-        {/* Header */}
-        <div className="bg-gradient-to-br from-[#1a3d2b] to-[#2a5a40] rounded-t-3xl px-6 pt-8 pb-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-white/15 flex items-center justify-center mx-auto mb-3">
-            <Heart size={28} className="text-red-300" fill="currentColor" />
-          </div>
-          <h2 className="text-xl font-extrabold text-white leading-snug">
-            If You Have Benefited,<br />This Is Your Opportunity to Give Back
-          </h2>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          {/* Quote */}
-          <p className="text-sm text-gray-600 leading-relaxed italic border-l-4 border-[#1a3d2b]/30 pl-4">
-            "Many patients and families have found relief, guidance, and long-term healing through Dr. Murali Krishna's care."
-          </p>
-
-          <p className="text-sm text-gray-600 leading-relaxed">
-            Behind every consultation is time, effort, and often the cost of medicines personally supported to help those who cannot afford treatment.
-          </p>
-
-          <p className="text-sm text-gray-700 font-semibold">
-            If his guidance has helped you or your loved ones, consider supporting this service. Your contribution will:
-          </p>
-
-          <ul className="space-y-2">
-            {[
-              "Help provide free treatment to those in need",
-              "Sustain ongoing charitable medical support",
-              "Extend this service to more lives",
-            ].map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
-                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">{i + 1}</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-
-          <p className="text-sm text-gray-500 text-center font-medium">
-            A small contribution from you can make a big difference for someone else. 🙏
-          </p>
-
-          {/* QR */}
-          {qrObjectPath ? (
-            <div className="text-center">
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 inline-block">
-                <img src={`${BASE}/api/storage${qrObjectPath}`} alt="PhonePe UPI QR" className="w-48 h-48 object-contain mx-auto" />
+        {/* ── Screen 1: Appeal ── */}
+        {screen === "appeal" && (
+          <>
+            <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-colors z-10">
+              <X size={18} />
+            </button>
+            <div className="bg-gradient-to-br from-[#1a3d2b] to-[#2a5a40] rounded-t-3xl px-6 pt-8 pb-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-white/15 flex items-center justify-center mx-auto mb-3">
+                <Heart size={28} className="text-red-300" fill="currentColor" />
               </div>
-              <p className="text-xs text-gray-400 mt-2">Scan with PhonePe, Google Pay, or any UPI app</p>
+              <h2 className="text-xl font-extrabold text-white leading-snug">
+                Your Health Was Restored.<br />Help Restore Someone Else's.
+              </h2>
             </div>
-          ) : (
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 text-center">
-              <QrCode size={44} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-gray-400">Payment QR will be available soon</p>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed italic border-l-4 border-[#1a3d2b]/30 pl-4">
+                "Thousands of patients have found relief through Dr. Murali Krishna's Ayurvedic care — many of them could not afford treatment on their own."
+              </p>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Behind every consultation is decades of knowledge, personal time, and often medicines provided at no cost to those who truly need it.
+              </p>
+              <p className="text-sm text-gray-700 font-semibold">Your contribution — however small — will:</p>
+              <ul className="space-y-2">
+                {["Fund free treatment for those who cannot afford it", "Keep this service accessible to all", "Help Dr. Murali Krishna's mission reach more lives"].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-gray-600">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">{i + 1}</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-center text-sm text-gray-500 font-medium">A little from you means everything to someone else. 🙏</p>
+              <button onClick={() => setScreen("donate")}
+                className="w-full py-4 bg-[#1a3d2b] text-white font-extrabold rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors shadow-lg">
+                Yes, I want to donate ❤️
+              </button>
+              <button onClick={onClose} className="w-full py-2.5 text-gray-400 text-sm hover:text-gray-600 transition-colors">
+                Maybe next time
+              </button>
             </div>
-          )}
+          </>
+        )}
 
-          <button onClick={onClose}
-            className="w-full py-3.5 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm hover:bg-[#1a3d2b]/90 transition-colors">
-            Close
-          </button>
-        </div>
+        {/* ── Screen 2: Payment ── */}
+        {screen === "donate" && (
+          <>
+            <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors z-10">
+              <X size={18} />
+            </button>
+            <div className="bg-gradient-to-br from-[#1a3d2b] to-[#2a5a40] rounded-t-3xl px-6 pt-7 pb-5 text-center">
+              <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-1">Step 2 of 2</p>
+              <h2 className="text-lg font-extrabold text-white">Scan &amp; Confirm Your Donation</h2>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {/* QR */}
+              {qrObjectPath ? (
+                <div className="text-center">
+                  <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100 inline-block">
+                    <img src={`${BASE}/api/storage${qrObjectPath}`} alt="UPI QR" className="w-44 h-44 object-contain mx-auto" />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">Scan with PhonePe, Google Pay, Paytm, or any UPI app</p>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 text-center">
+                  <QrCode size={40} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">QR will be available soon — ask us for UPI ID directly</p>
+                </div>
+              )}
+
+              {/* Patient ID instruction */}
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800">
+                <p className="font-bold mb-1">📝 Important — In the UPI "Message / Note" field, please type:</p>
+                <p className="font-black text-amber-900 text-base font-mono tracking-widest text-center py-1">
+                  {patientCode || "Your Patient ID"}
+                </p>
+                <p className="text-xs text-amber-700 mt-1">This helps us match your payment and send a proper receipt.</p>
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1.5">How much are you donating? (₹)</label>
+                <input
+                  type="number" min="1" placeholder="e.g. 500"
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-semibold focus:outline-none focus:border-[#1a3d2b] focus:ring-2 focus:ring-[#1a3d2b]/20"
+                />
+              </div>
+
+              {/* Last 6 digits */}
+              <div>
+                <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1.5">Transaction ID — Last 6 digits <span className="text-red-500">*</span></label>
+                <input
+                  type="text" maxLength={6} placeholder="e.g. 892341"
+                  value={lastSix} onChange={e => setLastSix(e.target.value.replace(/\D/g, ""))}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-mono font-semibold tracking-widest focus:outline-none focus:border-[#1a3d2b] focus:ring-2 focus:ring-[#1a3d2b]/20"
+                />
+                <p className="text-xs text-gray-400 mt-1">After payment, check the transaction receipt in your UPI app for the last 6 digits of the Transaction ID / UTR.</p>
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm">
+                  <AlertCircle size={14} className="shrink-0" /> {error}
+                </div>
+              )}
+
+              <button onClick={handleDonate} disabled={submitting}
+                className="w-full py-4 bg-[#1a3d2b] text-white font-extrabold rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg">
+                {submitting ? <Loader2 size={18} className="animate-spin" /> : <Heart size={16} fill="currentColor" />}
+                {submitting ? "Recording donation…" : "I have donated ✓"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Screen 3: Receipt ── */}
+        {screen === "receipt" && (
+          <div className="px-6 py-10 text-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
+              <Heart size={36} className="text-emerald-600" fill="currentColor" />
+            </div>
+            <h2 className="text-2xl font-extrabold text-[#1a3d2b] mb-3">Thank You! 🙏</h2>
+            <p className="text-base text-gray-600 leading-relaxed mb-3">
+              Your generosity has been recorded. Dr. Murali Krishna and the entire Susruta Hospital team are deeply grateful.
+            </p>
+            <p className="text-sm text-gray-500 leading-relaxed mb-2">
+              A thank-you letter will be sent to your registered email once your donation is confirmed.
+            </p>
+            <div className="bg-gray-50 rounded-2xl border border-gray-100 px-5 py-4 text-left text-sm space-y-1.5 my-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Donation Summary</p>
+              {patientCode && <p className="text-gray-700"><span className="font-semibold">Patient ID:</span> {patientCode}</p>}
+              <p className="text-gray-700"><span className="font-semibold">Amount:</span> ₹{amount}</p>
+              <p className="text-gray-700"><span className="font-semibold">Transaction (last 6):</span> xxxxxx{lastSix}</p>
+              <p className="text-gray-700"><span className="font-semibold">Date:</span> {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
+            </div>
+            <p className="text-sm text-emerald-700 font-semibold italic mb-6">
+              "May your good deed return to you as health, happiness, and abundance." 🌿
+            </p>
+            <button onClick={onClose}
+              className="w-full py-3.5 bg-[#1a3d2b] text-white font-bold rounded-2xl text-sm hover:bg-[#1a3d2b]/90 transition-colors">
+              Close
+            </button>
+          </div>
+        )}
       </motion.div>
     </div>
   );
@@ -611,7 +717,7 @@ export default function PatientDashboard() {
       {/* Popups */}
       <AnimatePresence>
         {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
-        {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} onClose={() => setDonationPopup(null)} />}
+        {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} apptId={donationPopup.apptId} patientCode={patient?.patientCode} onClose={() => setDonationPopup(null)} />}
         {showBooking && (
           <BookingWizard
             patient={patient}
