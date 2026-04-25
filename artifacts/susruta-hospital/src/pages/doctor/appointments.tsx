@@ -32,7 +32,7 @@ type PatientInfo = { id: number | null; patientCode: string | null; name: string
 
 type OnlineAppt = {
   id: number; type: "online"; status: string; reason: string | null;
-  documents: DocFile[]; joinEnabled: boolean; createdAt: string;
+  documents: DocFile[]; patientDocs: DocFile[]; joinEnabled: boolean; createdAt: string;
   date: string; timeLabel: string; slotId: number; patient: PatientInfo;
   prescription: Prescription | null;
 };
@@ -333,12 +333,12 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
 
       <div className="flex-1 overflow-auto px-4 py-4 space-y-5 pb-6">
         {/* Patient documents */}
-        {appt.documents.length > 0 && (
+        {(() => { const allDocs = [...appt.documents, ...(appt.patientDocs ?? [])]; return allDocs.length > 0 && (
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={11} /> Patient Documents</p>
             <div className="grid grid-cols-2 gap-2">
-              {appt.documents.map((d, i) => (
-                <button key={i} onClick={() => onDocClick(d, appt.documents)}
+              {allDocs.map((d, i) => (
+                <button key={i} onClick={() => onDocClick(d, allDocs)}
                   className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left active:scale-95">
                   {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" /> : <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText size={14} className="text-blue-500" /></div>}
                   <span className="text-xs font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
@@ -346,7 +346,7 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
               ))}
             </div>
           </div>
-        )}
+        ); })()}
 
         {/* Existing prescription */}
         {rxExists && !preview && (
@@ -486,11 +486,12 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
         </div>
       )}
 
+      {(() => { const allDocs = [...appt.documents, ...(appt.patientDocs ?? [])]; return (
       <div className="px-4 py-4 bg-white shrink-0">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={11} /> Patient Documents {appt.documents.length > 0 && <span className="text-gray-300">({appt.documents.length})</span>}</p>
-        {appt.documents.length === 0 ? <p className="text-xs text-gray-400 italic">No documents uploaded</p> : (
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={11} /> Patient Documents {allDocs.length > 0 && <span className="text-gray-300">({allDocs.length})</span>}</p>
+        {allDocs.length === 0 ? <p className="text-xs text-gray-400 italic">No documents uploaded</p> : (
           <div className="space-y-2">
-            {appt.documents.map((d, i) => (
+            {allDocs.map((d, i) => (
               <button key={i} onClick={() => onDocClick(d)} className="w-full flex items-center gap-2.5 px-3 py-3 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left active:scale-[0.99]">
                 {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" /> : <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText size={14} className="text-blue-500" /></div>}
                 <span className="text-sm font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
@@ -500,6 +501,7 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
           </div>
         )}
       </div>
+      ); })()}
 
       <div className="px-4 py-4 bg-white shrink-0">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><StickyNote size={11} /> Doctor's Notes</p>

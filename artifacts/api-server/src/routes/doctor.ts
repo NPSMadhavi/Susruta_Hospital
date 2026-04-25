@@ -71,24 +71,30 @@ router.get("/me", async (req, res) => {
 
 // ── GET /api/doctor/appointments ─────────────────────────────
 router.get("/appointments", requireDoctor, async (_req, res) => {
-  const rows = await db
-    .select({
-      appt: onlineAppointmentsTable,
-      slot: onlineSlotsTable,
-      patient: patientsTable,
-      prescription: prescriptionsTable,
-    })
-    .from(onlineAppointmentsTable)
-    .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-    .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-    .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime);
+  const [rows, allPatientDocs] = await Promise.all([
+    db
+      .select({
+        appt: onlineAppointmentsTable,
+        slot: onlineSlotsTable,
+        patient: patientsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(onlineAppointmentsTable)
+      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
+      .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
+    db.select().from(patientDocumentsTable),
+  ]);
 
   res.json(rows.map((r) => ({
     id: r.appt.id,
     status: r.appt.status,
     reason: r.appt.reason,
     documents: r.appt.documents,
+    patientDocs: allPatientDocs
+      .filter(d => d.patientId === r.patient.id)
+      .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
     joinEnabled: r.appt.joinEnabled,
     createdAt: r.appt.createdAt.toISOString(),
     slot: {
@@ -116,25 +122,27 @@ router.get("/appointments", requireDoctor, async (_req, res) => {
 
 // ── GET /api/doctor/all-appointments — Both types ────────────
 router.get("/all-appointments", requireDoctor, async (_req, res) => {
-  const onlineRows = await db
-    .select({
-      appt: onlineAppointmentsTable,
-      slot: onlineSlotsTable,
-      patient: patientsTable,
-      prescription: prescriptionsTable,
-    })
-    .from(onlineAppointmentsTable)
-    .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-    .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-    .where(inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"]))
-    .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime);
-
-  const offlineRows = await db
-    .select()
-    .from(appointmentsTable)
-    .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
-    .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt));
+  const [onlineRows, offlineRows, allPatientDocs] = await Promise.all([
+    db
+      .select({
+        appt: onlineAppointmentsTable,
+        slot: onlineSlotsTable,
+        patient: patientsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(onlineAppointmentsTable)
+      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
+      .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .where(inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"]))
+      .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
+    db
+      .select()
+      .from(appointmentsTable)
+      .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
+      .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt)),
+    db.select().from(patientDocumentsTable),
+  ]);
 
   const online = onlineRows.map((r) => ({
     id: r.appt.id,
@@ -142,6 +150,9 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     status: r.appt.status,
     reason: r.appt.reason ?? null,
     documents: r.appt.documents,
+    patientDocs: allPatientDocs
+      .filter(d => d.patientId === r.patient.id)
+      .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
     joinEnabled: r.appt.joinEnabled,
     createdAt: r.appt.createdAt.toISOString(),
     date: r.slot.date,
@@ -168,6 +179,7 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     status: r.status,
     reason: r.reason ?? null,
     documents: [] as any[],
+    patientDocs: [] as any[],
     joinEnabled: false,
     createdAt: r.createdAt?.toISOString() ?? "",
     date: r.date,
