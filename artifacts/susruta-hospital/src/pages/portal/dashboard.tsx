@@ -147,9 +147,11 @@ function DonationPopup({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl max-w-md w-full relative my-4">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm overflow-y-auto">
+      {/* min-h-full + flex lets the inner wrapper grow and scroll; items-end = bottom-sheet on mobile, items-center on sm+ */}
+      <div className="flex min-h-full items-end sm:items-center justify-center p-0 sm:p-4">
+      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: "spring", damping: 28, stiffness: 300 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-md w-full relative">
 
         {/* ── Screen 1: Appeal ── */}
         {screen === "appeal" && (
