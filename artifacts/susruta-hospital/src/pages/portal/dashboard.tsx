@@ -761,7 +761,7 @@ export default function PatientDashboard() {
   const liveAppt = onlineAppts.find(a => a.joinEnabled);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f4f7f5]">
+    <div className="min-h-[100dvh] bg-[#f4f7f5] overflow-x-hidden">
       {/* Popups — shared between mobile & desktop */}
       <AnimatePresence>
         {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
