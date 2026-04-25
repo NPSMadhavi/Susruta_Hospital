@@ -673,18 +673,29 @@ export default function PatientDashboard() {
   async function uploadPatientDoc(file: File) {
     setDocsUploading(true); setDocsError("");
     try {
+      // Camera photos on some Android devices report an empty type — fall back to JPEG
+      const contentType = file.type || "image/jpeg";
+      // Camera photos may lack a proper extension — append one based on content type
+      let fileName = file.name || "document";
+      if (!fileName.includes(".")) {
+        const ext = contentType === "application/pdf" ? "pdf"
+          : contentType.startsWith("image/png") ? "png"
+          : "jpg";
+        fileName = `${fileName}.${ext}`;
+      }
       const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
+        body: JSON.stringify({ name: fileName, contentType, size: file.size }),
       });
       if (!urlRes.ok) throw new Error("Could not get upload URL");
       const { uploadURL, objectPath } = await urlRes.json();
-      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+      if (!putRes.ok) throw new Error("File upload failed — please try again");
       const saveRes = await fetch(`${BASE}/api/patient/documents`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
+        body: JSON.stringify({ name: fileName, objectPath, contentType, size: file.size }),
       });
       if (!saveRes.ok) throw new Error("Could not save document");
       const doc = await saveRes.json();

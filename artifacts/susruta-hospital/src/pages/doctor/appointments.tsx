@@ -865,6 +865,7 @@ export default function DoctorPortal() {
 
   useEffect(() => {
     load();
+    loadDonations();
     intervalRef.current = setInterval(() => load(true), 20_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [load]);
