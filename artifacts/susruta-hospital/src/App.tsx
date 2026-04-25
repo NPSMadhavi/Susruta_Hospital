@@ -65,6 +65,7 @@ function Router() {
 
       {/* Patient Portal Routes */}
       <Route path="/portal" component={PortalLogin} />
+      <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/dashboard" component={PatientDashboard} />
       <Route path="/portal/book" component={PortalBook} />
       <Route path="/portal/online-book" component={OnlineBook} />
