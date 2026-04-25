@@ -230,17 +230,19 @@ export default function AdminDonations() {
                     <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{fmtDate(d.createdAt)}</td>
                     <td className="px-5 py-4">
                       <button onClick={() => toggleVerify(d)}
-                        className={cn(
-                          "relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all select-none",
-                          d.status === "verified"
-                            ? "bg-green-500 border-green-600 text-white"
-                            : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                        className="flex items-center gap-2 cursor-pointer group select-none">
+                        <div className={cn(
+                          "relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0",
+                          d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300"
                         )}>
-                        <span className={cn(
-                          "w-3.5 h-3.5 rounded-full transition-colors shrink-0",
-                          d.status === "verified" ? "bg-white" : "bg-gray-300"
-                        )} />
-                        {d.status === "verified" ? "Received" : "Not Received"}
+                          <div className={cn(
+                            "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+                            d.status === "verified" ? "translate-x-5" : "translate-x-1"
+                          )} />
+                        </div>
+                        <span className={cn("text-xs font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
+                          {d.status === "verified" ? "Received" : "Not Received"}
+                        </span>
                       </button>
                     </td>
                     <td className="px-5 py-4">

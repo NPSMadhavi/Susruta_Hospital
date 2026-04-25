@@ -974,14 +974,19 @@ export default function DoctorPortal() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[10px] text-gray-400 font-mono">xxxx{d.lastSixDigits} · {new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</p>
                     <button onClick={() => toggleDonationVerify(d)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0",
-                        d.status === "verified"
-                          ? "bg-green-500 border-green-600 text-white"
-                          : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                      className="flex items-center gap-1.5 shrink-0 group cursor-pointer">
+                      <div className={cn(
+                        "relative w-9 h-5 rounded-full transition-colors duration-200 shrink-0",
+                        d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300"
                       )}>
-                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", d.status === "verified" ? "bg-white" : "bg-gray-300")} />
-                      {d.status === "verified" ? "Received" : "Not Received"}
+                        <div className={cn(
+                          "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+                          d.status === "verified" ? "translate-x-4" : "translate-x-0.5"
+                        )} />
+                      </div>
+                      <span className={cn("text-[10px] font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
+                        {d.status === "verified" ? "Received" : "Not Received"}
+                      </span>
                     </button>
                   </div>
                 </div>
