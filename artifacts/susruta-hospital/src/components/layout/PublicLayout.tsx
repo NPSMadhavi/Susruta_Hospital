@@ -227,7 +227,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <BookingLoginModal
         open={bookingModalOpen}
         onClose={() => setBookingModalOpen(false)}
-        onContinueAsGuest={() => { setBookingModalOpen(false); navigate("/appointments"); }}
       />
 
       {/* ── Page content ── */}

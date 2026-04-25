@@ -20,7 +20,6 @@ async function apiPost(path: string, body: object) {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onContinueAsGuest: () => void;
 }
 
 type Mode = "login" | "register";
@@ -61,7 +60,7 @@ async function detectCountryCode(): Promise<string> {
   }
 }
 
-export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
+export function BookingLoginModal({ open, onClose }: Props) {
   const [mode, setMode] = useState<Mode>("login");
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
@@ -342,18 +341,6 @@ export function BookingLoginModal({ open, onClose, onContinueAsGuest }: Props) {
                 </button>
               </form>
 
-              <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-
-              <button onClick={onContinueAsGuest}
-                className="w-full flex items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground hover:text-primary transition-colors group"
-              >
-                <span>Continue as guest</span>
-                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
-              </button>
             </div>
           </motion.div>
         </div>
