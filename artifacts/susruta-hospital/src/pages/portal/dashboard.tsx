@@ -592,6 +592,7 @@ export default function PatientDashboard() {
   const docCamRef = useRef<HTMLInputElement>(null);
   const [verifyResending, setVerifyResending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"home" | "appointments" | "prescriptions" | "docs">("home");
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
@@ -760,8 +761,8 @@ export default function PatientDashboard() {
   const liveAppt = onlineAppts.find(a => a.joinEnabled);
 
   return (
-    <div className="min-h-screen bg-[#f4f7f5]">
-      {/* Popups */}
+    <div className="min-h-[100dvh] bg-[#f4f7f5]">
+      {/* Popups — shared between mobile & desktop */}
       <AnimatePresence>
         {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} apptId={donationPopup.apptId} patientCode={patient?.patientCode} onClose={() => setDonationPopup(null)} />}
@@ -813,374 +814,661 @@ export default function PatientDashboard() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-0 pb-6 sm:py-6 lg:py-8">
-        <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 space-y-6 lg:space-y-0">
+      {/* ══════════════════════════════════════════════════════
+          MOBILE LAYOUT  (hidden on md+)
+      ══════════════════════════════════════════════════════ */}
+      <div className="md:hidden flex flex-col" style={{ minHeight: "calc(100dvh - 56px)" }}>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto pb-24 px-4 pt-4 space-y-0">
+          <AnimatePresence mode="wait">
 
-          {/* ── LEFT SIDEBAR ──────────────────────────────────── */}
-          <div className="space-y-4">
-            {/* Welcome + Patient ID — flat top on mobile so it visually merges with the header */}
-            <div className="bg-[#1a3d2b] rounded-b-3xl sm:rounded-3xl px-6 py-6 shadow-md">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-13 h-13 rounded-2xl bg-white/10 flex items-center justify-center shrink-0" style={{ width: 52, height: 52 }}>
-                  <User size={24} className="text-white/80" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white/50 text-xs font-medium">Hello!</p>
-                  <p className="text-white font-bold text-lg leading-tight truncate">{patient?.name}</p>
-                </div>
-              </div>
+            {/* ── Home tab ── */}
+            {mobileTab === "home" && (
+              <motion.div key="m-home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
 
-              {patient?.patientCode && (
-                <div className="bg-white/12 border border-white/10 rounded-2xl px-4 py-4 mb-5">
-                  <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Your Patient ID</p>
-                  <p className="text-white font-black text-3xl font-mono tracking-widest">{patient.patientCode}</p>
-                  <p className="text-white/40 text-xs mt-1.5">Tell this number when visiting the clinic</p>
-                </div>
-              )}
+                {/* Email verification banner */}
+                {patient && !patient.emailVerified && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
+                        <p className="text-amber-700 text-xs mt-0.5">Check your inbox for the verification link.</p>
+                      </div>
+                    </div>
+                    {verifySent ? (
+                      <span className="text-xs font-semibold text-emerald-700">✓ Verification email sent!</span>
+                    ) : (
+                      <button onClick={resendVerificationEmail} disabled={verifyResending}
+                        className="self-start flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 rounded-xl px-3 py-1.5 disabled:opacity-60">
+                        {verifyResending ? <RefreshCw size={11} className="animate-spin" /> : <Bell size={11} />}
+                        Resend Verification
+                      </button>
+                    )}
+                  </div>
+                )}
 
-              <button onClick={() => setShowBooking(true)}
-                className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-sm">
-                <Calendar size={18} /> Book an Appointment
-              </button>
-            </div>
+                {/* Live alert — top priority */}
+                {hasLiveAppt && liveAppt && (
+                  <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}
+                    className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                      <p className="text-white font-black text-lg">Doctor is Ready!</p>
+                    </div>
+                    <p className="text-emerald-100 text-sm mb-4 leading-snug">Dr. Murali Krishna is waiting for your video call right now.</p>
+                    <button onClick={() => { handlePatientJoined(liveAppt.id); setMobileTab("appointments"); }}
+                      className="flex items-center justify-center gap-2 w-full py-4 bg-white text-emerald-700 font-extrabold rounded-2xl text-base active:scale-95 transition-transform">
+                      <Video size={20} /> Join Video Call →
+                    </button>
+                  </motion.div>
+                )}
 
-            {/* Live alert */}
-            {hasLiveAppt && liveAppt && (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-md">
-                <div className="flex items-center gap-2 mb-3">
-                  <Bell size={18} className="text-white animate-pulse" />
-                  <p className="text-white font-black text-base">Doctor is Ready!</p>
+                {/* Patient card */}
+                <div className="bg-[#1a3d2b] rounded-3xl px-5 py-5 shadow-md">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                      <User size={22} className="text-white/80" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/50 text-xs font-medium">Hello!</p>
+                      <p className="text-white font-bold text-lg leading-tight truncate">{patient?.name}</p>
+                    </div>
+                    <button onClick={loadData} className="p-2 text-white/40 hover:text-white rounded-xl active:bg-white/10">
+                      <RefreshCw size={15} />
+                    </button>
+                  </div>
+
+                  {patient?.patientCode && (
+                    <div className="bg-white/12 border border-white/10 rounded-2xl px-4 py-4 mb-4">
+                      <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Your Patient ID</p>
+                      <p className="text-white font-black text-4xl font-mono tracking-widest">{patient.patientCode}</p>
+                      <p className="text-white/40 text-xs mt-1">Mention this when visiting the clinic</p>
+                    </div>
+                  )}
+
+                  <button onClick={() => setShowBooking(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl active:bg-white/90 transition-colors shadow-sm">
+                    <Calendar size={18} /> Book an Appointment
+                  </button>
                 </div>
-                <p className="text-emerald-100 text-sm mb-4">Dr. Murali Krishna is waiting for you right now.</p>
-                <button
-                  onClick={() => handlePatientJoined(liveAppt.id)}
-                  className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
-                  <Video size={18} /> Join Video Call →
+
+                {/* Summary stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Upcoming", value: upcomingCount, color: "text-[#1a3d2b]" },
+                    { label: "Total Visits", value: allAppointments.length, color: "text-gray-700" },
+                    { label: "Prescriptions", value: prescriptions.length, color: "text-gray-700" },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white rounded-2xl border border-gray-200 px-3 py-4 text-center shadow-sm">
+                      <p className={cn("font-black text-2xl", s.color)}>{s.value}</p>
+                      <p className="text-gray-500 text-[11px] font-medium mt-0.5 leading-tight">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Hospital info */}
+                <div className="bg-white rounded-3xl px-5 py-4 border border-gray-200 shadow-sm">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Susruta Hospital</p>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 text-sm text-gray-600">
+                      <MapPin size={15} className="text-[#1a3d2b] shrink-0 mt-0.5" />
+                      <span>119, Ramulavari North Mada Street, Tirupati</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Phone size={15} className="text-[#1a3d2b] shrink-0" />
+                      <span>Contact via booking</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Donate button */}
+                <button onClick={() => setDonationPopup({ apptId: 0, qrObjectPath: phonepeQrRef.current })}
+                  className="w-full bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-3xl px-5 py-4 text-left active:from-rose-100 transition-all shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+                      <Heart size={18} className="text-red-500" fill="currentColor" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-gray-800">Support Dr. Murali Krishna</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Help extend free care to those in need</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Logout */}
+                <button onClick={logout}
+                  className="w-full flex items-center justify-center gap-2 py-3 border border-gray-200 rounded-2xl text-sm font-medium text-gray-500 bg-white active:bg-gray-50 transition-colors">
+                  <LogOut size={15} /> Sign Out
                 </button>
               </motion.div>
             )}
 
-            {/* Quick info */}
-            <div className="bg-white rounded-3xl px-5 py-5 border border-gray-200 shadow-sm space-y-3">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Your Summary</p>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 font-medium">Upcoming</span>
-                <span className="font-black text-[#1a3d2b] text-lg">{upcomingCount}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 font-medium">Total Visits</span>
-                <span className="font-black text-gray-700 text-lg">{allAppointments.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 font-medium">Prescriptions</span>
-                <span className="font-black text-gray-700 text-lg">{prescriptions.length}</span>
-              </div>
-            </div>
-
-            {/* Hospital info */}
-            <div className="bg-white rounded-3xl px-5 py-5 border border-gray-200 shadow-sm">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Susruta Hospital</p>
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 text-sm text-gray-600">
-                  <MapPin size={15} className="text-[#1a3d2b] shrink-0 mt-0.5" />
-                  <span>119, Ramulavari North Mada Street, Tirupati</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Phone size={15} className="text-[#1a3d2b] shrink-0" />
-                  <span>Contact via booking</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Donate card */}
-            <button
-              onClick={() => setDonationPopup({ apptId: 0, qrObjectPath: phonepeQrRef.current })}
-              className="w-full bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-3xl px-5 py-4 text-left hover:from-rose-100 hover:to-red-100 hover:border-rose-300 transition-all shadow-sm group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
-                  <Heart size={18} className="text-red-500" fill="currentColor" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm text-gray-800">Support Dr. Murali Krishna</p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-snug">Help extend free care to those in need</p>
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* ── MAIN CONTENT ───────────────────────────────────── */}
-          <div ref={mainContentRef}>
-            {/* Email verification banner */}
-            {patient && !patient.emailVerified && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex items-start gap-3 flex-1 min-w-0">
-                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
-                    <p className="text-amber-700 text-xs mt-0.5">Please verify your email address to enable all features. Check your inbox for the verification link.</p>
+            {/* ── Appointments tab ── */}
+            {mobileTab === "appointments" && (
+              <motion.div key="m-appts" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5" ref={mainContentRef}>
+                {/* Live alert at top of appointments too */}
+                {hasLiveAppt && liveAppt && (
+                  <div className="bg-emerald-600 rounded-3xl px-4 py-4 shadow-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Bell size={16} className="text-white animate-pulse" />
+                      <p className="text-white font-black">Doctor is Ready!</p>
+                    </div>
+                    <button onClick={() => handlePatientJoined(liveAppt.id)}
+                      className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base active:scale-95 transition-transform">
+                      <Video size={18} /> Join Video Call →
+                    </button>
                   </div>
-                </div>
-                {verifySent ? (
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shrink-0">
-                    Email sent! Check your inbox.
-                  </span>
-                ) : (
-                  <button
-                    onClick={resendVerificationEmail}
-                    disabled={verifyResending}
-                    className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl px-3 py-2 transition-colors shrink-0 disabled:opacity-60"
-                  >
-                    {verifyResending ? (
-                      <RefreshCw size={12} className="animate-spin" />
-                    ) : (
-                      <Bell size={12} />
-                    )}
-                    Resend Verification
-                  </button>
                 )}
-              </div>
-            )}
 
-            {/* Tab bar */}
-            <div className="flex gap-1 bg-white rounded-2xl border border-gray-200 p-1 shadow-sm mb-5">
-              <button
-                onClick={() => setMainTab("appointments")}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
-                  mainTab === "appointments"
-                    ? "bg-[#1a3d2b] text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-800"
+                {nextUpcoming && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Calendar size={12} /> Your Next Appointment
+                    </p>
+                    <HeroAppointment
+                      appt={nextUpcoming.data}
+                      type={nextUpcoming.type}
+                      videoCallApptId={videoCallApptId}
+                      onJoin={() => { if (nextUpcoming.type === "online") handlePatientJoined((nextUpcoming.data as any).id); }}
+                      onCallEnded={() => handleCallEnded((nextUpcoming.data as any).id)}
+                    />
+                  </div>
                 )}
-              >
-                <Calendar size={15} /> My Appointments
-                {upcomingCount > 0 && (
-                  <span className={cn(
-                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                    mainTab === "appointments" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
-                  )}>{upcomingCount}</span>
-                )}
-              </button>
-              <button
-                onClick={() => setMainTab("prescriptions")}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
-                  mainTab === "prescriptions"
-                    ? "bg-[#1a3d2b] text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-800"
-                )}
-              >
-                <ImageIcon size={15} /> Prescriptions
-                {prescriptions.length > 0 && (
-                  <span className={cn(
-                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                    mainTab === "prescriptions" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
-                  )}>{prescriptions.length}</span>
-                )}
-              </button>
-              <button
-                onClick={() => setMainTab("docs")}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
-                  mainTab === "docs"
-                    ? "bg-[#1a3d2b] text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-800"
-                )}
-              >
-                <FolderOpen size={15} /> My Docs
-                {patientDocs.length > 0 && (
-                  <span className={cn(
-                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                    mainTab === "docs" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
-                  )}>{patientDocs.length}</span>
-                )}
-              </button>
-            </div>
 
-            <AnimatePresence mode="wait">
-              {mainTab === "appointments" ? (
-                <motion.div key="appts" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-6">
-                  {/* Next appointment hero */}
-                  {nextUpcoming && (
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Calendar size={12} /> Your Next Appointment
-                      </p>
-                      <HeroAppointment
-                        appt={nextUpcoming.data}
-                        type={nextUpcoming.type}
-                        videoCallApptId={videoCallApptId}
-                        onJoin={() => {
-                          if (nextUpcoming.type === "online") {
-                            handlePatientJoined((nextUpcoming.data as any).id);
-                          }
-                        }}
-                        onCallEnded={() => handleCallEnded((nextUpcoming.data as any).id)}
-                      />
-                    </div>
-                  )}
-
-                  {/* Other upcoming */}
-                  {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 1 && (
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Clock size={12} /> Other Upcoming
-                      </p>
-                      <div className="space-y-3">
-                        {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
-                          <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
-                            onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
-                            onCallEnded={() => handleCallEnded((item.data as any).id)}
-                            onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* No upcoming */}
-                  {upcomingCount === 0 && (
-                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-10 text-center shadow-sm">
-                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                        <Calendar size={28} className="text-gray-300" />
-                      </div>
-                      <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
-                      <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
-                      <button onClick={() => setShowBooking(true)}
-                        className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
-                        <Calendar size={16} /> Book an Appointment
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Past appointments */}
-                  {pastAppts.length > 0 && (
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <CheckCircle2 size={12} /> Past Appointments
-                      </p>
-                      <div className="space-y-3">
-                        {pastAppts.map((item, i) => (
-                          <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
-                            onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
-                            onCallEnded={() => handleCallEnded((item.data as any).id)}
-                            onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              ) : mainTab === "prescriptions" ? (
-                <motion.div key="rx" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-                  {prescriptions.length === 0 ? (
-                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
-                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                        <ImageIcon size={28} className="text-gray-300" />
-                      </div>
-                      <p className="text-lg font-bold text-gray-500 mb-1">No prescriptions yet</p>
-                      <p className="text-sm text-gray-400">Prescriptions from your online consultations will appear here.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {prescriptions.map((appt, i) => (
-                        <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                          <img
-                            src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                            alt="Prescription"
-                            className="w-full h-36 object-cover bg-gray-50"
-                          />
-                          <div className="px-3 py-3">
-                            <p className="text-xs font-semibold text-gray-700 truncate">
-                              {fmtDateShort(appt.slot.date)}
-                            </p>
-                            {appt.prescription?.notes && (
-                              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{appt.prescription.notes}</p>
-                            )}
-                            <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
-                              download target="_blank" rel="noopener noreferrer"
-                              className="mt-2 flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
-                              <Download size={11} /> Download
-                            </a>
-                          </div>
-                        </div>
+                {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 1 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Clock size={12} /> Other Upcoming
+                    </p>
+                    <div className="space-y-3">
+                      {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
+                        <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                          onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                          onCallEnded={() => handleCallEnded((item.data as any).id)}
+                          onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
                       ))}
                     </div>
-                  )}
-                </motion.div>
-              ) : mainTab === "docs" ? (
-                <motion.div key="docs" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-                  {/* Upload buttons */}
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
-                      {docsUploading ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-                      <span>Take Photo</span>
-                      <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
-                    </label>
-                    <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
-                      <Upload size={20} />
-                      <span>Upload File</span>
-                      <input ref={docFileRef} type="file" accept="image/*,application/pdf" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
-                    </label>
                   </div>
-                  {docsError && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-red-700 mb-4">
-                      <AlertCircle size={14} /> {docsError}
+                )}
+
+                {upcomingCount === 0 && (
+                  <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <Calendar size={28} className="text-gray-300" />
                     </div>
-                  )}
-                  {patientDocs.length === 0 ? (
-                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
-                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                        <FolderOpen size={28} className="text-gray-300" />
+                    <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
+                    <p className="text-sm text-gray-400 mb-5">Book a consultation with Dr. Murali Krishna</p>
+                    <button onClick={() => setShowBooking(true)}
+                      className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base active:bg-[#1a3d2b]/90 transition-colors">
+                      <Calendar size={16} /> Book an Appointment
+                    </button>
+                  </div>
+                )}
+
+                {pastAppts.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <CheckCircle2 size={12} /> Past Appointments
+                    </p>
+                    <div className="space-y-3">
+                      {pastAppts.map((item, i) => (
+                        <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                          onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                          onCallEnded={() => handleCallEnded((item.data as any).id)}
+                          onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ── Prescriptions tab ── */}
+            {mobileTab === "prescriptions" && (
+              <motion.div key="m-rx" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                {prescriptions.length === 0 ? (
+                  <div className="bg-white rounded-3xl border border-gray-200 px-6 py-14 text-center shadow-sm">
+                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <ImageIcon size={28} className="text-gray-300" />
+                    </div>
+                    <p className="text-lg font-bold text-gray-500 mb-1">No prescriptions yet</p>
+                    <p className="text-sm text-gray-400">Prescriptions from your online consultations will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {prescriptions.map((appt, i) => (
+                      <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`} alt="Prescription"
+                          className="w-full h-40 object-cover bg-gray-50" />
+                        <div className="px-3 py-3">
+                          <p className="text-xs font-semibold text-gray-700 truncate">{fmtDateShort(appt.slot.date)}</p>
+                          {appt.prescription?.notes && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{appt.prescription.notes}</p>
+                          )}
+                          <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                            download target="_blank" rel="noopener noreferrer"
+                            className="mt-2 flex items-center gap-1 text-xs text-[#1a3d2b] font-bold">
+                            <Download size={11} /> Download
+                          </a>
+                        </div>
                       </div>
-                      <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
-                      <p className="text-sm text-gray-400">Upload your medical reports, lab results, or scans above.</p>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ── My Docs tab ── */}
+            {mobileTab === "docs" && (
+              <motion.div key="m-docs" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={cn("flex flex-col items-center justify-center gap-2 py-5 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center", docsUploading && "opacity-60 pointer-events-none")}>
+                    {docsUploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
+                    <span>Take Photo</span>
+                    <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                  </label>
+                  <label className={cn("flex flex-col items-center justify-center gap-2 py-5 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center", docsUploading && "opacity-60 pointer-events-none")}>
+                    <Upload size={22} />
+                    <span>Upload File</span>
+                    <input ref={docFileRef} type="file" accept="image/*,application/pdf" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                  </label>
+                </div>
+                {docsError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-red-700">
+                    <AlertCircle size={14} /> {docsError}
+                  </div>
+                )}
+                {patientDocs.length === 0 ? (
+                  <div className="bg-white rounded-3xl border border-gray-200 px-6 py-14 text-center shadow-sm">
+                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <FolderOpen size={28} className="text-gray-300" />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {patientDocs.map((doc) => {
-                        const isImg = doc.contentType.startsWith("image/");
-                        const url = `${BASE}/api/storage${doc.objectPath}`;
-                        return (
-                          <div key={doc.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm group">
-                            <a href={url} target="_blank" rel="noopener noreferrer">
-                              {isImg
-                                ? <img src={url} alt={doc.name} className="w-full h-32 object-cover bg-gray-50" />
-                                : <div className="w-full h-32 bg-blue-50 flex items-center justify-center">
-                                    <FileText size={36} className="text-blue-400" />
-                                  </div>
-                              }
-                            </a>
-                            <div className="px-3 py-2.5">
-                              <p className="text-xs font-semibold text-gray-700 truncate mb-0.5">{doc.name}</p>
-                              {doc.createdAt && (
-                                <p className="text-[10px] text-gray-400">
-                                  {new Date(doc.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-2 mt-2">
-                                <a href={url} download target="_blank" rel="noopener noreferrer"
-                                  className="flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
-                                  <Download size={11} /> Download
-                                </a>
-                                <button onClick={() => deletePatientDoc(doc.id)}
-                                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 font-medium ml-auto transition-colors">
-                                  <Trash2 size={11} /> Remove
-                                </button>
-                              </div>
+                    <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
+                    <p className="text-sm text-gray-400">Upload your reports, lab results, or scans above.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {patientDocs.map((doc) => {
+                      const isImg = doc.contentType.startsWith("image/");
+                      const url = `${BASE}/api/storage${doc.objectPath}`;
+                      return (
+                        <div key={doc.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                          <a href={url} target="_blank" rel="noopener noreferrer">
+                            {isImg
+                              ? <img src={url} alt={doc.name} className="w-full h-32 object-cover bg-gray-50" />
+                              : <div className="w-full h-32 bg-blue-50 flex items-center justify-center">
+                                  <FileText size={32} className="text-blue-400" />
+                                </div>
+                            }
+                          </a>
+                          <div className="px-3 py-2.5">
+                            <p className="text-xs font-semibold text-gray-700 truncate mb-0.5">{doc.name}</p>
+                            {doc.createdAt && (
+                              <p className="text-[10px] text-gray-400">
+                                {new Date(doc.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <a href={url} download target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-[#1a3d2b] font-bold">
+                                <Download size={11} /> Save
+                              </a>
+                              <button onClick={() => deletePatientDoc(doc.id)}
+                                className="flex items-center gap-1 text-xs text-red-400 font-medium ml-auto">
+                                <Trash2 size={11} /> Remove
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        </div>
+
+        {/* ── Mobile Bottom Navigation Bar ── */}
+        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex safe-pb">
+          {([ 
+            { id: "home",          label: "Home",         icon: User,      badge: 0 },
+            { id: "appointments",  label: "Appointments", icon: Calendar,  badge: upcomingCount },
+            { id: "prescriptions", label: "Prescriptions",icon: ImageIcon, badge: prescriptions.length },
+            { id: "docs",          label: "My Docs",      icon: FolderOpen,badge: patientDocs.length },
+          ] as const).map(tab => {
+            const Icon = tab.icon;
+            const active = mobileTab === tab.id;
+            return (
+              <button key={tab.id} onClick={() => setMobileTab(tab.id as typeof mobileTab)}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 relative transition-colors">
+                <div className="relative">
+                  <Icon size={22} className={cn("transition-colors", active ? "text-[#1a3d2b]" : "text-gray-400")} />
+                  {tab.badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 bg-emerald-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
+                      {tab.badge}
+                    </span>
                   )}
+                </div>
+                <span className={cn("text-[10px] font-semibold transition-colors leading-tight", active ? "text-[#1a3d2b] font-bold" : "text-gray-400")}>
+                  {tab.label}
+                </span>
+                {active && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#1a3d2b] rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+      {/* end MOBILE */}
+
+      {/* ══════════════════════════════════════════════════════
+          DESKTOP LAYOUT  (hidden on mobile, shown md+)
+      ══════════════════════════════════════════════════════ */}
+      <div className="hidden md:block">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-0 pb-6 sm:py-6 lg:py-8">
+          <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 space-y-6 lg:space-y-0">
+
+            {/* ── LEFT SIDEBAR ── */}
+            <div className="space-y-4">
+              <div className="bg-[#1a3d2b] rounded-b-3xl sm:rounded-3xl px-6 py-6 shadow-md">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-13 h-13 rounded-2xl bg-white/10 flex items-center justify-center shrink-0" style={{ width: 52, height: 52 }}>
+                    <User size={24} className="text-white/80" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white/50 text-xs font-medium">Hello!</p>
+                    <p className="text-white font-bold text-lg leading-tight truncate">{patient?.name}</p>
+                  </div>
+                </div>
+                {patient?.patientCode && (
+                  <div className="bg-white/12 border border-white/10 rounded-2xl px-4 py-4 mb-5">
+                    <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Your Patient ID</p>
+                    <p className="text-white font-black text-3xl font-mono tracking-widest">{patient.patientCode}</p>
+                    <p className="text-white/40 text-xs mt-1.5">Tell this number when visiting the clinic</p>
+                  </div>
+                )}
+                <button onClick={() => setShowBooking(true)}
+                  className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-sm">
+                  <Calendar size={18} /> Book an Appointment
+                </button>
+              </div>
+
+              {hasLiveAppt && liveAppt && (
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bell size={18} className="text-white animate-pulse" />
+                    <p className="text-white font-black text-base">Doctor is Ready!</p>
+                  </div>
+                  <p className="text-emerald-100 text-sm mb-4">Dr. Murali Krishna is waiting for you right now.</p>
+                  <button onClick={() => handlePatientJoined(liveAppt.id)}
+                    className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
+                    <Video size={18} /> Join Video Call →
+                  </button>
                 </motion.div>
-              ) : null}
-            </AnimatePresence>
+              )}
+
+              <div className="bg-white rounded-3xl px-5 py-5 border border-gray-200 shadow-sm space-y-3">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Your Summary</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600 font-medium">Upcoming</span>
+                  <span className="font-black text-[#1a3d2b] text-lg">{upcomingCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600 font-medium">Total Visits</span>
+                  <span className="font-black text-gray-700 text-lg">{allAppointments.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600 font-medium">Prescriptions</span>
+                  <span className="font-black text-gray-700 text-lg">{prescriptions.length}</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl px-5 py-5 border border-gray-200 shadow-sm">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Susruta Hospital</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 text-sm text-gray-600">
+                    <MapPin size={15} className="text-[#1a3d2b] shrink-0 mt-0.5" />
+                    <span>119, Ramulavari North Mada Street, Tirupati</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Phone size={15} className="text-[#1a3d2b] shrink-0" />
+                    <span>Contact via booking</span>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={() => setDonationPopup({ apptId: 0, qrObjectPath: phonepeQrRef.current })}
+                className="w-full bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-3xl px-5 py-4 text-left hover:from-rose-100 hover:to-red-100 hover:border-rose-300 transition-all shadow-sm group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
+                    <Heart size={18} className="text-red-500" fill="currentColor" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-800">Support Dr. Murali Krishna</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">Help extend free care to those in need</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* ── MAIN CONTENT ── */}
+            <div ref={mainContentRef}>
+              {patient && !patient.emailVerified && (
+                <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
+                      <p className="text-amber-700 text-xs mt-0.5">Please verify your email address to enable all features. Check your inbox for the verification link.</p>
+                    </div>
+                  </div>
+                  {verifySent ? (
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shrink-0">Email sent! Check your inbox.</span>
+                  ) : (
+                    <button onClick={resendVerificationEmail} disabled={verifyResending}
+                      className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl px-3 py-2 transition-colors shrink-0 disabled:opacity-60">
+                      {verifyResending ? <RefreshCw size={12} className="animate-spin" /> : <Bell size={12} />}
+                      Resend Verification
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Desktop tab bar */}
+              <div className="flex gap-1 bg-white rounded-2xl border border-gray-200 p-1 shadow-sm mb-5">
+                {([
+                  { id: "appointments",  label: "My Appointments", icon: Calendar,   badge: upcomingCount },
+                  { id: "prescriptions", label: "Prescriptions",   icon: ImageIcon,  badge: prescriptions.length },
+                  { id: "docs",          label: "My Docs",         icon: FolderOpen, badge: patientDocs.length },
+                ] as const).map(tab => {
+                  const Icon = tab.icon;
+                  const active = mainTab === tab.id;
+                  return (
+                    <button key={tab.id} onClick={() => setMainTab(tab.id as typeof mainTab)}
+                      className={cn("flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+                        active ? "bg-[#1a3d2b] text-white shadow-sm" : "text-gray-500 hover:text-gray-800")}>
+                      <Icon size={15} /> {tab.label}
+                      {tab.badge > 0 && (
+                        <span className={cn("text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                          active ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]")}>{tab.badge}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {mainTab === "appointments" ? (
+                  <motion.div key="appts" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-6">
+                    {nextUpcoming && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <Calendar size={12} /> Your Next Appointment
+                        </p>
+                        <HeroAppointment appt={nextUpcoming.data} type={nextUpcoming.type} videoCallApptId={videoCallApptId}
+                          onJoin={() => { if (nextUpcoming.type === "online") handlePatientJoined((nextUpcoming.data as any).id); }}
+                          onCallEnded={() => handleCallEnded((nextUpcoming.data as any).id)} />
+                      </div>
+                    )}
+                    {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 1 && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <Clock size={12} /> Other Upcoming
+                        </p>
+                        <div className="space-y-3">
+                          {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).slice(1).map((item, i) => (
+                            <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                              onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                              onCallEnded={() => handleCallEnded((item.data as any).id)}
+                              onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {upcomingCount === 0 && (
+                      <div className="bg-white rounded-3xl border border-gray-200 px-6 py-10 text-center shadow-sm">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                          <Calendar size={28} className="text-gray-300" />
+                        </div>
+                        <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
+                        <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
+                        <button onClick={() => setShowBooking(true)}
+                          className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
+                          <Calendar size={16} /> Book an Appointment
+                        </button>
+                      </div>
+                    )}
+                    {pastAppts.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <CheckCircle2 size={12} /> Past Appointments
+                        </p>
+                        <div className="space-y-3">
+                          {pastAppts.map((item, i) => (
+                            <ApptCard key={i} item={item} videoCallApptId={videoCallApptId}
+                              onJoin={() => { if (item.type === "online") handlePatientJoined((item.data as any).id); }}
+                              onCallEnded={() => handleCallEnded((item.data as any).id)}
+                              onDocumentsChange={(apptId, docs) => setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, documents: docs } : a))} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : mainTab === "prescriptions" ? (
+                  <motion.div key="rx" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                    {prescriptions.length === 0 ? (
+                      <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                          <ImageIcon size={28} className="text-gray-300" />
+                        </div>
+                        <p className="text-lg font-bold text-gray-500 mb-1">No prescriptions yet</p>
+                        <p className="text-sm text-gray-400">Prescriptions from your online consultations will appear here.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {prescriptions.map((appt, i) => (
+                          <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                            <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`} alt="Prescription"
+                              className="w-full h-36 object-cover bg-gray-50" />
+                            <div className="px-3 py-3">
+                              <p className="text-xs font-semibold text-gray-700 truncate">{fmtDateShort(appt.slot.date)}</p>
+                              {appt.prescription?.notes && (
+                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{appt.prescription.notes}</p>
+                              )}
+                              <a href={`${BASE}/api/storage${appt.prescription!.photoObjectPath}`}
+                                download target="_blank" rel="noopener noreferrer"
+                                className="mt-2 flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
+                                <Download size={11} /> Download
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                ) : mainTab === "docs" ? (
+                  <motion.div key="docs" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                      <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
+                        {docsUploading ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+                        <span>Take Photo</span>
+                        <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                      </label>
+                      <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
+                        <Upload size={20} />
+                        <span>Upload File</span>
+                        <input ref={docFileRef} type="file" accept="image/*,application/pdf" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                      </label>
+                    </div>
+                    {docsError && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-red-700 mb-4">
+                        <AlertCircle size={14} /> {docsError}
+                      </div>
+                    )}
+                    {patientDocs.length === 0 ? (
+                      <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                          <FolderOpen size={28} className="text-gray-300" />
+                        </div>
+                        <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
+                        <p className="text-sm text-gray-400">Upload your medical reports, lab results, or scans above.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {patientDocs.map((doc) => {
+                          const isImg = doc.contentType.startsWith("image/");
+                          const url = `${BASE}/api/storage${doc.objectPath}`;
+                          return (
+                            <div key={doc.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm group">
+                              <a href={url} target="_blank" rel="noopener noreferrer">
+                                {isImg
+                                  ? <img src={url} alt={doc.name} className="w-full h-32 object-cover bg-gray-50" />
+                                  : <div className="w-full h-32 bg-blue-50 flex items-center justify-center">
+                                      <FileText size={36} className="text-blue-400" />
+                                    </div>
+                                }
+                              </a>
+                              <div className="px-3 py-2.5">
+                                <p className="text-xs font-semibold text-gray-700 truncate mb-0.5">{doc.name}</p>
+                                {doc.createdAt && (
+                                  <p className="text-[10px] text-gray-400">
+                                    {new Date(doc.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <a href={url} download target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
+                                    <Download size={11} /> Download
+                                  </a>
+                                  <button onClick={() => deletePatientDoc(doc.id)}
+                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 font-medium ml-auto transition-colors">
+                                    <Trash2 size={11} /> Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>
+      {/* end DESKTOP */}
+
     </div>
   );
 }
