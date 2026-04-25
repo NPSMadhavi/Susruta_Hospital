@@ -6,6 +6,7 @@ import {
   Loader2, Leaf,
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
+import { dualSlotTime } from "@/lib/ist";
 import {
   useListOpenMonths,
   useGetAvailability,
@@ -26,6 +27,30 @@ function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+/** Render IST + local time range for a slot (start…end). Shows local only if timezone differs. */
+function SlotTimeRange({ date, start, end, selected }: { date: string; start: string; end: string; selected?: boolean }) {
+  const s = dualSlotTime(date, start);
+  const e = dualSlotTime(date, end);
+  const dim = selected ? "text-white/70" : "text-gray-500";
+  const bold = selected ? "text-white" : "text-gray-900";
+  return (
+    <>
+      <p className={`text-sm font-bold ${bold}`}>{s.ist} <span className={`text-[10px] font-normal ${dim}`}>IST</span></p>
+      <p className={`text-xs mt-0.5 ${dim}`}>to {e.ist} IST</p>
+      {s.local && (
+        <p className={`text-[10px] mt-0.5 ${dim}`}>{s.local} – {e.local} <span className="opacity-70">local</span></p>
+      )}
+    </>
+  );
+}
+
+/** Inline text label for a time range: "8:00 – 8:15 AM IST" (+ local if needed) */
+function slotRangeText(date: string, start: string, end: string): { ist: string; local: string | null } {
+  const s = dualSlotTime(date, start);
+  const e = dualSlotTime(date, end);
+  return { ist: `${s.ist} – ${e.ist} IST`, local: s.local ? `${s.local} – ${e.local} local` : null };
 }
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-IN", {
@@ -574,12 +599,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                                   sel ? "bg-blue-600 border-blue-600 text-white shadow-md"
                                     : "bg-white border-gray-200 hover:border-blue-400 hover:bg-blue-50",
                                 ].join(" ")}>
-                                <p className={`text-sm font-bold ${sel ? "text-white" : "text-gray-900"}`}>
-                                  {fmtTime(slot.startTime)}
-                                </p>
-                                <p className={`text-xs mt-0.5 ${sel ? "text-white/75" : "text-gray-500"}`}>
-                                  to {fmtTime(slot.endTime)}
-                                </p>
+                                <SlotTimeRange date={group.date} start={slot.startTime} end={slot.endTime} selected={sel} />
                               </button>
                             );
                           })}
@@ -757,9 +777,15 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <p className="text-sm font-semibold text-gray-800">Online Video Consultation</p>
                   </div>
                   <p className="text-base font-bold text-blue-700 ml-6">{fmtDate(onlineSlot.date)}</p>
-                  <p className="text-sm font-semibold text-gray-700 ml-6">
-                    {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
-                  </p>
+                  {(() => {
+                    const r = slotRangeText(onlineSlot.date, onlineSlot.startTime, onlineSlot.endTime);
+                    return (
+                      <>
+                        <p className="text-sm font-semibold text-gray-700 ml-6">{r.ist}</p>
+                        {r.local && <p className="text-xs text-gray-500 ml-6">{r.local}</p>}
+                      </>
+                    );
+                  })()}
                   <p className="text-xs text-gray-500 ml-6">
                     {savedDocs.length > 0
                       ? `${savedDocs.length} document(s) on file — visible to doctor`
@@ -798,9 +824,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 <p className="text-gray-500 text-sm mb-1">
                   Your online consultation on <strong className="text-gray-800">{fmtDate(onlineSlot.date)}</strong>
                 </p>
-                <p className="text-gray-500 text-sm mb-6">
-                  from <strong className="text-gray-800">{fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}</strong> is booked.
-                </p>
+                {(() => {
+                  const r = slotRangeText(onlineSlot.date, onlineSlot.startTime, onlineSlot.endTime);
+                  return (
+                    <>
+                      <p className="text-gray-500 text-sm mb-1">
+                        from <strong className="text-gray-800">{r.ist}</strong> is booked.
+                      </p>
+                      {r.local && <p className="text-gray-400 text-xs mb-5">{r.local}</p>}
+                    </>
+                  );
+                })()}
                 <p className="text-xs text-gray-400 mb-8 max-w-xs mx-auto leading-relaxed">
                   Dr. Murali Krishna will review your documents before the session. Keep your dashboard open on the day — you'll hear a chime when he's ready.
                 </p>

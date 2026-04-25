@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
-import { todayIST } from "@/lib/ist";
+import { todayIST, dualSlotTime, dualOfflineTime } from "@/lib/ist";
 import { BookingWizard } from "./BookingWizard";
 import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
 
@@ -33,12 +33,6 @@ type PhysicalAppt = {
 type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string; emailVerified: boolean };
 
 // ── Helpers ─────────────────────────────────────────────────────
-function fmtTime(t: string) {
-  if (!t) return t;
-  const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
 const IST = "Asia/Kolkata";
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -315,9 +309,16 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
   const onlineAppt = isOnline ? appt as OnlineAppt : null;
   const physicalAppt = !isOnline ? appt as PhysicalAppt : null;
   const date = isOnline ? onlineAppt!.slot.date : physicalAppt!.date;
-  const time = isOnline
-    ? `${fmtTime(onlineAppt!.slot.startTime)} – ${fmtTime(onlineAppt!.slot.endTime)}`
-    : physicalAppt!.timeSlot;
+  const timeIST = isOnline
+    ? (() => {
+        const s = dualSlotTime(date, onlineAppt!.slot.startTime);
+        const e = dualSlotTime(date, onlineAppt!.slot.endTime);
+        return { ist: `${s.ist} – ${e.ist} IST`, local: s.local ? `${s.local} – ${e.local} local` : null };
+      })()
+    : (() => {
+        const r = dualOfflineTime(date, physicalAppt!.timeSlot);
+        return { ist: r.display + " IST", local: r.local };
+      })();
   const status = appt.status;
   const canJoin = isOnline && onlineAppt!.joinEnabled;
   const isInCall = canJoin && videoCallApptId === onlineAppt!.id;
@@ -344,7 +345,8 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
         <p className="text-3xl font-extrabold text-gray-900 leading-tight">
           {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
         </p>
-        <p className="text-lg text-gray-500 font-semibold mt-1">{time}</p>
+        <p className="text-lg text-gray-500 font-semibold mt-1">{timeIST.ist}</p>
+        {timeIST.local && <p className="text-sm text-gray-400 mt-0.5">{timeIST.local}</p>}
 
         <div className="flex flex-wrap gap-2 mt-4">
           <span className={cn("text-sm font-bold px-3 py-1 rounded-full border", sm.cls)}>
@@ -432,9 +434,16 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded, onDocumentsChang
   const onlineAppt = isOnline ? data as OnlineAppt : null;
   const physicalAppt = !isOnline ? data as PhysicalAppt : null;
   const date = isOnline ? onlineAppt!.slot.date : physicalAppt!.date;
-  const time = isOnline
-    ? `${fmtTime(onlineAppt!.slot.startTime)} – ${fmtTime(onlineAppt!.slot.endTime)}`
-    : physicalAppt!.timeSlot;
+  const timeIST = isOnline
+    ? (() => {
+        const s = dualSlotTime(date, onlineAppt!.slot.startTime);
+        const e = dualSlotTime(date, onlineAppt!.slot.endTime);
+        return { ist: `${s.ist} – ${e.ist} IST`, local: s.local ? `${s.local} – ${e.local} local` : null };
+      })()
+    : (() => {
+        const r = dualOfflineTime(date, physicalAppt!.timeSlot);
+        return { ist: r.display + " IST", local: r.local };
+      })();
   const status = data.status;
   const canJoin = isOnline && onlineAppt!.joinEnabled;
   const sm = (status === "pending" && isOnline)
@@ -466,7 +475,8 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded, onDocumentsChang
             {canJoin && <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>}
           </div>
           <p className="font-bold text-base text-gray-900">{fmtDateShort(date)}</p>
-          <p className="text-sm text-gray-500">{time} · {isOnline ? "Video Consultation" : "In-Person"}</p>
+          <p className="text-sm text-gray-500">{timeIST.ist} · {isOnline ? "Video Consultation" : "In-Person"}</p>
+          {timeIST.local && <p className="text-xs text-gray-400">{timeIST.local}</p>}
         </div>
 
         {open ? <ChevronUp size={18} className="text-gray-400 shrink-0" /> : <ChevronDown size={18} className="text-gray-400 shrink-0" />}

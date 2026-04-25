@@ -1,5 +1,50 @@
 const TZ = "Asia/Kolkata";
 
+/** User's local IANA timezone from the browser */
+export function localTZ(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * Given a date (YYYY-MM-DD) and HH:MM time (both in IST),
+ * returns { ist: "8:00 AM", local: "2:30 AM" | null }.
+ * `local` is null when the browser timezone matches IST or produces the same display string.
+ */
+export function dualSlotTime(date: string, hhmm: string): { ist: string; local: string | null } {
+  const dt = new Date(`${date}T${hhmm}:00+05:30`);
+  const istStr = dt.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true });
+  const ltz = localTZ();
+  if (ltz === TZ) return { ist: istStr, local: null };
+  const localStr = dt.toLocaleTimeString("en-US", { timeZone: ltz, hour: "numeric", minute: "2-digit", hour12: true });
+  if (localStr === istStr) return { ist: istStr, local: null };
+  return { ist: istStr, local: localStr };
+}
+
+/**
+ * Parse an offline time-slot string (e.g. "10:00 AM - 10:15 AM") and return
+ * { display: original string, local: local-time range | null }.
+ * `local` is null when the user is in IST or the display would be the same.
+ */
+export function dualOfflineTime(date: string, timeSlotStr: string): { display: string; local: string | null } {
+  const ltz = localTZ();
+  if (ltz === TZ) return { display: timeSlotStr, local: null };
+  const re = /(\d{1,2}):(\d{2})\s*([AaPp][Mm])/g;
+  const matches = [...timeSlotStr.matchAll(re)];
+  if (!matches.length) return { display: timeSlotStr, local: null };
+  function to24(h: string, m: string, ampm: string): string {
+    let hh = parseInt(h);
+    if (ampm.toLowerCase() === "pm" && hh !== 12) hh += 12;
+    if (ampm.toLowerCase() === "am" && hh === 12) hh = 0;
+    return `${hh.toString().padStart(2, "0")}:${m}`;
+  }
+  const localTimes = matches.map(m => {
+    const dt = new Date(`${date}T${to24(m[1], m[2], m[3])}:00+05:30`);
+    return dt.toLocaleTimeString("en-US", { timeZone: ltz, hour: "numeric", minute: "2-digit", hour12: true });
+  });
+  const localDisplay = localTimes.length === 2 ? `${localTimes[0]} – ${localTimes[1]}` : localTimes[0];
+  return { display: timeSlotStr, local: localDisplay };
+}
+
 /** Today's date in IST as YYYY-MM-DD */
 export function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: TZ });
