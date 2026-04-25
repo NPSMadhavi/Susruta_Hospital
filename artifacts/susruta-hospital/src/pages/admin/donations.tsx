@@ -49,6 +49,20 @@ export default function AdminDonations() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Live SSE updates ──────────────────────────────────────────
+  useEffect(() => {
+    const es = new EventSource(`${BASE}/api/admin/donations/sse`, { withCredentials: true });
+    es.addEventListener("donation_updated", (e) => {
+      const payload = JSON.parse((e as MessageEvent).data) as { id: number; status: string; thankYouSent?: boolean };
+      setDonations(prev => prev.map(d =>
+        d.id === payload.id
+          ? { ...d, status: payload.status as "pending" | "verified", ...(payload.thankYouSent !== undefined ? { thankYouSent: payload.thankYouSent } : {}) }
+          : d
+      ));
+    });
+    return () => es.close();
+  }, []);
+
   async function toggleVerify(d: Donation) {
     const newVerified = d.status !== "verified";
     await fetch(`${BASE}/api/admin/donations/${d.id}/verify`, {

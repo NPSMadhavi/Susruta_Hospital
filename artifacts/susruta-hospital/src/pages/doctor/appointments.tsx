@@ -766,6 +766,20 @@ export default function DoctorPortal() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [load]);
 
+  // ── Donations live SSE ────────────────────────────────────────
+  useEffect(() => {
+    const es = new EventSource(`${BASE}/api/doctor/donations/sse`, { withCredentials: true });
+    es.addEventListener("donation_updated", (e) => {
+      const payload = JSON.parse((e as MessageEvent).data) as { id: number; status: string; thankYouSent?: boolean };
+      setDonations(prev => prev.map(d =>
+        d.id === payload.id
+          ? { ...d, status: payload.status, ...(payload.thankYouSent !== undefined ? { thankYouSent: payload.thankYouSent } : {}) }
+          : d
+      ));
+    });
+    return () => es.close();
+  }, []);
+
   async function logout() {
     await doctorFetch("/logout", { method: "POST" });
     nav("/doctor");

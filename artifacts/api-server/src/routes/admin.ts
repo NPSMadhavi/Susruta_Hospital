@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
 import { sendMagicLink, testSmtpConnection, sendDonationThankYou, type SmtpConfig } from "../lib/email";
+import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
 
 const router = Router();
 
@@ -276,6 +277,20 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+// ── GET /admin/donations/sse — live updates ────────────────────
+router.get("/donations/sse", requireAdmin, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write(": connected\n\n");
+
+  const cleanup = addDonationSseClient("admin", res);
+  const heartbeat = setInterval(() => { try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); } }, 15000);
+  req.on("close", () => { cleanup(); clearInterval(heartbeat); });
+});
+
 // ── GET /admin/donations ───────────────────────────────────────
 router.get("/donations", requireAdmin, async (req, res) => {
   try {
@@ -307,9 +322,11 @@ router.patch("/donations/:id/verify", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
   const { verified } = req.body;
+  const newStatus = verified ? "verified" : "pending";
   await db.update(donationsTable)
-    .set({ status: verified ? "verified" : "pending" })
+    .set({ status: newStatus })
     .where(eq(donationsTable.id, id));
+  broadcastDonationUpdate({ id, status: newStatus });
   res.json({ success: true });
 });
 
@@ -335,6 +352,7 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
       donationDate,
     });
     await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
+    broadcastDonationUpdate({ id, status: donation.status, thankYouSent: true });
     res.json({ success: true });
   } catch (err) {
     console.error("Thank you email error:", err);
