@@ -100,7 +100,7 @@ router.get("/sessions", requireAdmin, async (_req, res) => {
 
 // ── Admin: DELETE /api/online-slots/sessions/:id ──────────────
 // Deletes a session and all its slots.
-// If any non-cancelled appointments exist on those slots, they are cancelled first.
+// First removes all appointment records for those slots (FK would otherwise block CASCADE).
 router.delete("/sessions/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
@@ -114,27 +114,12 @@ router.delete("/sessions/:id", requireAdmin, async (req, res) => {
 
     if (slots.length > 0) {
       const slotIds = slots.map(s => s.id);
-
-      // 2. Cancel any active appointments so FK constraint won't block the delete
-      const activeAppts = await db
-        .select({ id: onlineAppointmentsTable.id })
-        .from(onlineAppointmentsTable)
-        .where(
-          and(
-            inArray(onlineAppointmentsTable.slotId, slotIds),
-          )
-        );
-
-      if (activeAppts.length > 0) {
-        const apptIds = activeAppts.map(a => a.id);
-        await db
-          .update(onlineAppointmentsTable)
-          .set({ status: "cancelled" })
-          .where(inArray(onlineAppointmentsTable.id, apptIds));
-      }
+      // 2. Hard-delete all appointment records for these slots.
+      //    (The FK on online_appointments.slot_id has no CASCADE so we must remove them first.)
+      await db.delete(onlineAppointmentsTable).where(inArray(onlineAppointmentsTable.slotId, slotIds));
     }
 
-    // 3. Delete the session — cascades to slots automatically
+    // 3. Delete the session — ON DELETE CASCADE removes the slots
     await db.delete(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.id, id));
     res.status(204).send();
   } catch (err: any) {
