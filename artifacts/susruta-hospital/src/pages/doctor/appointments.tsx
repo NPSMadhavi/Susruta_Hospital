@@ -5,7 +5,7 @@ import {
   Calendar, Clock, Phone, FileText, ImageIcon, Camera, Upload,
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn,
   ChevronDown, ChevronUp, Mail, MailCheck, StickyNote, Save, ClipboardList,
-  Stethoscope, CloudUpload, FilePlus2, Heart, IndianRupee, Search,
+  Stethoscope, CloudUpload, FilePlus2, Heart, IndianRupee, Search, ArrowLeft,
 } from "lucide-react";
 import { VideoCall } from "@/components/VideoCall";
 import logoImg from "@assets/logo_1773840200056.png";
@@ -84,7 +84,7 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed", cancelled: "Cancelled",
 };
 
-// ── Drag-resize hook ─────────────────────────────────────────────
+// ── Drag-resize hook (desktop only) ──────────────────────────────
 function useDragResize(initial: number, min: number, max: number) {
   const [width, setWidth] = useState(initial);
   const startX = useRef(0);
@@ -107,7 +107,6 @@ function useDragResize(initial: number, min: number, max: number) {
   return { width, handlers: handlers.current };
 }
 
-// ── Drag Handle ──────────────────────────────────────────────────
 function DragHandle({ handlers }: { handlers: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void; onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void } }) {
   return (
     <div {...handlers} className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 hover:bg-[#1a3d2b]/30 active:bg-[#1a3d2b]/50 transition-colors group flex items-center justify-center relative touch-none">
@@ -172,18 +171,18 @@ function NotesEditor({ apptId, initialNotes, onSaved }: { apptId: number; initia
   return (
     <div className="space-y-2">
       <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Write clinical notes, observations, or follow-up instructions..." rows={4}
-        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/40 bg-amber-50 placeholder-gray-400 text-gray-700" />
+        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/40 bg-amber-50 placeholder-gray-400 text-gray-700" />
       {error && <p className="text-xs text-red-500">{error}</p>}
       <button onClick={handleSave} disabled={saving}
-        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all", saved ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-[#1a3d2b] text-white hover:bg-[#1a3d2b]/90 disabled:opacity-50")}>
-        {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <CheckCircle2 size={12} /> : <Save size={12} />}
+        className={cn("flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all w-full justify-center", saved ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-[#1a3d2b] text-white hover:bg-[#1a3d2b]/90 disabled:opacity-50")}>
+        {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
         {saving ? "Saving…" : saved ? "Saved!" : "Save Notes"}
       </button>
     </div>
   );
 }
 
-// ── Small Prescription Upload (used in ApptDetail) ────────────────
+// ── Small Prescription Upload ─────────────────────────────────────
 function PrescriptionUpload({ apptId, prescription, onUploaded }: { apptId: number; prescription: Prescription | null; onUploaded: (rx: Prescription) => void }) {
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
@@ -207,36 +206,38 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: { apptId: numb
     finally { setUploading(false); }
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {prescription?.photoObjectPath && !preview && (
-        <div className="rounded-lg overflow-hidden border border-gray-200">
-          <img src={`${BASE}/api/storage${prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-40 object-contain bg-gray-50" />
-          <div className="flex justify-between items-center px-3 py-1.5 bg-white border-t border-gray-100">
-            <span className="text-[11px] text-gray-400">{fmtDateFromTs(prescription.updatedAt, { day: "numeric", month: "short" })}</span>
-            <a href={`${BASE}/api/storage${prescription.photoObjectPath}`} download className="text-[11px] text-[#1a3d2b] font-semibold flex items-center gap-1 hover:underline"><Download size={10} /> Download</a>
+        <div className="rounded-xl overflow-hidden border border-gray-200">
+          <img src={`${BASE}/api/storage${prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-48 object-contain bg-gray-50" />
+          <div className="flex justify-between items-center px-3 py-2 bg-white border-t border-gray-100">
+            <span className="text-xs text-gray-400">{fmtDateFromTs(prescription.updatedAt, { day: "numeric", month: "short" })}</span>
+            <a href={`${BASE}/api/storage${prescription.photoObjectPath}`} download className="text-xs text-[#1a3d2b] font-semibold flex items-center gap-1 hover:underline"><Download size={11} /> Download</a>
           </div>
         </div>
       )}
       {preview && (
         <div className="space-y-2">
-          <img src={preview} alt="Preview" className="w-full max-h-40 object-contain rounded-lg border-2 border-[#1a3d2b]/30 bg-gray-50" />
+          <img src={preview} alt="Preview" className="w-full max-h-48 object-contain rounded-xl border-2 border-[#1a3d2b]/30 bg-gray-50" />
           <div className="flex gap-2">
-            <button onClick={confirmUpload} disabled={uploading} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1a3d2b] text-white font-bold rounded-lg text-xs hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
-              {uploading ? <><Loader2 size={12} className="animate-spin" /> Uploading…</> : <><CheckCircle2 size={12} /> Confirm</>}
+            <button onClick={confirmUpload} disabled={uploading} className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
+              {uploading ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><CheckCircle2 size={14} /> Confirm Upload</>}
             </button>
-            <button onClick={() => { setPreview(null); setPendingFile(null); }} disabled={uploading} className="px-3 py-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 disabled:opacity-60"><X size={12} /></button>
+            <button onClick={() => { setPreview(null); setPendingFile(null); }} disabled={uploading} className="px-4 py-3 border border-gray-200 rounded-xl text-gray-400 hover:bg-gray-50 disabled:opacity-60"><X size={14} /></button>
           </div>
         </div>
       )}
-      {err && <p className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+      {err && <p className="text-sm text-red-600 flex items-center gap-1.5"><AlertCircle size={13} />{err}</p>}
       {!preview && (
-        <div className="flex gap-2">
-          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#1a3d2b]/30 rounded-lg text-xs text-[#1a3d2b] font-medium cursor-pointer hover:bg-[#1a3d2b]/5 transition-colors">
-            <Camera size={13} /> Take Photo
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95">
+            <Camera size={20} />
+            <span>Take Photo</span>
             <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </label>
-          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-            <Upload size={13} /> {prescription?.photoObjectPath ? "Replace" : "Upload"}
+          <label className="flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95">
+            <Upload size={20} />
+            <span>{prescription?.photoObjectPath ? "Replace" : "Upload File"}</span>
             <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </label>
         </div>
@@ -245,7 +246,7 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: { apptId: numb
   );
 }
 
-// ── Rx Upload Panel (Rx Needed section — full elegant UI) ─────────
+// ── Rx Upload Panel ───────────────────────────────────────────────
 function RxUploadPanel({ appt, onSaved, onDocClick }: {
   appt: OnlineAppt;
   onSaved: (rx: Prescription) => void;
@@ -302,46 +303,44 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
   const rxExists = !!appt.prescription?.photoObjectPath;
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-white">
+    <div className="flex flex-col bg-white min-h-0">
       {/* Patient header */}
-      <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-br from-[#1a3d2b]/4 to-white shrink-0">
-        <div className="flex items-center gap-4">
-          <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center border-2 shrink-0", appt.patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/25" : "bg-gray-100 border-gray-200")}>
+      <div className="px-4 py-4 border-b border-gray-100 bg-gradient-to-br from-[#1a3d2b]/4 to-white shrink-0">
+        <div className="flex items-center gap-3">
+          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center border-2 shrink-0", appt.patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/25" : "bg-gray-100 border-gray-200")}>
             {appt.patient.patientCode
-              ? <span className="font-black text-[#1a3d2b] text-base font-mono">{appt.patient.patientCode}</span>
-              : <User size={26} className="text-gray-400" />}
+              ? <span className="font-black text-[#1a3d2b] text-sm font-mono">{appt.patient.patientCode}</span>
+              : <User size={22} className="text-gray-400" />}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-extrabold text-gray-900 truncate">{appt.patient.name}</h2>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+            <h2 className="text-base font-extrabold text-gray-900 truncate">{appt.patient.name}</h2>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
               {appt.patient.phone && <span className="text-xs text-gray-500 flex items-center gap-1"><Phone size={10} />{appt.patient.phone}</span>}
-              {appt.patient.email && <span className="text-xs text-gray-400 flex items-center gap-1"><Mail size={10} />{appt.patient.email}</span>}
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Consultation</p>
-            <p className="text-xs font-semibold text-gray-700 mt-0.5">{fmtDate(appt.date)}</p>
+            <p className="text-xs font-semibold text-gray-700">{fmtDateShort(appt.date)}</p>
             <p className="text-[11px] text-gray-500">{appt.timeLabel}</p>
           </div>
         </div>
         {appt.reason && (
-          <div className="mt-3 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+          <div className="mt-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
             <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">Chief Complaint</p>
             <p className="text-xs text-gray-700">{appt.reason}</p>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto px-6 py-5 space-y-6">
-        {/* Patient documents (for reference) */}
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-5 pb-6">
+        {/* Patient documents */}
         {appt.documents.length > 0 && (
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={11} /> Patient Documents</p>
             <div className="grid grid-cols-2 gap-2">
               {appt.documents.map((d, i) => (
                 <button key={i} onClick={() => onDocClick(d, appt.documents)}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left">
-                  {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-7 h-7 rounded object-cover shrink-0 bg-gray-100" /> : <div className="w-7 h-7 rounded bg-blue-50 flex items-center justify-center shrink-0"><FileText size={13} className="text-blue-500" /></div>}
+                  className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left active:scale-95">
+                  {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" /> : <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText size={14} className="text-blue-500" /></div>}
                   <span className="text-xs font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
                 </button>
               ))}
@@ -349,17 +348,14 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
           </div>
         )}
 
-        {/* Existing prescription preview */}
+        {/* Existing prescription */}
         {rxExists && !preview && (
           <div>
             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1.5"><CheckCircle2 size={11} /> Current Prescription</p>
             <div className="relative rounded-xl overflow-hidden border-2 border-emerald-200 group cursor-pointer" onClick={() => onDocClick({ name: "Prescription", objectPath: appt.prescription!.photoObjectPath!, contentType: "image/jpeg", size: 0 }, [])}>
               <img src={`${BASE}/api/storage${appt.prescription!.photoObjectPath!}`} alt="Rx" className="w-full max-h-48 object-contain bg-gray-50" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 flex items-center justify-center transition-all">
-                <ZoomIn size={22} className="text-white opacity-0 group-hover:opacity-100 drop-shadow" />
-              </div>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">Uploaded {fmtDateFromTs(appt.prescription!.updatedAt, { day: "numeric", month: "short" })} · <button className="text-[#1a3d2b] hover:underline" onClick={() => fileRef.current?.click()}>Replace photo</button></p>
+            <p className="text-xs text-gray-400 mt-1.5">Uploaded {fmtDateFromTs(appt.prescription!.updatedAt, { day: "numeric", month: "short" })} · <button className="text-[#1a3d2b] hover:underline" onClick={() => fileRef.current?.click()}>Replace photo</button></p>
           </div>
         )}
 
@@ -368,41 +364,34 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
             <ImageIcon size={11} /> {rxExists ? "Replace Prescription Photo" : "Prescription Photo"}
           </p>
-
           {preview ? (
             <div className="space-y-3">
               <div className="relative rounded-2xl overflow-hidden border-2 border-[#1a3d2b]/30 shadow-sm">
                 <img src={preview} alt="Preview" className="w-full max-h-64 object-contain bg-gray-50" />
                 <button onClick={() => { setPreview(null); setPendingFile(null); }}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
-                  <X size={13} />
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
+                  <X size={14} />
                 </button>
               </div>
-              <p className="text-xs text-center text-gray-400 flex items-center justify-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-500" /> Photo ready to save</p>
+              <p className="text-sm text-center text-gray-400 flex items-center justify-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-500" /> Photo ready to save</p>
             </div>
           ) : (
-            <div
-              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              className={cn(
-                "relative rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-4 py-10 px-6 cursor-pointer group",
-                dragOver ? "border-[#1a3d2b] bg-[#1a3d2b]/5 scale-[1.01]" : "border-gray-300 hover:border-[#1a3d2b]/40 hover:bg-gray-50"
-              )}>
-              <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center transition-colors", dragOver ? "bg-[#1a3d2b]/10" : "bg-gray-100 group-hover:bg-[#1a3d2b]/8")}>
-                <CloudUpload size={30} className={cn("transition-colors", dragOver ? "text-[#1a3d2b]" : "text-gray-400 group-hover:text-[#1a3d2b]/60")} />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-semibold text-gray-600 mb-1">Drop prescription photo here</p>
-                <p className="text-xs text-gray-400">or choose an option below</p>
-              </div>
-              <div className="flex gap-3 w-full max-w-xs">
-                <label className="flex-1 flex flex-col items-center gap-1.5 py-3 px-2 bg-[#1a3d2b] text-white rounded-xl text-xs font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center">
-                  <Camera size={16} /> Take Photo
+            <div className="space-y-3">
+              {/* Big camera button — main CTA on mobile */}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col items-center justify-center gap-2 py-6 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-bold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95 shadow-lg shadow-[#1a3d2b]/20">
+                  <Camera size={28} />
+                  <span>Take Photo</span>
+                  <span className="text-[10px] text-white/60 font-normal">Use camera</span>
                   <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
-                <label className="flex-1 flex flex-col items-center gap-1.5 py-3 px-2 bg-white border-2 border-gray-200 text-gray-600 rounded-xl text-xs font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center">
-                  <FilePlus2 size={16} /> Browse File
+                <label className="flex flex-col items-center justify-center gap-2 py-6 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95"
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}>
+                  <FilePlus2 size={28} className={dragOver ? "text-[#1a3d2b]" : ""} />
+                  <span>Browse File</span>
+                  <span className="text-[10px] text-gray-400 font-normal">Image or PDF</span>
                   <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
               </div>
@@ -417,7 +406,7 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
             value={notes}
             onChange={e => setNotes(e.target.value)}
             placeholder="Diagnosis, medications, instructions, follow-up advice…"
-            rows={5}
+            rows={4}
             className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b]/40 bg-amber-50 placeholder-gray-400 text-gray-700 leading-relaxed"
           />
         </div>
@@ -427,14 +416,12 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
             <AlertCircle size={15} className="shrink-0 mt-0.5" /> {err}
           </div>
         )}
-
         {saved && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-emerald-700 font-semibold">
-            <CheckCircle2 size={15} /> Prescription saved! Patient moved to All Patients.
+            <CheckCircle2 size={15} /> Prescription saved!
           </div>
         )}
 
-        {/* Save button */}
         <button
           onClick={handleSave}
           disabled={uploading || saved}
@@ -453,7 +440,7 @@ function RxUploadPanel({ appt, onSaved, onDocClick }: {
   );
 }
 
-// ── Appointment Detail (right panel main content) ─────────────────
+// ── Appointment Detail ────────────────────────────────────────────
 function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
   appt: OnlineAppt;
   onDocClick: (doc: DocFile) => void;
@@ -462,7 +449,7 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
 }) {
   return (
     <div className="flex flex-col divide-y divide-gray-100 overflow-auto h-full">
-      <div className="px-5 py-4 bg-white shrink-0">
+      <div className="px-4 py-4 bg-white shrink-0">
         <div className="flex items-start gap-3">
           <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center border-2 shrink-0", appt.patient.patientCode ? "bg-[#1a3d2b]/6 border-[#1a3d2b]/20" : "bg-gray-100 border-gray-200")}>
             {appt.patient.patientCode ? <span className="font-black text-[#1a3d2b] text-sm font-mono">{appt.patient.patientCode}</span> : <User size={22} className="text-gray-400" />}
@@ -478,49 +465,49 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 mt-3">
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
+          <div className="bg-gray-50 rounded-xl px-3 py-2.5">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Date & Time</p>
-            <p className="text-xs font-semibold text-gray-700">{fmtDate(appt.date)}</p>
+            <p className="text-xs font-semibold text-gray-700">{fmtDateShort(appt.date)}</p>
             <p className="text-xs text-gray-500">{appt.timeLabel}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg px-3 py-2">
+          <div className="bg-gray-50 rounded-xl px-3 py-2.5">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Contact</p>
             {appt.patient.phone && <p className="text-xs font-semibold text-gray-700">{appt.patient.phone}</p>}
             {appt.patient.email && <p className="text-xs text-gray-500 truncate">{appt.patient.email}</p>}
           </div>
         </div>
-        {appt.reason && <div className="mt-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2"><p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">Reason</p><p className="text-xs text-gray-700">{appt.reason}</p></div>}
+        {appt.reason && <div className="mt-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2"><p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">Reason</p><p className="text-xs text-gray-700">{appt.reason}</p></div>}
       </div>
 
       {appt.joinEnabled && (
-        <div className="px-5 py-4 bg-white border-b border-gray-100 shrink-0">
+        <div className="px-4 py-4 bg-white border-b border-gray-100 shrink-0">
           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Video size={11} /> Video Consultation — Active</p>
           <VideoCall apptId={appt.id} role="doctor" onCallEnded={() => onCallEnded(appt.id)} />
         </div>
       )}
 
-      <div className="px-5 py-4 bg-white shrink-0">
+      <div className="px-4 py-4 bg-white shrink-0">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={11} /> Patient Documents {appt.documents.length > 0 && <span className="text-gray-300">({appt.documents.length})</span>}</p>
         {appt.documents.length === 0 ? <p className="text-xs text-gray-400 italic">No documents uploaded</p> : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {appt.documents.map((d, i) => (
-              <button key={i} onClick={() => onDocClick(d)} className="w-full flex items-center gap-2.5 px-3 py-2 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-lg transition-all group text-left">
-                {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-7 h-7 rounded object-cover shrink-0 bg-gray-100" /> : <div className="w-7 h-7 rounded bg-blue-50 flex items-center justify-center shrink-0"><FileText size={13} className="text-blue-500" /></div>}
-                <span className="text-xs font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
-                <ZoomIn size={12} className="text-gray-300 group-hover:text-[#1a3d2b] shrink-0" />
+              <button key={i} onClick={() => onDocClick(d)} className="w-full flex items-center gap-2.5 px-3 py-3 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left active:scale-[0.99]">
+                {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" /> : <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText size={14} className="text-blue-500" /></div>}
+                <span className="text-sm font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
+                <ZoomIn size={13} className="text-gray-300 group-hover:text-[#1a3d2b] shrink-0" />
               </button>
             ))}
           </div>
         )}
       </div>
 
-      <div className="px-5 py-4 bg-white shrink-0">
+      <div className="px-4 py-4 bg-white shrink-0">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><StickyNote size={11} /> Doctor's Notes</p>
         <NotesEditor apptId={appt.id} initialNotes={appt.prescription?.notes ?? ""} onSaved={rx => onPrescriptionUploaded(appt.id, rx)} />
       </div>
 
-      <div className="px-5 py-4 bg-white">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+      <div className="px-4 py-4 bg-white pb-8">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
           <ImageIcon size={11} /> Prescription Photo
           {appt.prescription?.photoObjectPath && <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">Uploaded</span>}
         </p>
@@ -530,7 +517,7 @@ function ApptDetail({ appt, onDocClick, onPrescriptionUploaded, onCallEnded }: {
   );
 }
 
-// ── Patient History Panel (All Patients section) ───────────────────
+// ── Patient History Panel ──────────────────────────────────────────
 function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }: {
   patient: PatientInfo & { email?: string; createdAt?: string };
   patientDocs: DocFile[];
@@ -541,9 +528,8 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
   const sorted = [...appointments].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-white">
-      {/* Patient header */}
-      <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-br from-[#1a3d2b]/3 to-white shrink-0">
+    <div className="flex flex-col bg-white min-h-0">
+      <div className="px-4 py-4 border-b border-gray-100 bg-gradient-to-br from-[#1a3d2b]/3 to-white shrink-0">
         <div className="flex items-center gap-3">
           <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center border-2 shrink-0", patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/25" : "bg-gray-100 border-gray-200")}>
             {patient.patientCode ? <span className="font-black text-[#1a3d2b] text-base font-mono">{patient.patientCode}</span> : <User size={24} className="text-gray-400" />}
@@ -559,8 +545,7 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-5 py-4 space-y-5">
-        {/* Patient documents (from profile) */}
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-5 pb-8">
         <div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
             <FileText size={11} /> Medical Documents {patientDocs.length > 0 && <span className="text-gray-300">({patientDocs.length})</span>}
@@ -571,20 +556,19 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
               <p className="text-xs text-gray-400">No documents uploaded yet</p>
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {patientDocs.map((d, i) => (
                 <button key={i} onClick={() => onDocClick(d, patientDocs)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left">
+                  className="w-full flex items-center gap-2.5 px-3 py-3 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-xl transition-all group text-left active:scale-[0.99]">
                   {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" /> : <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText size={14} className="text-blue-500" /></div>}
-                  <span className="text-xs font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
-                  <ZoomIn size={12} className="text-gray-300 group-hover:text-[#1a3d2b] shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
+                  <ZoomIn size={13} className="text-gray-300 group-hover:text-[#1a3d2b] shrink-0" />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Appointment history */}
         <div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
             <Calendar size={11} /> Consultation History {appointments.length > 0 && <span className="text-gray-300">({appointments.length})</span>}
@@ -592,8 +576,7 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
           {appointments.length === 0 ? (
             <div className="text-center py-5 rounded-xl bg-gray-50 border border-gray-100">
               <Video size={22} className="text-gray-200 mx-auto mb-1.5" />
-              <p className="text-xs text-gray-400">No appointments booked yet</p>
-              <p className="text-[10px] text-gray-300 mt-0.5">Appointments will appear here when booked</p>
+              <p className="text-xs text-gray-400">No appointments yet</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -603,11 +586,11 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
                 return (
                   <div key={appt.id} className={cn("rounded-xl border overflow-hidden transition-all", isExpanded ? "border-[#1a3d2b]/20 shadow-sm" : "border-gray-100")}>
                     <button onClick={() => setExpandedId(isExpanded ? null : appt.id)}
-                      className={cn("w-full flex items-center gap-3 px-4 py-3 text-left transition-colors", isExpanded ? "bg-[#1a3d2b]/4" : "bg-gray-50 hover:bg-gray-100")}>
-                      <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><Video size={13} className="text-blue-500" /></div>
+                      className={cn("w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors", isExpanded ? "bg-[#1a3d2b]/4" : "bg-gray-50 hover:bg-gray-100")}>
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><Video size={13} className="text-blue-500" /></div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-700">{fmtDate(appt.date)} · {appt.timeLabel}</p>
-                        {appt.reason && <p className="text-[10px] text-gray-400 truncate">{appt.reason}</p>}
+                        <p className="text-sm font-semibold text-gray-700">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
+                        {appt.reason && <p className="text-xs text-gray-400 truncate">{appt.reason}</p>}
                       </div>
                       <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
                       {isExpanded ? <ChevronUp size={13} className="text-gray-400 shrink-0" /> : <ChevronDown size={13} className="text-gray-400 shrink-0" />}
@@ -620,9 +603,9 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
                             <div className="space-y-1.5">
                               {appt.documents.map((d, i) => (
                                 <button key={i} onClick={() => onDocClick(d, appt.documents)}
-                                  className="w-full flex items-center gap-2 px-2.5 py-2 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-lg transition-all group text-left">
-                                  {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-6 h-6 rounded object-cover" /> : <div className="w-6 h-6 rounded bg-blue-50 flex items-center justify-center"><FileText size={12} className="text-blue-500" /></div>}
-                                  <span className="text-xs text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
+                                  className="w-full flex items-center gap-2 px-2.5 py-2.5 bg-gray-50 hover:bg-[#1a3d2b]/5 border border-gray-200 hover:border-[#1a3d2b]/20 rounded-lg transition-all group text-left">
+                                  {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-7 h-7 rounded object-cover" /> : <div className="w-7 h-7 rounded bg-blue-50 flex items-center justify-center"><FileText size={13} className="text-blue-500" /></div>}
+                                  <span className="text-sm text-gray-700 flex-1 truncate group-hover:text-[#1a3d2b]">{d.name}</span>
                                   <ZoomIn size={11} className="text-gray-300 group-hover:text-[#1a3d2b]" />
                                 </button>
                               ))}
@@ -632,7 +615,7 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
                         {appt.prescription?.notes && (
                           <div className="px-4 py-3">
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1"><StickyNote size={10} /> Doctor's Notes</p>
-                            <p className="text-xs text-gray-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 whitespace-pre-wrap">{appt.prescription.notes}</p>
+                            <p className="text-sm text-gray-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 whitespace-pre-wrap">{appt.prescription.notes}</p>
                           </div>
                         )}
                         {appt.prescription?.photoObjectPath && (
@@ -640,10 +623,7 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1"><ImageIcon size={10} /> Prescription</p>
                             <button onClick={() => onDocClick({ name: "Prescription", objectPath: appt.prescription!.photoObjectPath!, contentType: "image/jpeg", size: 0 }, [])}
                               className="relative rounded-lg overflow-hidden border border-gray-200 hover:border-[#1a3d2b]/30 transition-all group w-full">
-                              <img src={`${BASE}/api/storage${appt.prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-28 object-contain bg-gray-50" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 flex items-center justify-center transition-all">
-                                <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 drop-shadow" />
-                              </div>
+                              <img src={`${BASE}/api/storage${appt.prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-32 object-contain bg-gray-50" />
                             </button>
                           </div>
                         )}
@@ -661,7 +641,133 @@ function PatientHistoryPanel({ patient, patientDocs, appointments, onDocClick }:
   );
 }
 
-// ── Appointment List Row ──────────────────────────────────────────
+// ── Mobile Card Components ────────────────────────────────────────
+function MobileApptCard({ appt, onClick }: { appt: OnlineAppt; onClick: () => void }) {
+  const hasRx = !!appt.prescription?.photoObjectPath;
+  return (
+    <button onClick={onClick} className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm p-4 active:scale-[0.98] transition-transform">
+      <div className="flex items-start gap-3">
+        <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center border shrink-0", appt.patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/20" : "bg-blue-50 border-blue-100")}>
+          {appt.patient.patientCode ? <span className="font-black text-[#1a3d2b] text-xs font-mono">{appt.patient.patientCode}</span> : <Video size={16} className="text-blue-500" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <p className="text-base font-bold text-gray-900 truncate">{appt.patient.name}</p>
+            {appt.joinEnabled
+              ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse shrink-0">🟢 Live</span>
+              : <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>}
+          </div>
+          <p className="text-sm text-gray-500">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
+          {appt.reason && <p className="text-xs text-gray-400 truncate mt-0.5">{appt.reason}</p>}
+          <div className="flex gap-2 mt-1.5">
+            {hasRx && <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium"><CheckCircle2 size={9} /> Rx uploaded</span>}
+            {appt.patient.phone && <span className="text-[10px] text-gray-400">{appt.patient.phone}</span>}
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-gray-300 shrink-0 mt-1" />
+      </div>
+    </button>
+  );
+}
+
+function MobileOfflineCard({ appt }: { appt: OfflineAppt }) {
+  return (
+    <div className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="flex items-start gap-3">
+        <div className="w-11 h-11 rounded-xl bg-green-50 border border-green-100 flex items-center justify-center shrink-0">
+          <MapPin size={16} className="text-green-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <p className="text-base font-bold text-gray-900 truncate">{appt.patient.name}</p>
+            <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
+          </div>
+          <p className="text-sm text-gray-500">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
+          {appt.patient.phone && <p className="text-xs text-gray-400 mt-0.5">{appt.patient.phone}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileRxCard({ appt, onClick }: { appt: OnlineAppt; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full text-left bg-white rounded-2xl border border-amber-100 shadow-sm p-4 active:scale-[0.98] transition-transform">
+      <div className="flex items-start gap-3">
+        <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center border shrink-0", appt.patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/20" : "bg-amber-50 border-amber-200")}>
+          {appt.patient.patientCode ? <span className="font-black text-[#1a3d2b] text-xs font-mono">{appt.patient.patientCode}</span> : <Stethoscope size={16} className="text-amber-500" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-bold text-gray-900 truncate">{appt.patient.name}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
+          <p className="text-xs text-amber-600 mt-1 flex items-center gap-1 font-medium"><ClipboardList size={10} /> Prescription needed</p>
+        </div>
+        <ChevronRight size={16} className="text-amber-300 shrink-0 mt-1" />
+      </div>
+    </button>
+  );
+}
+
+function MobilePatientCard({ patient, onClick }: { patient: RegisteredPatient; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm p-4 active:scale-[0.98] transition-transform">
+      <div className="flex items-center gap-3">
+        <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center border shrink-0", patient.patientCode ? "bg-[#1a3d2b]/8 border-[#1a3d2b]/20" : "bg-gray-100 border-gray-200")}>
+          {patient.patientCode ? <span className="font-black text-[#1a3d2b] text-xs font-mono">{patient.patientCode}</span> : <User size={16} className="text-gray-400" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-bold text-gray-900 truncate">{patient.name}</p>
+          <div className="flex items-center gap-3 mt-0.5">
+            <span className="text-sm text-gray-400">{patient.appointments.length} visit{patient.appointments.length !== 1 ? "s" : ""}</span>
+            {patient.documents.length > 0 && <span className="text-sm text-blue-400 flex items-center gap-1"><FileText size={10} />{patient.documents.length} doc{patient.documents.length !== 1 ? "s" : ""}</span>}
+          </div>
+          {patient.phone && <p className="text-xs text-gray-400 mt-0.5">{patient.phone}</p>}
+        </div>
+        <ChevronRight size={16} className="text-gray-300 shrink-0" />
+      </div>
+    </button>
+  );
+}
+
+// ── Donations Mobile Card ─────────────────────────────────────────
+function MobileDonationCard({ d, onToggle, onThanks }: { d: DonationRow; onToggle: () => void; onThanks: () => void }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {d.patientCode && (
+            <span className="text-xs font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">{d.patientCode}</span>
+          )}
+          <div className="min-w-0">
+            <p className="text-base font-bold text-gray-800 truncate">{d.patientName || "—"}</p>
+            {d.patientEmail && <p className="text-xs text-gray-400 truncate">{d.patientEmail}</p>}
+          </div>
+        </div>
+        <span className="text-lg font-black text-emerald-700 shrink-0">₹{d.amount}</span>
+      </div>
+      <p className="text-xs text-gray-400 font-mono mb-3">Txn: xxxxxx{d.lastSixDigits} · {new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+      <div className="flex items-center gap-3">
+        <button onClick={onToggle} className="flex items-center gap-2 flex-1 cursor-pointer group">
+          <div className={cn("relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0", d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300")}>
+            <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200", d.status === "verified" ? "translate-x-5" : "translate-x-1")} />
+          </div>
+          <span className={cn("text-sm font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
+            {d.status === "verified" ? "Received" : "Not Received"}
+          </span>
+        </button>
+        <button onClick={() => !d.thankYouSent && onThanks()} disabled={d.thankYouSent}
+          className={cn("flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border transition-all active:scale-95",
+            d.thankYouSent ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default" : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
+          )}>
+          {d.thankYouSent ? <MailCheck size={14} /> : <Mail size={14} />}
+          {d.thankYouSent ? "Sent" : "Thanks"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Desktop List Rows ─────────────────────────────────────────────
 function ApptRow({ appt, selected, onClick }: { appt: OnlineAppt; selected: boolean; onClick: () => void }) {
   const hasRx = !!appt.prescription?.photoObjectPath;
   return (
@@ -671,9 +777,7 @@ function ApptRow({ appt, selected, onClick }: { appt: OnlineAppt; selected: bool
           <p className={cn("text-sm font-bold truncate", selected ? "text-[#1a3d2b]" : "text-gray-800")}>{appt.patient.name}</p>
           <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0 border", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
         </div>
-        {appt.patient.patientCode && (
-          <p className="text-base font-black text-[#1a3d2b] font-mono tracking-widest leading-none mb-1">{appt.patient.patientCode}</p>
-        )}
+        {appt.patient.patientCode && <p className="text-base font-black text-[#1a3d2b] font-mono tracking-widest leading-none mb-1">{appt.patient.patientCode}</p>}
         <p className="text-[11px] text-gray-500">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
         {hasRx && <p className="text-[10px] text-emerald-500 mt-0.5 flex items-center gap-1"><CheckCircle2 size={9} />Rx uploaded</p>}
         {appt.joinEnabled && <p className="text-[10px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1 animate-pulse">🟢 Live</p>}
@@ -682,10 +786,7 @@ function ApptRow({ appt, selected, onClick }: { appt: OnlineAppt; selected: bool
   );
 }
 
-// ── Patient Row (All Patients section) ────────────────────────────
 function PatientRow({ patient, selected, onClick }: { patient: RegisteredPatient; selected: boolean; onClick: () => void }) {
-  const hasAppts = patient.appointments.length > 0;
-  const hasDocs = patient.documents.length > 0;
   return (
     <button onClick={onClick} className={cn("w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-center gap-2.5", selected && "bg-[#1a3d2b]/5 border-l-[3px] border-l-[#1a3d2b]")}>
       <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", patient.patientCode ? "bg-[#1a3d2b]/8 border border-[#1a3d2b]/15" : "bg-gray-100")}>
@@ -694,9 +795,8 @@ function PatientRow({ patient, selected, onClick }: { patient: RegisteredPatient
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm font-semibold truncate", selected ? "text-[#1a3d2b]" : "text-gray-800")}>{patient.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          {hasAppts && <span className="text-[10px] text-gray-400">{patient.appointments.length} visit{patient.appointments.length !== 1 ? "s" : ""}</span>}
-          {!hasAppts && <span className="text-[10px] text-gray-300 italic">No appointments yet</span>}
-          {hasDocs && <span className="text-[10px] text-blue-400 flex items-center gap-0.5"><FileText size={8} />{patient.documents.length} doc{patient.documents.length !== 1 ? "s" : ""}</span>}
+          <span className="text-[10px] text-gray-400">{patient.appointments.length} visit{patient.appointments.length !== 1 ? "s" : ""}</span>
+          {patient.documents.length > 0 && <span className="text-[10px] text-blue-400 flex items-center gap-0.5"><FileText size={8} />{patient.documents.length} docs</span>}
         </div>
       </div>
       <ChevronRight size={13} className={cn("shrink-0", selected ? "text-[#1a3d2b]" : "text-gray-300")} />
@@ -704,7 +804,6 @@ function PatientRow({ patient, selected, onClick }: { patient: RegisteredPatient
   );
 }
 
-// ── Rx Needed Row ─────────────────────────────────────────────────
 function RxRow({ appt, selected, onClick }: { appt: OnlineAppt; selected: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} className={cn("w-full text-left px-3 py-3.5 border-b border-amber-50 hover:bg-amber-50/50 transition-colors flex items-start gap-3", selected && "bg-amber-50 border-l-[3px] border-l-amber-500")}>
@@ -741,6 +840,10 @@ export default function DoctorPortal() {
   const [donationSearch, setDonationSearch] = useState("");
   const [donationToast, setDonationToast] = useState<string | null>(null);
 
+  // mobile: are we in a detail view?
+  const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  const [mobileShowDocViewer, setMobileShowDocViewer] = useState(false);
+
   const listPanel = useDragResize(300, 180, 600);
   const detailPanel = useDragResize(420, 280, 720);
 
@@ -766,7 +869,6 @@ export default function DoctorPortal() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [load]);
 
-  // ── Donations live SSE ────────────────────────────────────────
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/doctor/donations/sse`, { withCredentials: true });
     es.addEventListener("donation_updated", (e) => {
@@ -787,7 +889,6 @@ export default function DoctorPortal() {
 
   function handlePrescriptionUploaded(apptId: number, rx: Prescription) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
-    // Also update registeredPatients
     setRegisteredPatients(prev => prev.map(p => ({
       ...p,
       appointments: p.appointments.map(a => a.id === apptId ? { ...a, prescription: rx } : a),
@@ -796,8 +897,8 @@ export default function DoctorPortal() {
 
   function handleRxSaved(apptId: number, rx: Prescription) {
     handlePrescriptionUploaded(apptId, rx);
-    // When Rx saved from Rx Needed panel, deselect and stay in section (list auto-updates)
     setSelectedApptId(null);
+    setMobileShowDetail(false);
   }
 
   async function loadDonations() {
@@ -811,10 +912,7 @@ export default function DoctorPortal() {
 
   async function toggleDonationVerify(d: DonationRow) {
     const newVerified = d.status !== "verified";
-    await doctorFetch(`/donations/${d.id}/verify`, {
-      method: "PATCH",
-      body: JSON.stringify({ verified: newVerified }),
-    });
+    await doctorFetch(`/donations/${d.id}/verify`, { method: "PATCH", body: JSON.stringify({ verified: newVerified }) });
     setDonations(prev => prev.map(x => x.id === d.id ? { ...x, status: newVerified ? "verified" : "pending" } : x));
   }
 
@@ -825,42 +923,31 @@ export default function DoctorPortal() {
       if (res && !res.error) {
         setDonations(prev => prev.map(x => x.id === d.id ? { ...x, thankYouSent: true } : x));
         setDonationToast("Thank you email sent!");
-      } else {
-        setDonationToast("Failed to send email.");
-      }
+      } else { setDonationToast("Failed to send email."); }
     } catch { setDonationToast("Failed to send email."); }
     setTimeout(() => setDonationToast(null), 3500);
   }
 
   async function handleCallEnded(apptId: number) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
-    try { await doctorFetch(`/online-appointments/${apptId}/complete`, { method: "POST" }); } catch { }
+    try { await doctorFetch(`/online-appointments/${apptId}/complete`, { method: "POST" }); } catch {}
   }
 
-  // ── Derived data ────────────────────────────────────────────────
-  const upcomingOnline = online
-    .filter(a => isUpcoming(a.date, a.status))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const upcomingOffline = offline
-    .filter(a => isUpcoming(a.date, a.status))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const rxNeeded = online
-    .filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath)
-    .sort((a, b) => b.date.localeCompare(a.date));
-
+  // ── Derived ──────────────────────────────────────────────────────
+  const upcomingOnline = online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
+  const upcomingOffline = offline.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
+  const rxNeeded = online.filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath).sort((a, b) => b.date.localeCompare(a.date));
   const liveCount = online.filter(a => a.joinEnabled).length;
 
   const selectedAppt = online.find(a => a.id === selectedApptId) ?? null;
   const selectedPatient = registeredPatients.find(p => p.id === selectedPatientId) ?? null;
 
   const navItems = [
-    { key: "online" as Section,    label: "Online Consultations", icon: <Video size={15} />,         count: upcomingOnline.length, color: "text-white" },
-    { key: "offline" as Section,   label: "In-Person Visits",     icon: <MapPin size={15} />,         count: upcomingOffline.length, color: "text-white" },
-    { key: "rxneeded" as Section,  label: "Rx Needed",            icon: <ClipboardList size={15} />,  count: rxNeeded.length, color: rxNeeded.length > 0 ? "text-amber-300" : "text-white" },
-    { key: "patients" as Section,  label: "All Patients",         icon: <Users size={15} />,          count: registeredPatients.length, color: "text-white" },
-    { key: "donations" as Section, label: "Donations",            icon: <Heart size={15} />,          count: donations.length, color: "text-white" },
+    { key: "online" as Section,    label: "Online",   shortLabel: "Online",   icon: <Video size={20} />,        count: upcomingOnline.length },
+    { key: "offline" as Section,   label: "In-Person", shortLabel: "Visits",  icon: <MapPin size={20} />,       count: upcomingOffline.length },
+    { key: "rxneeded" as Section,  label: "Rx Needed", shortLabel: "Rx",      icon: <ClipboardList size={20} />,count: rxNeeded.length, amber: true },
+    { key: "patients" as Section,  label: "Patients",  shortLabel: "Patients", icon: <Users size={20} />,       count: registeredPatients.length },
+    { key: "donations" as Section, label: "Donations", shortLabel: "Donate",  icon: <Heart size={20} />,        count: donations.length },
   ];
 
   const hasDetail = (section === "rxneeded" || section === "online") ? selectedAppt !== null
@@ -869,26 +956,174 @@ export default function DoctorPortal() {
   const showPreview = previewDoc !== null && hasDetail;
 
   function selectSection(s: Section) {
-    setSection(s); setSelectedApptId(null); setSelectedPatientId(null); setPreviewDoc(null);
+    setSection(s);
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+    setPreviewDoc(null);
+    setMobileShowDetail(false);
+    setMobileShowDocViewer(false);
     if (s === "donations") loadDonations();
   }
 
-  return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none" style={{ fontSize: '103%' }}>
+  function handleMobileSelect(apptId?: number, patientId?: number) {
+    if (apptId !== undefined) { setSelectedApptId(apptId); setSelectedPatientId(null); }
+    if (patientId !== undefined) { setSelectedPatientId(patientId); setSelectedApptId(null); }
+    setPreviewDoc(null);
+    setMobileShowDetail(true);
+  }
 
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <header className="bg-[#1a3d2b] h-13 flex items-center px-4 gap-3 shrink-0 z-40" style={{ height: 52 }}>
+  function mobileBack() {
+    if (mobileShowDocViewer) { setMobileShowDocViewer(false); setPreviewDoc(null); return; }
+    setMobileShowDetail(false);
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+  }
+
+  function handleMobileDocClick(doc: DocFile, docs: DocFile[]) {
+    setPreviewDoc(doc);
+    setPreviewDocs(docs);
+    setMobileShowDocViewer(true);
+  }
+
+  // ── Donations filtered ────────────────────────────────────────
+  const filteredDonations = donations.filter(d => {
+    if (!donationSearch.trim()) return true;
+    const q = donationSearch.toLowerCase();
+    return d.patientName?.toLowerCase().includes(q) || d.patientCode?.toLowerCase().includes(q) || d.lastSixDigits.includes(q) || d.amount.includes(q);
+  });
+  const totalAmt = filteredDonations.reduce((s, d) => s + parseFloat(d.amount || "0"), 0);
+  const verifiedCount = filteredDonations.filter(d => d.status === "verified").length;
+  const pendingCount = filteredDonations.filter(d => d.status !== "verified").length;
+
+  // ── Render detail content (shared between mobile/desktop) ─────
+  function renderDetail() {
+    if (selectedAppt && section !== "rxneeded") {
+      return <ApptDetail appt={selectedAppt}
+        onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); setMobileShowDocViewer(true); }}
+        onPrescriptionUploaded={handlePrescriptionUploaded}
+        onCallEnded={handleCallEnded} />;
+    }
+    if (selectedAppt && section === "rxneeded") {
+      return <RxUploadPanel appt={selectedAppt}
+        onSaved={rx => handleRxSaved(selectedAppt.id, rx)}
+        onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); setMobileShowDocViewer(true); }} />;
+    }
+    if (selectedPatient) {
+      return <PatientHistoryPanel
+        patient={{ id: selectedPatient.id, patientCode: selectedPatient.patientCode, name: selectedPatient.name, email: selectedPatient.email, phone: selectedPatient.phone, createdAt: selectedPatient.createdAt }}
+        patientDocs={selectedPatient.documents}
+        appointments={selectedPatient.appointments}
+        onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); setMobileShowDocViewer(true); }} />;
+    }
+    return null;
+  }
+
+  // ── Render list content ───────────────────────────────────────
+  function renderMobileList() {
+    if (loading) return <div className="flex items-center justify-center py-20"><Loader2 size={28} className="animate-spin text-gray-300" /></div>;
+    if (err) return <div className="flex flex-col items-center py-16 px-6 text-center"><AlertCircle size={32} className="text-red-400 mb-3" /><p className="text-gray-500">{err}</p></div>;
+
+    if (section === "online") {
+      return upcomingOnline.length === 0
+        ? <EmptyState icon={<Video size={36} />} title="No upcoming consultations" sub="Online appointments appear here" />
+        : <div className="space-y-3">{upcomingOnline.map(a => <MobileApptCard key={a.id} appt={a} onClick={() => handleMobileSelect(a.id)} />)}</div>;
+    }
+    if (section === "offline") {
+      return upcomingOffline.length === 0
+        ? <EmptyState icon={<MapPin size={36} />} title="No upcoming in-person visits" sub="" />
+        : <div className="space-y-3">{upcomingOffline.map(a => <MobileOfflineCard key={a.id} appt={a} />)}</div>;
+    }
+    if (section === "rxneeded") {
+      return rxNeeded.length === 0
+        ? <EmptyState icon={<CheckCircle2 size={36} className="text-emerald-400" />} title="All prescriptions uploaded" sub="Nothing pending" />
+        : <div className="space-y-3">{rxNeeded.map(a => <MobileRxCard key={a.id} appt={a} onClick={() => handleMobileSelect(a.id)} />)}</div>;
+    }
+    if (section === "patients") {
+      return registeredPatients.length === 0
+        ? <EmptyState icon={<Users size={36} />} title="No patients registered" sub="" />
+        : <div className="space-y-3">{registeredPatients.map(p => <MobilePatientCard key={p.id} patient={p} onClick={() => handleMobileSelect(undefined, p.id)} />)}</div>;
+    }
+    if (section === "donations") {
+      if (donationsLoading) return <div className="flex items-center justify-center py-20"><Loader2 size={28} className="animate-spin text-gray-300" /></div>;
+
+      return (
+        <div className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-center">
+              <IndianRupee size={16} className="text-emerald-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-400 font-medium">Total</p>
+              <p className="text-base font-black text-gray-800">₹{totalAmt.toLocaleString("en-IN")}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-center">
+              <CheckCircle2 size={16} className="text-green-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-400 font-medium">Received</p>
+              <p className="text-base font-black text-green-700">{verifiedCount}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-center">
+              <Clock size={16} className="text-amber-500 mx-auto mb-1" />
+              <p className="text-xs text-gray-400 font-medium">Pending</p>
+              <p className="text-base font-black text-amber-600">{pendingCount}</p>
+            </div>
+          </div>
+          {/* Search */}
+          <div className="relative">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Search donations…"
+              value={donationSearch} onChange={e => setDonationSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:outline-none focus:border-[#1a3d2b] shadow-sm" />
+          </div>
+          {filteredDonations.length === 0
+            ? <EmptyState icon={<Heart size={36} />} title="No donations found" sub="Patient donations appear here" />
+            : filteredDonations.map(d => (
+              <MobileDonationCard key={d.id} d={d}
+                onToggle={() => toggleDonationVerify(d)}
+                onThanks={() => sendDonationThankYou(d)} />
+            ))
+          }
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const sectionTitle: Record<Section, string> = {
+    online: "Online Consultations",
+    offline: "In-Person Visits",
+    rxneeded: "Rx Needed",
+    patients: "All Patients",
+    donations: "Donations",
+  };
+
+  return (
+    <div className="h-[100dvh] flex flex-col bg-gray-50 overflow-hidden" style={{ fontSize: '103%' }}>
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header className="bg-[#1a3d2b] flex items-center px-4 gap-3 shrink-0 z-40" style={{ height: 52 }}>
+        {/* Mobile: back button in detail view */}
+        {mobileShowDetail && (
+          <button onClick={mobileBack} className="md:hidden p-2 -ml-1 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+            <ArrowLeft size={18} />
+          </button>
+        )}
         <img src={logoImg} alt="" className="h-7 brightness-0 invert shrink-0" />
         <div className="h-4 w-px bg-white/20 hidden sm:block" />
         <div className="hidden sm:block">
           <p className="text-white/40 text-[10px] font-medium uppercase tracking-wider leading-none">Doctor Portal</p>
           <p className="text-white font-bold text-sm leading-tight">Dr. P. Murali Krishna</p>
         </div>
+        {/* Mobile: show current section title in detail view */}
+        {mobileShowDetail && (
+          <p className="md:hidden text-white/70 text-sm font-semibold truncate ml-1">
+            {selectedAppt ? selectedAppt.patient.name : selectedPatient ? selectedPatient.name : ""}
+          </p>
+        )}
         <div className="flex-1" />
-        {rxNeeded.length > 0 && (
+        {rxNeeded.length > 0 && !mobileShowDetail && (
           <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 rounded-lg px-2.5 py-1.5">
             <ClipboardList size={13} className="text-amber-300" />
-            <span className="text-amber-200 text-xs font-semibold">{rxNeeded.length} Rx Pending</span>
+            <span className="text-amber-200 text-xs font-semibold hidden sm:inline">{rxNeeded.length} Rx Pending</span>
+            <span className="text-amber-200 text-xs font-semibold sm:hidden">{rxNeeded.length}</span>
           </div>
         )}
         {liveCount > 0 && (
@@ -897,20 +1132,92 @@ export default function DoctorPortal() {
             <span className="text-emerald-300 text-xs font-semibold">{liveCount} Live</span>
           </div>
         )}
-        <p className="text-white/40 text-[12px] hidden md:block font-medium">
+        <p className="text-white/40 text-[12px] hidden lg:block font-medium">
           {fmtTimeIST(lastRefresh, { hour: "2-digit", minute: "2-digit" })}
         </p>
         <button onClick={() => load()} className="p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Refresh"><RefreshCw size={14} /></button>
-        <button onClick={logout} className="flex items-center gap-1.5 px-3 py-1.5 text-white/70 hover:text-red-300 rounded-lg hover:bg-white/10 border border-white/15 hover:border-red-400/30 transition-colors text-[12px] font-semibold">
+        <button onClick={logout} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-white/70 hover:text-red-300 rounded-lg hover:bg-white/10 border border-white/15 hover:border-red-400/30 transition-colors text-[12px] font-semibold">
           <LogOut size={13} /> Logout
         </button>
+        <button onClick={logout} className="sm:hidden p-2 text-white/50 hover:text-red-300 rounded-lg hover:bg-white/10 transition-colors"><LogOut size={16} /></button>
       </header>
 
-      {/* ── Body ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Toast */}
+      {donationToast && (
+        <div className="fixed top-16 right-4 z-50 bg-[#1a3d2b] text-white px-4 py-3 rounded-2xl shadow-xl text-sm font-semibold max-w-xs">
+          {donationToast}
+        </div>
+      )}
 
-        {/* ── Sidebar ──────────────────────────────────────────── */}
-        <aside className="hidden md:flex w-52 bg-[#1a3d2b] flex-col shrink-0">
+      {/* ── MOBILE LAYOUT ──────────────────────────────────────── */}
+      <div className="md:hidden flex flex-col flex-1 overflow-hidden">
+        {/* Mobile content area */}
+        <div className="flex-1 overflow-hidden relative">
+
+          {/* List screen */}
+          <div className={cn("absolute inset-0 overflow-y-auto transition-transform duration-300 ease-in-out", mobileShowDetail ? "-translate-x-full" : "translate-x-0")}>
+            <div className="px-4 pt-4 pb-3 shrink-0">
+              <h2 className="text-lg font-extrabold text-gray-900">{sectionTitle[section]}</h2>
+              <p className="text-sm text-gray-400">
+                {section === "online" ? `${upcomingOnline.length} upcoming`
+                  : section === "offline" ? `${upcomingOffline.length} upcoming`
+                  : section === "rxneeded" ? `${rxNeeded.length} awaiting`
+                  : section === "patients" ? `${registeredPatients.length} registered`
+                  : `${donations.length} total`}
+              </p>
+            </div>
+            <div className="px-4 pb-24">
+              {renderMobileList()}
+            </div>
+          </div>
+
+          {/* Detail screen */}
+          <div className={cn("absolute inset-0 overflow-y-auto bg-white transition-transform duration-300 ease-in-out", mobileShowDetail ? "translate-x-0" : "translate-x-full")}>
+            {mobileShowDocViewer && previewDoc ? (
+              <InlineDocViewer doc={previewDoc} docs={previewDocs} onNavigate={setPreviewDoc} onClose={() => { setMobileShowDocViewer(false); setPreviewDoc(null); }} />
+            ) : (
+              renderDetail()
+            )}
+          </div>
+        </div>
+
+        {/* ── Bottom Tab Bar ─────────────────────────────────── */}
+        <nav className="shrink-0 bg-white border-t border-gray-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] safe-bottom" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex">
+            {navItems.map(item => {
+              const active = section === item.key;
+              return (
+                <button key={item.key} onClick={() => { selectSection(item.key); }}
+                  className={cn("flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors relative",
+                    active ? "text-[#1a3d2b]" : "text-gray-400 hover:text-gray-600"
+                  )}>
+                  <div className="relative">
+                    {item.icon}
+                    {item.count > 0 && (
+                      <span className={cn(
+                        "absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center text-white",
+                        item.amber ? "bg-amber-500" : "bg-[#1a3d2b]"
+                      )}>
+                        {item.count > 99 ? "99+" : item.count}
+                      </span>
+                    )}
+                  </div>
+                  <span className={cn("text-[10px] font-semibold leading-none", active ? "text-[#1a3d2b]" : "text-gray-400")}>
+                    {item.shortLabel}
+                  </span>
+                  {active && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#1a3d2b] rounded-b-full" />}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+
+      {/* ── DESKTOP LAYOUT ─────────────────────────────────────── */}
+      <div className="hidden md:flex flex-1 overflow-hidden">
+
+        {/* Sidebar */}
+        <aside className="w-52 bg-[#1a3d2b] flex flex-col shrink-0">
           <div className="px-4 pt-5 pb-2">
             <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest">Navigation</p>
           </div>
@@ -918,11 +1225,11 @@ export default function DoctorPortal() {
             {navItems.map(item => (
               <button key={item.key} onClick={() => selectSection(item.key)}
                 className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left", section === item.key ? "bg-white/15 text-white" : "text-white/50 hover:bg-white/8 hover:text-white/80")}>
-                <span className={cn(section === item.key ? "text-white" : "text-white/40", item.key === "rxneeded" && item.count > 0 ? "text-amber-300" : "")}>{item.icon}</span>
+                <span className={cn(section === item.key ? "text-white" : "text-white/40", item.amber && item.count > 0 ? "text-amber-300" : "")}>{item.icon}</span>
                 <span className="flex-1 text-sm">{item.label}</span>
                 {item.count > 0 && (
                   <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                    item.key === "rxneeded" && item.count > 0
+                    item.amber && item.count > 0
                       ? section === item.key ? "bg-amber-400/30 text-amber-200" : "bg-amber-400/20 text-amber-300"
                       : section === item.key ? "bg-white/20 text-white" : "bg-white/10 text-white/40"
                   )}>{item.count}</span>
@@ -932,148 +1239,57 @@ export default function DoctorPortal() {
           </nav>
         </aside>
 
-        {/* ── List panel ───────────────────────────────────────── */}
+        {/* List panel */}
         <div style={{ width: section === "donations" ? 0 : listPanel.width }} className={cn("shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden", section === "donations" && "hidden")}>
           <div className="px-4 py-2.5 border-b border-gray-100 bg-white shrink-0">
-            <h2 className="font-bold text-gray-900 text-sm">
-              {section === "online" ? "Online Consultations"
-                : section === "offline" ? "In-Person Visits"
-                : section === "rxneeded" ? "Rx Needed"
-                : section === "donations" ? "Donations"
-                : "All Patients"}
-            </h2>
+            <h2 className="font-bold text-gray-900 text-sm">{sectionTitle[section]}</h2>
             <p className="text-[11px] text-gray-400">
               {section === "patients" ? `${registeredPatients.length} registered`
                 : section === "rxneeded" ? `${rxNeeded.length} awaiting prescription`
-                : section === "donations" ? `${donations.length} total donations`
-                : `${section === "online" ? upcomingOnline.length : upcomingOffline.length} upcoming`}
+                : section === "online" ? `${upcomingOnline.length} upcoming`
+                : `${upcomingOffline.length} upcoming`}
             </p>
           </div>
-
           <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-            ) : err ? (
-              <div className="flex flex-col items-center py-10 px-4 text-center">
-                <AlertCircle size={24} className="text-red-400 mb-2" />
-                <p className="text-sm text-gray-500">{err}</p>
-              </div>
-            ) : section === "patients" ? (
-              registeredPatients.length === 0 ? (
-                <div className="flex flex-col items-center py-14 text-center px-4">
-                  <Users size={28} className="text-gray-200 mb-2" />
-                  <p className="text-sm text-gray-400">No patients registered yet</p>
-                </div>
-              ) : registeredPatients.map(p => (
-                <PatientRow key={p.id} patient={p} selected={selectedPatientId === p.id}
-                  onClick={() => { setSelectedPatientId(p.id); setSelectedApptId(null); setPreviewDoc(null); }} />
-              ))
-            ) : section === "rxneeded" ? (
-              rxNeeded.length === 0 ? (
-                <div className="flex flex-col items-center py-14 text-center px-4">
-                  <CheckCircle2 size={28} className="text-emerald-200 mb-2" />
-                  <p className="text-sm font-medium text-gray-400">All prescriptions uploaded</p>
-                  <p className="text-xs text-gray-300 mt-1">No pending prescriptions</p>
-                </div>
-              ) : rxNeeded.map(appt => (
-                <RxRow key={appt.id} appt={appt} selected={selectedApptId === appt.id}
-                  onClick={() => { setSelectedApptId(appt.id); setSelectedPatientId(null); setPreviewDoc(null); }} />
-              ))
-            ) : section === "donations" ? (
-              donationsLoading ? (
-                <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
-              ) : donations.length === 0 ? (
-                <div className="flex flex-col items-center py-14 text-center px-4">
-                  <Heart size={28} className="text-gray-200 mb-2" />
-                  <p className="text-sm font-medium text-gray-400">No donations yet</p>
-                  <p className="text-xs text-gray-300 mt-1">Patient donations appear here</p>
-                </div>
-              ) : donations.map(d => (
-                <div key={d.id} className="border-b border-gray-100 px-3 py-3 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {d.patientCode && (
-                        <span className="text-[10px] font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded px-1.5 py-0.5 shrink-0">
-                          {d.patientCode}
-                        </span>
-                      )}
-                      <p className="text-sm font-semibold text-gray-800 truncate">{d.patientName || "—"}</p>
-                    </div>
-                    <span className="text-sm font-black text-emerald-700 shrink-0">₹{d.amount}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-gray-400 font-mono">xxxx{d.lastSixDigits} · {new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</p>
-                    <button onClick={() => toggleDonationVerify(d)}
-                      className="flex items-center gap-1.5 shrink-0 group cursor-pointer">
-                      <div className={cn(
-                        "relative w-9 h-5 rounded-full transition-colors duration-200 shrink-0",
-                        d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300"
-                      )}>
-                        <div className={cn(
-                          "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
-                          d.status === "verified" ? "translate-x-4" : "translate-x-0.5"
-                        )} />
+            {loading ? <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+              : err ? <div className="flex flex-col items-center py-10 px-4 text-center"><AlertCircle size={24} className="text-red-400 mb-2" /><p className="text-sm text-gray-500">{err}</p></div>
+              : section === "patients" ? (
+                registeredPatients.length === 0
+                  ? <div className="flex flex-col items-center py-14 text-center px-4"><Users size={28} className="text-gray-200 mb-2" /><p className="text-sm text-gray-400">No patients registered</p></div>
+                  : registeredPatients.map(p => <PatientRow key={p.id} patient={p} selected={selectedPatientId === p.id} onClick={() => { setSelectedPatientId(p.id); setSelectedApptId(null); setPreviewDoc(null); }} />)
+              ) : section === "rxneeded" ? (
+                rxNeeded.length === 0
+                  ? <div className="flex flex-col items-center py-14 text-center px-4"><CheckCircle2 size={28} className="text-emerald-200 mb-2" /><p className="text-sm font-medium text-gray-400">All prescriptions uploaded</p></div>
+                  : rxNeeded.map(a => <RxRow key={a.id} appt={a} selected={selectedApptId === a.id} onClick={() => { setSelectedApptId(a.id); setSelectedPatientId(null); setPreviewDoc(null); }} />)
+              ) : section === "online" ? (
+                upcomingOnline.length === 0
+                  ? <div className="flex flex-col items-center py-14 text-center px-4"><Video size={28} className="text-gray-200 mb-2" /><p className="text-sm font-medium text-gray-400">No upcoming appointments</p></div>
+                  : upcomingOnline.map(a => <ApptRow key={a.id} appt={a} selected={selectedApptId === a.id} onClick={() => { setSelectedApptId(a.id); setSelectedPatientId(null); setPreviewDoc(null); }} />)
+              ) : (
+                upcomingOffline.length === 0
+                  ? <div className="flex flex-col items-center py-14 text-center px-4"><MapPin size={28} className="text-gray-200 mb-2" /><p className="text-sm font-medium text-gray-400">No in-person visits</p></div>
+                  : upcomingOffline.map(a => (
+                    <button key={a.id} className="w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center shrink-0 mt-0.5"><MapPin size={14} className="text-green-600" /></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{a.patient.name}</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{fmtDateShort(a.date)} · {a.timeLabel}</p>
                       </div>
-                      <span className={cn("text-[10px] font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
-                        {d.status === "verified" ? "Received" : "Not Received"}
-                      </span>
+                      <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full border shrink-0", STATUS_PILL[a.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[a.status] ?? a.status}</span>
                     </button>
-                  </div>
-                </div>
-              ))
-            ) : section === "online" ? (
-              upcomingOnline.length === 0 ? (
-                <div className="flex flex-col items-center py-14 text-center px-4">
-                  <Video size={28} className="text-gray-200 mb-2" />
-                  <p className="text-sm font-medium text-gray-400">No upcoming appointments</p>
-                  <p className="text-xs text-gray-300 mt-1">Confirmed appointments appear here</p>
-                </div>
-              ) : upcomingOnline.map(appt => (
-                <ApptRow key={appt.id} appt={appt} selected={selectedApptId === appt.id}
-                  onClick={() => { setSelectedApptId(appt.id); setSelectedPatientId(null); setPreviewDoc(null); }} />
-              ))
-            ) : (
-              upcomingOffline.length === 0 ? (
-                <div className="flex flex-col items-center py-14 text-center px-4">
-                  <MapPin size={28} className="text-gray-200 mb-2" />
-                  <p className="text-sm font-medium text-gray-400">No upcoming in-person visits</p>
-                </div>
-              ) : upcomingOffline.map(appt => (
-                <button key={appt.id} onClick={() => {}}
-                  className="w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center shrink-0 mt-0.5"><MapPin size={14} className="text-green-600" /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{appt.patient.name}</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">{fmtDateShort(appt.date)} · {appt.timeLabel}</p>
-                  </div>
-                  <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full border shrink-0", STATUS_PILL[appt.status] ?? STATUS_PILL.pending)}>{STATUS_LABEL[appt.status] ?? appt.status}</span>
-                </button>
-              ))
-            )}
+                  ))
+              )}
           </div>
         </div>
 
         {section !== "donations" && <DragHandle handlers={listPanel.handlers} />}
 
-        {/* ── Right area ───────────────────────────────────────── */}
+        {/* Right area */}
         <div className="flex flex-1 overflow-hidden">
           {showPreview ? (
             <>
               <div style={{ width: detailPanel.width }} className="shrink-0 overflow-hidden border-r border-gray-200">
-                {selectedAppt && section !== "rxneeded" && (
-                  <ApptDetail appt={selectedAppt} onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }} onPrescriptionUploaded={handlePrescriptionUploaded} onCallEnded={handleCallEnded} />
-                )}
-                {selectedAppt && section === "rxneeded" && (
-                  <RxUploadPanel appt={selectedAppt} onSaved={rx => handleRxSaved(selectedAppt.id, rx)} onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); }} />
-                )}
-                {selectedPatient && (
-                  <PatientHistoryPanel
-                    patient={{ id: selectedPatient.id, patientCode: selectedPatient.patientCode, name: selectedPatient.name, email: selectedPatient.email, phone: selectedPatient.phone, createdAt: selectedPatient.createdAt }}
-                    patientDocs={selectedPatient.documents}
-                    appointments={selectedPatient.appointments}
-                    onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); }}
-                  />
-                )}
+                {renderDetail()}
               </div>
               <DragHandle handlers={detailPanel.handlers} />
               <div className="flex-1 overflow-hidden">
@@ -1081,140 +1297,95 @@ export default function DoctorPortal() {
               </div>
             </>
           ) : hasDetail ? (
-            <div className="flex-1 overflow-hidden bg-white">
-              {selectedAppt && section !== "rxneeded" && (
-                <ApptDetail appt={selectedAppt} onDocClick={d => { setPreviewDoc(d); setPreviewDocs(selectedAppt.documents); }} onPrescriptionUploaded={handlePrescriptionUploaded} onCallEnded={handleCallEnded} />
-              )}
-              {selectedAppt && section === "rxneeded" && (
-                <RxUploadPanel appt={selectedAppt} onSaved={rx => handleRxSaved(selectedAppt.id, rx)} onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); }} />
-              )}
-              {selectedPatient && (
-                <PatientHistoryPanel
-                  patient={{ id: selectedPatient.id, patientCode: selectedPatient.patientCode, name: selectedPatient.name, email: selectedPatient.email, phone: selectedPatient.phone, createdAt: selectedPatient.createdAt }}
-                  patientDocs={selectedPatient.documents}
-                  appointments={selectedPatient.appointments}
-                  onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); }}
-                />
-              )}
-            </div>
+            <div className="flex-1 overflow-hidden bg-white">{renderDetail()}</div>
           ) : section === "donations" ? (
-            <div className="flex-1 overflow-y-auto bg-gray-50">
-              {/* Toast */}
-              {donationToast && (
-                <div className="fixed top-6 right-6 z-50 bg-[#1a3d2b] text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold">
-                  {donationToast}
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0"><IndianRupee size={18} className="text-emerald-700" /></div>
+                  <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total Donated</p><p className="text-xl font-black text-gray-800">₹{totalAmt.toLocaleString("en-IN")}</p></div>
                 </div>
-              )}
-              <div className="p-6">
-                {/* Search */}
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="flex-1 relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input type="text" placeholder="Search by name, Patient ID, amount…"
-                      value={donationSearch} onChange={e => setDonationSearch(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1a3d2b]" />
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0"><CheckCircle2 size={18} className="text-green-700" /></div>
+                  <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Received</p><p className="text-xl font-black text-green-700">{verifiedCount}</p></div>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"><Clock size={18} className="text-amber-600" /></div>
+                  <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Not Received</p><p className="text-xl font-black text-amber-600">{pendingCount}</p></div>
+                </div>
+              </div>
+              {/* Search */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input type="text" placeholder="Search by name, Patient ID, amount…"
+                    value={donationSearch} onChange={e => setDonationSearch(e.target.value)}
+                    className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1a3d2b]" />
+                </div>
+                <button onClick={loadDonations} className="p-2 text-gray-400 hover:text-[#1a3d2b] hover:bg-white rounded-xl border border-gray-200 transition-colors" title="Refresh">
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+              {/* Table */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {donationsLoading ? (
+                  <div className="py-16 text-center flex items-center justify-center gap-2 text-gray-400"><Loader2 size={16} className="animate-spin" /> Loading…</div>
+                ) : filteredDonations.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <Heart size={28} className="text-gray-200 mx-auto mb-3" />
+                    <p className="text-gray-500 font-semibold text-sm">No donations found</p>
                   </div>
-                  <button onClick={loadDonations} className="p-2 text-gray-400 hover:text-[#1a3d2b] hover:bg-white rounded-xl border border-gray-200 transition-colors" title="Refresh">
-                    <RefreshCw size={14} />
-                  </button>
-                </div>
-
-                {/* Summary cards */}
-                {(() => {
-                  const filtered = donations.filter(d => {
-                    if (!donationSearch.trim()) return true;
-                    const q = donationSearch.toLowerCase();
-                    return d.patientName?.toLowerCase().includes(q) || d.patientCode?.toLowerCase().includes(q) || d.lastSixDigits.includes(q) || d.amount.includes(q);
-                  });
-                  const totalAmt = filtered.reduce((s, d) => s + parseFloat(d.amount || "0"), 0);
-                  const verifiedCount = filtered.filter(d => d.status === "verified").length;
-                  const pendingCount = filtered.filter(d => d.status !== "verified").length;
-                  return (
-                    <>
-                      <div className="grid grid-cols-3 gap-4 mb-5">
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0"><IndianRupee size={18} className="text-emerald-700" /></div>
-                          <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total Donated</p><p className="text-xl font-black text-gray-800">₹{totalAmt.toLocaleString("en-IN")}</p></div>
-                        </div>
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0"><CheckCircle2 size={18} className="text-green-700" /></div>
-                          <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Received</p><p className="text-xl font-black text-green-700">{verifiedCount}</p></div>
-                        </div>
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"><Clock size={18} className="text-amber-600" /></div>
-                          <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Not Received</p><p className="text-xl font-black text-amber-600">{pendingCount}</p></div>
-                        </div>
-                      </div>
-
-                      {/* Table */}
-                      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                        {donationsLoading ? (
-                          <div className="py-16 text-center text-gray-400 text-sm flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading donations…</div>
-                        ) : filtered.length === 0 ? (
-                          <div className="py-16 text-center">
-                            <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3"><Heart size={24} className="text-gray-300" /></div>
-                            <p className="text-gray-500 font-semibold text-sm">No donations found</p>
-                            <p className="text-xs text-gray-400 mt-1">Patient donations will appear here</p>
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-100 bg-gray-50">
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Patient</th>
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Amount</th>
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Txn Last 6</th>
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Date</th>
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Status</th>
-                                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {filtered.map(d => (
-                                  <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                                    <td className="px-5 py-4">
-                                      <div className="flex items-center gap-3">
-                                        {d.patientCode && (
-                                          <span className="text-sm font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">{d.patientCode}</span>
-                                        )}
-                                        <div>
-                                          <p className="font-semibold text-gray-800">{d.patientName || "—"}</p>
-                                          <p className="text-xs text-gray-400">{d.patientEmail || "—"}</p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="px-5 py-4"><span className="text-base font-black text-emerald-700">₹{d.amount}</span></td>
-                                    <td className="px-5 py-4"><span className="font-mono font-semibold text-gray-700 tracking-widest">xxxxxx{d.lastSixDigits}</span></td>
-                                    <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" } as any)}</td>
-                                    <td className="px-5 py-4">
-                                      <button onClick={() => toggleDonationVerify(d)} className="flex items-center gap-2 cursor-pointer group select-none">
-                                        <div className={cn("relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0", d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300")}>
-                                          <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200", d.status === "verified" ? "translate-x-5" : "translate-x-1")} />
-                                        </div>
-                                        <span className={cn("text-xs font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
-                                          {d.status === "verified" ? "Received" : "Not Received"}
-                                        </span>
-                                      </button>
-                                    </td>
-                                    <td className="px-5 py-4">
-                                      <button onClick={() => !d.thankYouSent && sendDonationThankYou(d)} disabled={d.thankYouSent}
-                                        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
-                                          d.thankYouSent ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default" : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
-                                        )}>
-                                        {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
-                                        {d.thankYouSent ? "Sent" : "Send Thanks"}
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  );
-                })()}
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Patient</th>
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Amount</th>
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Txn Last 6</th>
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Date</th>
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Status</th>
+                          <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDonations.map(d => (
+                          <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+                                {d.patientCode && <span className="text-sm font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">{d.patientCode}</span>}
+                                <div><p className="font-semibold text-gray-800">{d.patientName || "—"}</p><p className="text-xs text-gray-400">{d.patientEmail || "—"}</p></div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4"><span className="text-base font-black text-emerald-700">₹{d.amount}</span></td>
+                            <td className="px-5 py-4"><span className="font-mono font-semibold text-gray-700 tracking-widest">xxxxxx{d.lastSixDigits}</span></td>
+                            <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" } as any)}</td>
+                            <td className="px-5 py-4">
+                              <button onClick={() => toggleDonationVerify(d)} className="flex items-center gap-2 cursor-pointer group select-none">
+                                <div className={cn("relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0", d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300")}>
+                                  <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200", d.status === "verified" ? "translate-x-5" : "translate-x-1")} />
+                                </div>
+                                <span className={cn("text-xs font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
+                                  {d.status === "verified" ? "Received" : "Not Received"}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="px-5 py-4">
+                              <button onClick={() => !d.thankYouSent && sendDonationThankYou(d)} disabled={d.thankYouSent}
+                                className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+                                  d.thankYouSent ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default" : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
+                                )}>
+                                {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
+                                {d.thankYouSent ? "Sent" : "Send Thanks"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1237,6 +1408,18 @@ export default function DoctorPortal() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
+  return (
+    <div className="flex flex-col items-center py-20 text-center px-6">
+      <div className="w-20 h-20 rounded-3xl bg-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-300">
+        {icon}
+      </div>
+      <p className="text-base font-semibold text-gray-400">{title}</p>
+      {sub && <p className="text-sm text-gray-300 mt-1">{sub}</p>}
     </div>
   );
 }
