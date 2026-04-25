@@ -4,18 +4,28 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { db, siteSettingsTable } from "@workspace/db";
 
-// ── Inline logo for emails (base64 — always visible, never blocked) ───
-// Use process.cwd() — reliable in both CJS and ESM with tsx
-const LOGO_BASE64 = (() => {
+// ── Inline logo for emails (CID attachment — works in Gmail, Outlook, Apple Mail) ──
+const LOGO_CID = "logo@susrutahospital.com";
+const LOGO_PATH = (() => {
   try {
-    const logoPath = join(process.cwd(), "src", "lib", "assets", "logo.png");
-    const buf = readFileSync(logoPath);
-    return buf.toString("base64");
+    const p = join(process.cwd(), "src", "lib", "assets", "logo.png");
+    readFileSync(p); // verify it exists at startup
+    return p;
   } catch (e) {
-    console.warn("[email] Logo not loaded for emails:", (e as Error).message);
+    console.warn("[email] Logo asset not found:", (e as Error).message);
     return null;
   }
 })();
+
+function logoAttachments(): import("nodemailer/lib/mailer").Attachment[] {
+  if (!LOGO_PATH) return [];
+  return [{
+    filename: "logo.png",
+    path: LOGO_PATH,
+    cid: LOGO_CID,
+    contentDisposition: "inline",
+  }];
+}
 
 // ── Load SMTP config from DB (env vars as fallback) ───────────
 export interface SmtpConfig {
@@ -169,10 +179,10 @@ const EMAIL_FOOTER_HTML = `
   </tr>`;
 
 function emailWrapper(content: string) {
-  const logoHeader = LOGO_BASE64
+  const logoHeader = LOGO_PATH
     ? `<tr>
           <td style="background:#ffffff;padding:28px 36px 20px;text-align:center;border-bottom:4px solid #1a3d2b;">
-            <img src="data:image/png;base64,${LOGO_BASE64}" alt="Susruta Hospital" width="240" height="27"
+            <img src="cid:${LOGO_CID}" alt="Susruta Hospital" width="240" height="27"
               style="display:block;margin:0 auto;max-width:240px;height:auto;border:0;" />
             <p style="color:#6b7280;margin:8px 0 0;font-size:11px;font-family:Arial,sans-serif;letter-spacing:0.5px;">Authentic Ayurvedic Healthcare &middot; Tirupati</p>
           </td>
@@ -272,6 +282,7 @@ export async function sendMagicLink(opts: {
     subject,
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
 
@@ -333,6 +344,7 @@ export async function sendPasswordResetEmail(opts: {
     subject,
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
 
@@ -407,6 +419,7 @@ export async function sendSubscriptionConfirmation(opts: { to: string; name: str
       "List-Unsubscribe": `<${unsubUrl}>, <mailto:${cfg.subscriberFrom}?subject=Unsubscribe>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
+    attachments: logoAttachments(),
   });
 }
 
@@ -466,6 +479,7 @@ export async function sendBroadcastEmail(opts: {
       "X-Mailer": "Susruta Hospital Newsletter",
       "Message-ID": msgId,
     },
+    attachments: logoAttachments(),
   });
 }
 
@@ -567,6 +581,7 @@ export async function sendAppointmentAckEmail(opts: {
     subject,
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
 
@@ -661,6 +676,7 @@ export async function sendOnlineMeetingLinkEmail(opts: {
     subject,
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
 
@@ -733,6 +749,7 @@ export async function sendDonationThankYou({ to, name, patientCode, amount, last
     subject,
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
 
@@ -762,5 +779,6 @@ export async function testSmtpConnection(cfg: SmtpConfig, testTo: string): Promi
     subject: "Susruta Hospital — SMTP Test Successful",
     html,
     text,
+    attachments: logoAttachments(),
   });
 }
