@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable } from "@workspace/db";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 import { z } from "zod/v4";
 
@@ -99,10 +99,48 @@ router.get("/sessions", requireAdmin, async (_req, res) => {
 });
 
 // ── Admin: DELETE /api/online-slots/sessions/:id ──────────────
+// Deletes a session and all its slots.
+// If any non-cancelled appointments exist on those slots, they are cancelled first.
 router.delete("/sessions/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.id, id));
-  res.status(204).send();
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  try {
+    // 1. Find all slots belonging to this session
+    const slots = await db
+      .select({ id: onlineSlotsTable.id })
+      .from(onlineSlotsTable)
+      .where(eq(onlineSlotsTable.sessionId, id));
+
+    if (slots.length > 0) {
+      const slotIds = slots.map(s => s.id);
+
+      // 2. Cancel any active appointments so FK constraint won't block the delete
+      const activeAppts = await db
+        .select({ id: onlineAppointmentsTable.id })
+        .from(onlineAppointmentsTable)
+        .where(
+          and(
+            inArray(onlineAppointmentsTable.slotId, slotIds),
+          )
+        );
+
+      if (activeAppts.length > 0) {
+        const apptIds = activeAppts.map(a => a.id);
+        await db
+          .update(onlineAppointmentsTable)
+          .set({ status: "cancelled" })
+          .where(inArray(onlineAppointmentsTable.id, apptIds));
+      }
+    }
+
+    // 3. Delete the session — cascades to slots automatically
+    await db.delete(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.id, id));
+    res.status(204).send();
+  } catch (err: any) {
+    console.error("[DELETE session] error:", err?.message ?? err);
+    res.status(500).json({ error: "delete_failed", message: err?.message ?? "Unknown error" });
+  }
 });
 
 // ── Public: GET /api/online-slots/available ───────────────────
