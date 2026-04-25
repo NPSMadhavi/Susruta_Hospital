@@ -11,6 +11,7 @@ import {
   prescriptionsTable,
   appointmentsTable,
   patientDocumentsTable,
+  donationsTable,
 } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
@@ -269,6 +270,28 @@ router.get("/patients", requireDoctor, async (_req, res) => {
         } : null,
       })),
   })));
+});
+
+// ── GET /doctor/donations ──────────────────────────────────────
+router.get("/donations", requireDoctor, async (_req, res) => {
+  try {
+    const rows = await db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+    res.json(rows);
+  } catch (err) {
+    console.error("Doctor donations error:", err);
+    res.status(500).json({ error: "Failed to fetch donations" });
+  }
+});
+
+// ── PATCH /doctor/donations/:id/verify ────────────────────────
+router.patch("/donations/:id/verify", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const { verified } = req.body;
+  await db.update(donationsTable)
+    .set({ status: verified ? "verified" : "pending" })
+    .where(eq(donationsTable.id, id));
+  res.json({ success: true });
 });
 
 function fmtTime(t: string) {

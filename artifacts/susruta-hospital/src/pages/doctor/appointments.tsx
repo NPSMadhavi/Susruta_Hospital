@@ -5,7 +5,7 @@ import {
   Calendar, Clock, Phone, FileText, ImageIcon, Camera, Upload,
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn,
   ChevronDown, ChevronUp, Mail, StickyNote, Save, ClipboardList,
-  Stethoscope, CloudUpload, FilePlus2,
+  Stethoscope, CloudUpload, FilePlus2, Heart, IndianRupee,
 } from "lucide-react";
 import { VideoCall } from "@/components/VideoCall";
 import logoImg from "@assets/logo_1773840200056.png";
@@ -52,7 +52,11 @@ type RegisteredPatient = {
   }[];
 };
 
-type Section = "online" | "offline" | "rxneeded" | "patients";
+type Section = "online" | "offline" | "rxneeded" | "patients" | "donations";
+type DonationRow = {
+  id: number; patientCode: string | null; patientName: string | null; patientEmail: string | null;
+  amount: string; lastSixDigits: string; status: string; thankYouSent: boolean; createdAt: string;
+};
 
 // ── Helpers ─────────────────────────────────────────────────────
 const IST = "Asia/Kolkata";
@@ -732,6 +736,8 @@ export default function DoctorPortal() {
   const [previewDocs, setPreviewDocs] = useState<DocFile[]>([]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [donations, setDonations] = useState<DonationRow[]>([]);
+  const [donationsLoading, setDonationsLoading] = useState(false);
 
   const listPanel = useDragResize(300, 180, 600);
   const detailPanel = useDragResize(420, 280, 720);
@@ -778,6 +784,24 @@ export default function DoctorPortal() {
     setSelectedApptId(null);
   }
 
+  async function loadDonations() {
+    setDonationsLoading(true);
+    try {
+      const data = await doctorFetch("/donations");
+      setDonations(Array.isArray(data) ? data : []);
+    } catch {}
+    setDonationsLoading(false);
+  }
+
+  async function toggleDonationVerify(d: DonationRow) {
+    const newVerified = d.status !== "verified";
+    await doctorFetch(`/donations/${d.id}/verify`, {
+      method: "PATCH",
+      body: JSON.stringify({ verified: newVerified }),
+    });
+    setDonations(prev => prev.map(x => x.id === d.id ? { ...x, status: newVerified ? "verified" : "pending" } : x));
+  }
+
   async function handleCallEnded(apptId: number) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, joinEnabled: false, status: "completed" } : a));
     try { await doctorFetch(`/online-appointments/${apptId}/complete`, { method: "POST" }); } catch { }
@@ -802,10 +826,11 @@ export default function DoctorPortal() {
   const selectedPatient = registeredPatients.find(p => p.id === selectedPatientId) ?? null;
 
   const navItems = [
-    { key: "online" as Section,   label: "Online Consultations", icon: <Video size={15} />,         count: upcomingOnline.length, color: "text-white" },
-    { key: "offline" as Section,  label: "In-Person Visits",     icon: <MapPin size={15} />,         count: upcomingOffline.length, color: "text-white" },
-    { key: "rxneeded" as Section, label: "Rx Needed",            icon: <ClipboardList size={15} />,  count: rxNeeded.length, color: rxNeeded.length > 0 ? "text-amber-300" : "text-white" },
-    { key: "patients" as Section, label: "All Patients",         icon: <Users size={15} />,          count: registeredPatients.length, color: "text-white" },
+    { key: "online" as Section,    label: "Online Consultations", icon: <Video size={15} />,         count: upcomingOnline.length, color: "text-white" },
+    { key: "offline" as Section,   label: "In-Person Visits",     icon: <MapPin size={15} />,         count: upcomingOffline.length, color: "text-white" },
+    { key: "rxneeded" as Section,  label: "Rx Needed",            icon: <ClipboardList size={15} />,  count: rxNeeded.length, color: rxNeeded.length > 0 ? "text-amber-300" : "text-white" },
+    { key: "patients" as Section,  label: "All Patients",         icon: <Users size={15} />,          count: registeredPatients.length, color: "text-white" },
+    { key: "donations" as Section, label: "Donations",            icon: <Heart size={15} />,          count: donations.length, color: "text-white" },
   ];
 
   const hasDetail = (section === "rxneeded" || section === "online") ? selectedAppt !== null
@@ -815,6 +840,7 @@ export default function DoctorPortal() {
 
   function selectSection(s: Section) {
     setSection(s); setSelectedApptId(null); setSelectedPatientId(null); setPreviewDoc(null);
+    if (s === "donations") loadDonations();
   }
 
   return (
@@ -883,11 +909,13 @@ export default function DoctorPortal() {
               {section === "online" ? "Online Consultations"
                 : section === "offline" ? "In-Person Visits"
                 : section === "rxneeded" ? "Rx Needed"
+                : section === "donations" ? "Donations"
                 : "All Patients"}
             </h2>
             <p className="text-[11px] text-gray-400">
               {section === "patients" ? `${registeredPatients.length} registered`
                 : section === "rxneeded" ? `${rxNeeded.length} awaiting prescription`
+                : section === "donations" ? `${donations.length} total donations`
                 : `${section === "online" ? upcomingOnline.length : upcomingOffline.length} upcoming`}
             </p>
           </div>
@@ -920,6 +948,43 @@ export default function DoctorPortal() {
               ) : rxNeeded.map(appt => (
                 <RxRow key={appt.id} appt={appt} selected={selectedApptId === appt.id}
                   onClick={() => { setSelectedApptId(appt.id); setSelectedPatientId(null); setPreviewDoc(null); }} />
+              ))
+            ) : section === "donations" ? (
+              donationsLoading ? (
+                <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+              ) : donations.length === 0 ? (
+                <div className="flex flex-col items-center py-14 text-center px-4">
+                  <Heart size={28} className="text-gray-200 mb-2" />
+                  <p className="text-sm font-medium text-gray-400">No donations yet</p>
+                  <p className="text-xs text-gray-300 mt-1">Patient donations appear here</p>
+                </div>
+              ) : donations.map(d => (
+                <div key={d.id} className="border-b border-gray-100 px-3 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {d.patientCode && (
+                        <span className="text-[10px] font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded px-1.5 py-0.5 shrink-0">
+                          {d.patientCode}
+                        </span>
+                      )}
+                      <p className="text-sm font-semibold text-gray-800 truncate">{d.patientName || "—"}</p>
+                    </div>
+                    <span className="text-sm font-black text-emerald-700 shrink-0">₹{d.amount}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-gray-400 font-mono">xxxx{d.lastSixDigits} · {new Date(d.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</p>
+                    <button onClick={() => toggleDonationVerify(d)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0",
+                        d.status === "verified"
+                          ? "bg-green-500 border-green-600 text-white"
+                          : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                      )}>
+                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", d.status === "verified" ? "bg-white" : "bg-gray-300")} />
+                      {d.status === "verified" ? "Received" : "Not Received"}
+                    </button>
+                  </div>
+                </div>
               ))
             ) : section === "online" ? (
               upcomingOnline.length === 0 ? (
@@ -996,6 +1061,42 @@ export default function DoctorPortal() {
                   onDocClick={(d, docs) => { setPreviewDoc(d); setPreviewDocs(docs); }}
                 />
               )}
+            </div>
+          ) : section === "donations" ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-xs mx-auto space-y-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Summary</p>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                    <IndianRupee size={18} className="text-emerald-700" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Total Donated</p>
+                    <p className="text-2xl font-black text-gray-800">
+                      ₹{donations.reduce((s, d) => s + parseFloat(d.amount || "0"), 0).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={18} className="text-green-700" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Received</p>
+                    <p className="text-2xl font-black text-green-700">{donations.filter(d => d.status === "verified").length}</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                    <Clock size={18} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Not Received</p>
+                    <p className="text-2xl font-black text-amber-600">{donations.filter(d => d.status !== "verified").length}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 text-center mt-4">Toggle "Received" on each donation after verifying on PhonePe</p>
+              </div>
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
