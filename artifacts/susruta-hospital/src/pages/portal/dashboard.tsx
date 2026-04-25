@@ -1013,7 +1013,7 @@ export default function PatientDashboard() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-base font-bold text-gray-800">My Medical Documents</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Upload reports, test results, and health records. They'll be available to attach during consultations.</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Upload reports, test results, and health records. The doctor can view them at any time.</p>
                     </div>
                     <button onClick={() => docFileRef.current?.click()}
                       className="flex items-center gap-2 bg-[#1a3d2b] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#1a3d2b]/90 transition-colors shrink-0 ml-3">
@@ -1044,7 +1044,7 @@ export default function PatientDashboard() {
                         <FolderOpen size={28} className="text-gray-300" />
                       </div>
                       <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
-                      <p className="text-sm text-gray-400 mb-5">Upload your medical records here — they'll be ready to share when you book an online consultation.</p>
+                      <p className="text-sm text-gray-400 mb-5">Upload your reports, test results, or health records — the doctor can review them at any time.</p>
                       <button onClick={() => docFileRef.current?.click()}
                         className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
                         <Upload size={16} /> Upload Document
