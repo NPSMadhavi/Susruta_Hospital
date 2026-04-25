@@ -6,7 +6,7 @@ import {
   RefreshCw, CheckCircle2, MapPin,
   Download, Heart, QrCode, X,
   AlertCircle, Phone, ChevronDown, ChevronUp,
-  Bell, ImageIcon, Loader2, Trash2,
+  Bell, ImageIcon, Loader2, Trash2, Upload, Camera, FolderOpen,
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Types ───────────────────────────────────────────────────────
 type DocFile = { name: string; objectPath: string; contentType: string; size: number };
+type PatientDoc = { id: number; name: string; objectPath: string; contentType: string; size: number; createdAt: string | null };
 type OnlineAppt = {
   id: number; status: string; reason?: string; createdAt: string;
   joinEnabled: boolean; joinEnabledAt: string | null;
@@ -583,7 +584,12 @@ export default function PatientDashboard() {
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
   const [showBooking, setShowBooking] = useState(false);
-  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions">("appointments");
+  const [mainTab, setMainTab] = useState<"appointments" | "prescriptions" | "docs">("appointments");
+  const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
+  const [docsUploading, setDocsUploading] = useState(false);
+  const [docsError, setDocsError] = useState("");
+  const docFileRef = useRef<HTMLInputElement>(null);
+  const docCamRef = useRef<HTMLInputElement>(null);
   const [verifyResending, setVerifyResending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
@@ -647,19 +653,50 @@ export default function PatientDashboard() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [me, myOnline, myPhysical, settings] = await Promise.all([
+    const [me, myOnline, myPhysical, settings, myDocs] = await Promise.all([
       patientFetch("/me"),
       fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
       patientFetch("/appointments"),
       fetch(`${BASE}/api/admin/settings`).then(r => r.ok ? r.json() : {}),
+      fetch(`${BASE}/api/patient/documents`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
     ]);
     if (!me) return;
     setPatient(me);
     setOnlineAppts(myOnline ?? []);
     setPhysicalAppts(myPhysical ?? []);
+    setPatientDocs(myDocs ?? []);
     phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
     setLoading(false);
   }, []);
+
+  async function uploadPatientDoc(file: File) {
+    setDocsUploading(true); setDocsError("");
+    try {
+      const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
+      });
+      if (!urlRes.ok) throw new Error("Could not get upload URL");
+      const { uploadURL, objectPath } = await urlRes.json();
+      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      const saveRes = await fetch(`${BASE}/api/patient/documents`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
+      });
+      if (!saveRes.ok) throw new Error("Could not save document");
+      const doc = await saveRes.json();
+      setPatientDocs(prev => [doc, ...prev]);
+    } catch (e: any) { setDocsError(e.message || "Upload failed"); }
+    finally { setDocsUploading(false); }
+  }
+
+  async function deletePatientDoc(id: number) {
+    if (!confirm("Remove this document?")) return;
+    const res = await fetch(`${BASE}/api/patient/documents/${id}`, { method: "DELETE", credentials: "include" });
+    if (res.ok) setPatientDocs(prev => prev.filter(d => d.id !== id));
+  }
 
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/patient/sse`, { withCredentials: true });
@@ -942,6 +979,23 @@ export default function PatientDashboard() {
                   )}>{prescriptions.length}</span>
                 )}
               </button>
+              <button
+                onClick={() => setMainTab("docs")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+                  mainTab === "docs"
+                    ? "bg-[#1a3d2b] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                )}
+              >
+                <FolderOpen size={15} /> My Docs
+                {patientDocs.length > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    mainTab === "docs" ? "bg-white/20 text-white" : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                  )}>{patientDocs.length}</span>
+                )}
+              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -1050,6 +1104,75 @@ export default function PatientDashboard() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </motion.div>
+              ) : mainTab === "docs" ? (
+                <motion.div key="docs" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                  {/* Upload buttons */}
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
+                      {docsUploading ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+                      <span>Take Photo</span>
+                      <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                    </label>
+                    <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
+                      <Upload size={20} />
+                      <span>Upload File</span>
+                      <input ref={docFileRef} type="file" accept="image/*,application/pdf" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPatientDoc(f); e.target.value = ""; } }} />
+                    </label>
+                  </div>
+                  {docsError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-red-700 mb-4">
+                      <AlertCircle size={14} /> {docsError}
+                    </div>
+                  )}
+                  {patientDocs.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-gray-200 px-6 py-12 text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <FolderOpen size={28} className="text-gray-300" />
+                      </div>
+                      <p className="text-lg font-bold text-gray-500 mb-1">No documents yet</p>
+                      <p className="text-sm text-gray-400">Upload your medical reports, lab results, or scans above.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {patientDocs.map((doc) => {
+                        const isImg = doc.contentType.startsWith("image/");
+                        const url = `${BASE}/api/storage${doc.objectPath}`;
+                        return (
+                          <div key={doc.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm group">
+                            <a href={url} target="_blank" rel="noopener noreferrer">
+                              {isImg
+                                ? <img src={url} alt={doc.name} className="w-full h-32 object-cover bg-gray-50" />
+                                : <div className="w-full h-32 bg-blue-50 flex items-center justify-center">
+                                    <FileText size={36} className="text-blue-400" />
+                                  </div>
+                              }
+                            </a>
+                            <div className="px-3 py-2.5">
+                              <p className="text-xs font-semibold text-gray-700 truncate mb-0.5">{doc.name}</p>
+                              {doc.createdAt && (
+                                <p className="text-[10px] text-gray-400">
+                                  {new Date(doc.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2">
+                                <a href={url} download target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-xs text-[#1a3d2b] font-bold hover:underline">
+                                  <Download size={11} /> Download
+                                </a>
+                                <button onClick={() => deletePatientDoc(doc.id)}
+                                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 font-medium ml-auto transition-colors">
+                                  <Trash2 size={11} /> Remove
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </motion.div>
