@@ -163,7 +163,7 @@ export default function AdminDonations() {
             <CheckCircle2 size={20} className="text-green-700" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Verified</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Received</p>
             <p className="text-2xl font-black text-green-700">{verifiedCount}</p>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function AdminDonations() {
             <Clock size={20} className="text-amber-600" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pending</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Not Received</p>
             <p className="text-2xl font-black text-amber-600">{pendingCount}</p>
           </div>
         </div>
@@ -231,13 +231,16 @@ export default function AdminDonations() {
                     <td className="px-5 py-4">
                       <button onClick={() => toggleVerify(d)}
                         className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+                          "relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all select-none",
                           d.status === "verified"
-                            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                            : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                            ? "bg-green-500 border-green-600 text-white"
+                            : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
                         )}>
-                        {d.status === "verified" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                        {d.status === "verified" ? "Verified" : "Pending"}
+                        <span className={cn(
+                          "w-3.5 h-3.5 rounded-full transition-colors shrink-0",
+                          d.status === "verified" ? "bg-white" : "bg-gray-300"
+                        )} />
+                        {d.status === "verified" ? "Received" : "Not Received"}
                       </button>
                     </td>
                     <td className="px-5 py-4">
