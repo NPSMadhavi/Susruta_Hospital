@@ -304,20 +304,27 @@ router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
   const [row] = await db.select().from(donationsTable).where(eq(donationsTable.id, id));
   if (!row) { res.status(404).json({ error: "not_found" }); return; }
+  if (!row.patientEmail) { res.status(400).json({ error: "no_email", message: "No email address on record for this donation." }); return; }
   if (row.thankYouSent) { res.json({ success: true, skipped: true }); return; }
   try {
     const { sendDonationThankYou } = await import("../lib/email");
+    const donationDate = row.createdAt
+      ? row.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+      : new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
     await sendDonationThankYou({
+      to: row.patientEmail,
       name: row.patientName || "Patient",
-      email: row.patientEmail || "",
+      patientCode: row.patientCode || null,
       amount: row.amount,
+      lastSixDigits: row.lastSixDigits || "",
+      donationDate,
     });
     await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
     broadcastDonationUpdate({ id, status: row.status, thankYouSent: true });
     res.json({ success: true });
   } catch (err) {
     console.error("Doctor donation thank-you error:", err);
-    res.status(500).json({ error: "email_failed" });
+    res.status(500).json({ error: "email_failed", message: (err as Error).message });
   }
 });
 

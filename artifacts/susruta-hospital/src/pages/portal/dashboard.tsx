@@ -817,9 +817,10 @@ export default function PatientDashboard() {
       {/* ══════════════════════════════════════════════════════
           MOBILE LAYOUT  (hidden on md+)
       ══════════════════════════════════════════════════════ */}
-      <div className="md:hidden flex flex-col" style={{ minHeight: "calc(100dvh - 56px)" }}>
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto pb-24 px-4 pt-4 space-y-0">
+      {/* Fixed-height mobile shell — fills exactly the space below the sticky header */}
+      <div className="md:hidden fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden bg-[#f4f7f5]" style={{ top: "64px" }}>
+        {/* Scrollable content — nav height is ~64px, pb ensures content isn't hidden */}
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-0 overscroll-contain">
           <AnimatePresence mode="wait">
 
             {/* ── Home tab ── */}
@@ -1134,7 +1135,7 @@ export default function PatientDashboard() {
         </div>
 
         {/* ── Mobile Bottom Navigation Bar ── */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex safe-pb">
+        <nav className="shrink-0 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.07)] flex" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {([ 
             { id: "home",          label: "Home",         icon: User,      badge: 0 },
             { id: "appointments",  label: "Appointments", icon: Calendar,  badge: upcomingCount },
