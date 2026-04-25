@@ -283,6 +283,28 @@ router.get("/donations", requireDoctor, async (_req, res) => {
   }
 });
 
+// ── POST /doctor/donations/:id/thank-you ──────────────────────
+router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const [row] = await db.select().from(donationsTable).where(eq(donationsTable.id, id));
+  if (!row) { res.status(404).json({ error: "not_found" }); return; }
+  if (row.thankYouSent) { res.json({ success: true, skipped: true }); return; }
+  try {
+    const { sendDonationThankYou } = await import("../lib/email");
+    await sendDonationThankYou({
+      name: row.patientName || "Patient",
+      email: row.patientEmail || "",
+      amount: row.amount,
+    });
+    await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Doctor donation thank-you error:", err);
+    res.status(500).json({ error: "email_failed" });
+  }
+});
+
 // ── PATCH /doctor/donations/:id/verify ────────────────────────
 router.patch("/donations/:id/verify", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
