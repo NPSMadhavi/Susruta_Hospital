@@ -1,6 +1,18 @@
 import nodemailer from "nodemailer";
 import { createHmac } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { db, siteSettingsTable } from "@workspace/db";
+
+// ── Inline logo for emails (base64 — always visible, never blocked) ───
+const LOGO_BASE64 = (() => {
+  try {
+    const buf = readFileSync(join(__dirname, "assets", "logo.png"));
+    return buf.toString("base64");
+  } catch {
+    return null;
+  }
+})();
 
 // ── Load SMTP config from DB (env vars as fallback) ───────────
 export interface SmtpConfig {
@@ -154,6 +166,21 @@ const EMAIL_FOOTER_HTML = `
   </tr>`;
 
 function emailWrapper(content: string) {
+  const logoHeader = LOGO_BASE64
+    ? `<tr>
+          <td style="background:#ffffff;padding:28px 36px 20px;text-align:center;border-bottom:4px solid #1a3d2b;">
+            <img src="data:image/png;base64,${LOGO_BASE64}" alt="Susruta Hospital" width="240" height="27"
+              style="display:block;margin:0 auto;max-width:240px;height:auto;border:0;" />
+            <p style="color:#6b7280;margin:8px 0 0;font-size:11px;font-family:Arial,sans-serif;letter-spacing:0.5px;">Authentic Ayurvedic Healthcare &middot; Tirupati</p>
+          </td>
+        </tr>`
+    : `<tr>
+          <td style="background:#1a3d2b;padding:32px;text-align:center;border-bottom:4px solid #0f2419;">
+            <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:bold;letter-spacing:0.5px;font-family:Arial,sans-serif;">SUSRUTA HOSPITAL</h1>
+            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:12px;font-family:Arial,sans-serif;">Authentic Ayurvedic Healthcare &middot; Tirupati</p>
+          </td>
+        </tr>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -165,13 +192,8 @@ function emailWrapper(content: string) {
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 20px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-        <tr>
-          <td style="background:#1a3d2b;padding:32px;text-align:center;">
-            <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:bold;letter-spacing:0.5px;font-family:Arial,sans-serif;">SUSRUTA HOSPITAL</h1>
-            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:12px;font-family:Arial,sans-serif;">Authentic Ayurvedic Healthcare · Tirupati</p>
-          </td>
-        </tr>
+      <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+        ${logoHeader}
         ${content}
         ${EMAIL_FOOTER_HTML}
       </table>
