@@ -368,11 +368,10 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
         {/* Action */}
         <div className="mt-5">
           {isInCall ? (
-            <>
-              <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
-              <CallDocumentUpload apptId={onlineAppt!.id} />
-              <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
-            </>
+            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-300 rounded-2xl px-4 py-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+              <p className="text-emerald-700 font-bold text-sm">Video call in progress…</p>
+            </div>
           ) : canJoin ? (
             <>
               <button onClick={onJoin}
@@ -488,11 +487,10 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded, onDocumentsChang
           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
             <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50">
               {canJoin && videoCallApptId === onlineAppt!.id ? (
-                <>
-                  <VideoCall apptId={onlineAppt!.id} role="patient" onCallEnded={onCallEnded} autoJoin />
-                  <CallDocumentUpload apptId={onlineAppt!.id} />
-                  <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
-                </>
+                <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                  <p className="text-emerald-700 font-bold text-sm">Video call in progress…</p>
+                </div>
               ) : canJoin ? (
                 <>
                   <button onClick={onJoin}
@@ -596,14 +594,22 @@ export default function PatientDashboard() {
   const sseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
+  const chimeCountRef = useRef(0);
   const phonepeQrRef = useRef<string | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
 
   function startChiming() {
     shouldChimeRef.current = true;
+    chimeCountRef.current = 0;
     if (chimeIntervalRef.current) clearInterval(chimeIntervalRef.current);
     chimeIntervalRef.current = setInterval(() => {
-      if (shouldChimeRef.current) playChime();
+      if (!shouldChimeRef.current) { clearInterval(chimeIntervalRef.current!); return; }
+      if (chimeCountRef.current < 2) {
+        playChime();
+        chimeCountRef.current++;
+      } else {
+        stopChiming();
+      }
     }, 15_000);
   }
 
@@ -621,13 +627,10 @@ export default function PatientDashboard() {
     setVideoCallApptId(apptId);
     setJoinPopup(null);
     setMainTab("appointments");
+    setMobileTab("appointments");
     fetch(`${BASE}/api/online-appointments/${apptId}/patient-joined`, {
       method: "POST", credentials: "include",
     }).catch(() => {});
-    // Scroll to the video call section (critical on mobile where it's below the sidebar)
-    setTimeout(() => {
-      mainContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
   }
 
   function handleCallEnded(apptId: number) {
@@ -785,6 +788,22 @@ export default function PatientDashboard() {
           />
         )}
       </AnimatePresence>
+
+      {/* Fixed full-screen video call overlay — stable across tab switches */}
+      {videoCallApptId !== null && (() => {
+        const callAppt = onlineAppts.find(a => a.id === videoCallApptId);
+        return (
+          <div className="fixed inset-0 z-40 bg-black flex flex-col overflow-hidden">
+            <VideoCall apptId={videoCallApptId} role="patient" onCallEnded={() => handleCallEnded(videoCallApptId)} autoJoin />
+            {callAppt && (
+              <div className="bg-black px-4 pb-safe pb-4 space-y-2 shrink-0">
+                <CallDocumentUpload apptId={videoCallApptId} />
+                <GuestLinkCard apptId={videoCallApptId} guestToken={callAppt.guestToken} />
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="bg-[#1a3d2b] sticky top-0 z-30 shadow-none sm:shadow-md">
