@@ -10,6 +10,7 @@ import {
   patientsTable,
   prescriptionsTable,
   appointmentsTable,
+  patientDocumentsTable,
 } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
@@ -222,6 +223,52 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
 
   res.json({ ok: true });
+});
+
+// ── GET /api/doctor/patients — All registered patients with docs + appt history ──
+router.get("/patients", requireDoctor, async (_req, res) => {
+  const [patients, docs, onlineRows] = await Promise.all([
+    db.select().from(patientsTable).orderBy(patientsTable.name),
+    db.select().from(patientDocumentsTable),
+    db
+      .select({
+        appt: onlineAppointmentsTable,
+        slot: onlineSlotsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(onlineAppointmentsTable)
+      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
+  ]);
+
+  res.json(patients.map(p => ({
+    id: p.id,
+    patientCode: p.patientCode ?? null,
+    name: p.name,
+    email: p.email,
+    phone: p.phone ?? null,
+    createdAt: p.createdAt.toISOString(),
+    documents: docs
+      .filter(d => d.patientId === p.id)
+      .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
+    appointments: onlineRows
+      .filter(r => r.appt.patientId === p.id)
+      .map(r => ({
+        id: r.appt.id,
+        status: r.appt.status,
+        date: r.slot.date,
+        timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
+        reason: r.appt.reason ?? null,
+        joinEnabled: r.appt.joinEnabled,
+        documents: r.appt.documents as any[],
+        prescription: r.prescription ? {
+          photoObjectPath: r.prescription.photoObjectPath ?? null,
+          notes: r.prescription.notes ?? null,
+          updatedAt: r.prescription.updatedAt.toISOString(),
+        } : null,
+      })),
+  })));
 });
 
 function fmtTime(t: string) {
