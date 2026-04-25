@@ -17,6 +17,7 @@ import { eq, desc, inArray } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
 import { notifyPatientSessionEnded } from "./patient";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
+import { addAppointmentSseClient } from "../lib/appointmentSse";
 
 const router = Router();
 const COOKIE = "doctor_session";
@@ -271,6 +272,13 @@ router.get("/patients", requireDoctor, async (_req, res) => {
         } : null,
       })),
   })));
+});
+
+// ── GET /doctor/online-appointments/sse — live appointment updates ─
+router.get("/online-appointments/sse", requireDoctor, (req, res) => {
+  addAppointmentSseClient(res);
+  res.write(": connected\n\n");
+  req.on("close", () => {/* handled by addAppointmentSseClient cleanup */});
 });
 
 // ── GET /doctor/donations/sse — live updates ──────────────────

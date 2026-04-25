@@ -870,6 +870,31 @@ export default function DoctorPortal() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [load]);
 
+  // ── Real-time appointment updates via SSE ─────────────────────
+  useEffect(() => {
+    const es = new EventSource(`${BASE}/api/doctor/online-appointments/sse`, { withCredentials: true });
+    es.addEventListener("new_online_appointment", (e) => {
+      const appt = JSON.parse((e as MessageEvent).data) as OnlineAppt;
+      setOnline(prev => {
+        if (prev.some(a => a.id === appt.id)) return prev;
+        return [appt, ...prev];
+      });
+    });
+    es.addEventListener("appointment_updated", (e) => {
+      const payload = JSON.parse((e as MessageEvent).data) as { id: number; joinEnabled: boolean; status: string };
+      setOnline(prev => prev.map(a =>
+        a.id === payload.id ? { ...a, joinEnabled: payload.joinEnabled, status: payload.status } : a
+      ));
+      setRegisteredPatients(prev => prev.map(p => ({
+        ...p,
+        appointments: p.appointments.map(a =>
+          a.id === payload.id ? { ...a, joinEnabled: payload.joinEnabled, status: payload.status } : a
+        ),
+      })));
+    });
+    return () => es.close();
+  }, []);
+
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/doctor/donations/sse`, { withCredentials: true });
     es.addEventListener("donation_updated", (e) => {

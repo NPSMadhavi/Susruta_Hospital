@@ -12,6 +12,14 @@ import { sendAppointmentAckEmail } from "../lib/email";
 import type { DocumentFile } from "@workspace/db";
 import { notifyPatientJoinEnabled, notifyPatientSessionEnded } from "./patient";
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
+import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated } from "../lib/appointmentSse";
+
+function fmtTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return t;
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
 
 const router = Router();
 
@@ -62,6 +70,28 @@ router.post("/", requirePatient, async (req: any, res) => {
     slotEndTime: slot.endTime,
     reason: reason,
   }).catch((err) => console.error("[email] ack failed:", err));
+
+  // Notify doctor portal in real-time
+  broadcastNewOnlineAppointment({
+    id: appt.id,
+    type: "online",
+    status: appt.status,
+    reason: appt.reason ?? null,
+    documents: appt.documents,
+    joinEnabled: appt.joinEnabled,
+    createdAt: appt.createdAt.toISOString(),
+    date: slot.date,
+    timeLabel: `${fmtTime(slot.startTime)} \u2013 ${fmtTime(slot.endTime)}`,
+    slotId: slot.id,
+    patient: {
+      id: patient.id,
+      patientCode: patient.patientCode ?? null,
+      name: patient.name,
+      email: patient.email,
+      phone: patient.phone ?? null,
+    },
+    prescription: null,
+  });
 
   res.status(201).json(appt);
 });
@@ -238,6 +268,9 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   // Notify this patient via SSE — include roomName + guestToken so frontend can skip re-fetching
   notifyPatientJoinEnabled(patient.id, id, roomName, guestToken);
 
+  // Notify doctor portal in real-time
+  broadcastAppointmentUpdated({ id, joinEnabled: true, status: "confirmed" });
+
   res.json({ ok: true, joinEnabled: true, roomName, apptId: id });
 });
 
@@ -262,6 +295,7 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   }
 
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
 
   res.json({ ok: true, joinEnabled: false });
 });
@@ -276,6 +310,8 @@ router.post("/admin/:id/reset-pending", requireAdmin, async (req, res) => {
   await db.update(onlineAppointmentsTable)
     .set({ status: "pending", joinEnabled: false, joinEnabledAt: null, livekitRoomName: null, guestToken: null })
     .where(eq(onlineAppointmentsTable.id, id));
+
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "pending" });
 
   res.json({ ok: true });
 });
@@ -302,6 +338,8 @@ router.patch("/admin/:id/approve", requireAdmin, async (req, res) => {
     .where(eq(onlineAppointmentsTable.id, id))
     .returning();
 
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "confirmed" });
+
   res.json({ ...updated, slot, patient });
 });
 
@@ -318,6 +356,8 @@ router.patch("/admin/:id/cancel", requireAdmin, async (req, res) => {
     .set({ status: "cancelled" })
     .where(eq(onlineAppointmentsTable.id, id))
     .returning();
+
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "cancelled" });
 
   res.json(updated);
 });
