@@ -37,6 +37,12 @@ const BookBody = z.object({
 
 router.post("/", requirePatient, async (req: any, res) => {
   const patient = req.patient;
+
+  if (!patient.emailVerified) {
+    res.status(403).json({ error: "email_not_verified", message: "Please verify your email address before booking an appointment." });
+    return;
+  }
+
   const parsed = BookBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "validation_error", issues: parsed.error.issues });

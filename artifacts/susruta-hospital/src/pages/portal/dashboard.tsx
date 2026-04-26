@@ -929,10 +929,16 @@ export default function PatientDashboard() {
                     </div>
                   )}
 
-                  <button onClick={() => setShowBooking(true)}
-                    className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl active:bg-white/90 transition-colors shadow-sm">
-                    <Calendar size={18} /> Book an Appointment
-                  </button>
+                  {patient?.emailVerified ? (
+                    <button onClick={() => setShowBooking(true)}
+                      className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl active:bg-white/90 transition-colors shadow-sm">
+                      <Calendar size={18} /> Book an Appointment
+                    </button>
+                  ) : (
+                    <div className="w-full bg-white/20 border border-white/30 rounded-2xl px-4 py-3 text-center">
+                      <p className="text-white/80 text-sm font-medium">Verify your email to book appointments</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary stats */}
@@ -1041,10 +1047,14 @@ export default function PatientDashboard() {
                     </div>
                     <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
                     <p className="text-sm text-gray-400 mb-5">Book a consultation with Dr. Murali Krishna</p>
-                    <button onClick={() => setShowBooking(true)}
-                      className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base active:bg-[#1a3d2b]/90 transition-colors">
-                      <Calendar size={16} /> Book an Appointment
-                    </button>
+                    {patient?.emailVerified ? (
+                      <button onClick={() => setShowBooking(true)}
+                        className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base active:bg-[#1a3d2b]/90 transition-colors">
+                        <Calendar size={16} /> Book an Appointment
+                      </button>
+                    ) : (
+                      <p className="text-sm text-amber-600 font-medium bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">Verify your email to book appointments</p>
+                    )}
                   </div>
                 )}
 
@@ -1235,10 +1245,16 @@ export default function PatientDashboard() {
                     <p className="text-white/40 text-xs mt-1.5">Tell this number when visiting the clinic</p>
                   </div>
                 )}
-                <button onClick={() => setShowBooking(true)}
-                  className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-sm">
-                  <Calendar size={18} /> Book an Appointment
-                </button>
+                {patient?.emailVerified ? (
+                  <button onClick={() => setShowBooking(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-white text-[#1a3d2b] font-bold text-base px-4 py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-sm">
+                    <Calendar size={18} /> Book an Appointment
+                  </button>
+                ) : (
+                  <div className="w-full bg-white/20 border border-white/30 rounded-2xl px-4 py-3 text-center">
+                    <p className="text-white/80 text-sm font-medium">Verify your email to book appointments</p>
+                  </div>
+                )}
               </div>
 
               {hasLiveAppt && liveAppt && (
@@ -1381,10 +1397,14 @@ export default function PatientDashboard() {
                         </div>
                         <p className="text-lg font-bold text-gray-500 mb-1">No upcoming appointments</p>
                         <p className="text-sm text-gray-400 mb-5">Book an appointment with Dr. Murali Krishna</p>
-                        <button onClick={() => setShowBooking(true)}
-                          className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
-                          <Calendar size={16} /> Book an Appointment
-                        </button>
+                        {patient?.emailVerified ? (
+                          <button onClick={() => setShowBooking(true)}
+                            className="inline-flex items-center gap-2 bg-[#1a3d2b] text-white font-bold px-6 py-3 rounded-2xl text-base hover:bg-[#1a3d2b]/90 transition-colors">
+                            <Calendar size={16} /> Book an Appointment
+                          </button>
+                        ) : (
+                          <p className="text-sm text-amber-600 font-medium bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">Verify your email to book appointments</p>
+                        )}
                       </div>
                     )}
                     {pastAppts.length > 0 && (
