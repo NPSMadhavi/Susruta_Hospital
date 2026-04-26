@@ -723,6 +723,16 @@ export default function PatientDashboard() {
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/patient/sse`, { withCredentials: true });
     sseRef.current = es;
+
+    // On reconnect (not the initial open), re-fetch appointment state to catch any
+    // events missed while the server was restarting or the connection was down.
+    let sseConnected = false;
+    es.onopen = () => {
+      if (!sseConnected) { sseConnected = true; return; } // skip initial connect
+      // Reconnected after a drop — resync to catch any missed events
+      loadData();
+    };
+
     es.addEventListener("join_enabled", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       playChime();
@@ -746,7 +756,7 @@ export default function PatientDashboard() {
       setDonationPopup(prev => prev ?? { apptId: data.apptId, qrObjectPath: data.qrObjectPath });
     });
     return () => { es.close(); stopChiming(); };
-  }, []);
+  }, [loadData]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

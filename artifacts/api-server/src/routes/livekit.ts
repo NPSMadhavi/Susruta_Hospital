@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
-import { db, onlineAppointmentsTable } from "@workspace/db";
+import { db, onlineAppointmentsTable, siteSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { notifyAdminCallEnded } from "./appointments";
+import { notifyPatientSessionEnded } from "./patient";
+import { broadcastAppointmentUpdated } from "../lib/appointmentSse";
 import express from "express";
 
 const router = Router();
@@ -137,16 +139,30 @@ router.post(
 
       if (event.event === "room_finished") {
         const roomName = event.room?.name;
+        console.log(`[livekit webhook] room_finished: ${roomName}`);
         if (roomName?.startsWith("susruta-appt-")) {
           const apptId = parseInt(roomName.replace("susruta-appt-", ""), 10);
           if (!isNaN(apptId)) {
-            // Mark appointment as completed and clear joinEnabled
+            const [appt] = await db.select().from(onlineAppointmentsTable)
+              .where(eq(onlineAppointmentsTable.id, apptId));
+
+            // Only act if it wasn't already ended by the doctor/admin (to avoid double-notifications)
+            const wasStillJoinEnabled = appt?.joinEnabled ?? false;
+
             await db.update(onlineAppointmentsTable)
               .set({ joinEnabled: false, status: "completed" })
               .where(eq(onlineAppointmentsTable.id, apptId));
 
             // Notify admin panel
             notifyAdminCallEnded(apptId);
+
+            if (wasStillJoinEnabled && appt) {
+              // Room closed by LiveKit itself (network blip, timeout, etc.) — notify everyone
+              console.log(`[livekit webhook] room closed by LiveKit, notifying patient ${appt.patientId} and doctor portal`);
+              const [settings] = await db.select().from(siteSettingsTable);
+              notifyPatientSessionEnded(appt.patientId, apptId, settings?.phonepeQrObjectPath ?? null);
+              broadcastAppointmentUpdated({ id: apptId, joinEnabled: false, status: "completed" });
+            }
           }
         }
       }
