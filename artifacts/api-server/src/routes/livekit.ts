@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { notifyAdminCallEnded } from "./appointments";
 import { notifyPatientSessionEnded } from "./patient";
 import { broadcastAppointmentUpdated } from "../lib/appointmentSse";
+import { requireAdmin } from "../lib/auth";
 import express from "express";
 
 const router = Router();
@@ -122,6 +123,30 @@ router.get("/guest-token/:apptId", async (req, res) => {
   const roomName = appt.livekitRoomName || makeRoomName(apptId);
   // Issue a fresh guest token each time (short TTL)
   const token = await createGuestToken(apptId, (req.query.name as string) || "Guest");
+  res.json({ token, roomName, serverUrl: LK_URL });
+});
+
+// ── GET /api/livekit/admin-token/:apptId ─────────────────────
+// Admin joins an ongoing call as a silent observer (no cam/mic published by default)
+router.get("/admin-token/:apptId", requireAdmin, async (req, res) => {
+  const apptId = parseInt(req.params.apptId, 10);
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(eq(onlineAppointmentsTable.id, apptId));
+
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  if (!appt.joinEnabled) {
+    res.status(403).json({ error: "call_not_active", message: "This session is not currently active." });
+    return;
+  }
+
+  const roomName = appt.livekitRoomName || makeRoomName(apptId);
+  const at = new AccessToken(LK_API_KEY, LK_API_SECRET, {
+    identity: `admin-${Date.now()}`,
+    name: "Admin",
+    ttl: 3 * 60 * 60,
+  });
+  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, roomAdmin: true });
+  const token = await at.toJwt();
   res.json({ token, roomName, serverUrl: LK_URL });
 });
 

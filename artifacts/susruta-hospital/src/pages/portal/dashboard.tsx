@@ -7,6 +7,7 @@ import {
   Download, Heart, QrCode, X,
   AlertCircle, Phone, ChevronDown, ChevronUp,
   Bell, ImageIcon, Loader2, Trash2, Upload, Camera, FolderOpen,
+  Mic, VideoIcon, ShieldCheck,
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -571,6 +572,160 @@ function ApptCard({ item, videoCallApptId, onJoin, onCallEnded, onDocumentsChang
   );
 }
 
+// ── Permission Request Overlay ───────────────────────────────────
+type PermStatus = "idle" | "checking" | "success" | "denied" | "no_device" | "error";
+
+function PermissionRequestOverlay({ onDismiss }: { onDismiss: () => void }) {
+  const [status, setStatus] = useState<PermStatus>("idle");
+
+  async function checkPermissions() {
+    setStatus("checking");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach(t => t.stop());
+      setStatus("success");
+      setTimeout(onDismiss, 3500);
+    } catch (err: any) {
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setStatus("denied");
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setStatus("no_device");
+      } else {
+        setStatus("error");
+      }
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.65)" }}>
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-[#1a3d2b] px-5 pt-5 pb-4 relative">
+          <button onClick={onDismiss} className="absolute top-4 right-4 w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25 transition-colors">
+            <X size={14} />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+              <ShieldCheck size={22} className="text-white" />
+            </div>
+            <div>
+              <p className="font-extrabold text-white text-base leading-tight">Microphone &amp; Camera Check</p>
+              <p className="text-white/70 text-xs mt-0.5">Your doctor's team requested this</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-5">
+          {status === "idle" && (
+            <>
+              {/* Steps */}
+              <div className="space-y-3 mb-6">
+                {[
+                  { step: "1", icon: <Mic size={14} className="text-[#1a3d2b]" />, text: "Tap the green button below" },
+                  { step: "2", icon: <CheckCircle2 size={14} className="text-[#1a3d2b]" />, text: 'When your browser asks, tap "Allow"' },
+                  { step: "3", icon: <VideoIcon size={14} className="text-[#1a3d2b]" />, text: "You're all set — continue your consultation" },
+                ].map(({ step, icon, text }) => (
+                  <div key={step} className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#1a3d2b]/10 flex items-center justify-center shrink-0">
+                      {icon}
+                    </div>
+                    <p className="text-sm text-gray-700 pt-1 leading-snug">{text}</p>
+                  </div>
+                ))}
+              </div>
+              {/* CTA */}
+              <button
+                onClick={checkPermissions}
+                className="w-full flex items-center justify-center gap-2.5 py-4 rounded-2xl bg-[#1a3d2b] hover:bg-[#15322a] text-white font-extrabold text-base transition-colors shadow-lg shadow-[#1a3d2b]/20 active:scale-[0.98]"
+              >
+                <Mic size={20} />
+                Check Microphone &amp; Camera
+              </button>
+              <p className="text-center text-xs text-gray-400 mt-3">We only check — no audio or video is recorded.</p>
+            </>
+          )}
+
+          {status === "checking" && (
+            <div className="text-center py-6">
+              <Loader2 size={36} className="animate-spin text-[#1a3d2b] mx-auto mb-3" />
+              <p className="font-semibold text-gray-800">Checking your microphone and camera…</p>
+              <p className="text-sm text-gray-500 mt-1">Your browser may ask for permission.</p>
+            </div>
+          )}
+
+          {status === "success" && (
+            <div className="text-center py-6">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 size={34} className="text-emerald-600" />
+              </div>
+              <p className="font-extrabold text-gray-900 text-lg">All Good!</p>
+              <p className="text-sm text-gray-500 mt-1.5">Your microphone and camera are working. You can continue your consultation.</p>
+            </div>
+          )}
+
+          {status === "denied" && (
+            <div className="py-2">
+              <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-2xl px-4 py-3.5 mb-4">
+                <AlertCircle size={20} className="text-red-500 shrink-0" />
+                <div>
+                  <p className="font-bold text-red-700 text-sm">Microphone is Blocked</p>
+                  <p className="text-xs text-red-600 mt-0.5">Your browser has blocked access. Follow the steps below to allow it.</p>
+                </div>
+              </div>
+              <div className="space-y-3 mb-5">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">How to allow in Chrome:</p>
+                {[
+                  "Look for a 🔒 or camera icon in the address bar at the top",
+                  'Tap it, then tap "Allow" next to Microphone and Camera',
+                  "Refresh this page and try again",
+                ].map((s, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <p className="text-sm text-gray-700">{s}</p>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setStatus("idle")} className="w-full py-3 rounded-xl border-2 border-[#1a3d2b]/20 text-[#1a3d2b] font-bold text-sm hover:bg-[#1a3d2b]/5 transition-colors">
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {status === "no_device" && (
+            <div className="text-center py-4">
+              <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                <Mic size={26} className="text-amber-600" />
+              </div>
+              <p className="font-bold text-gray-900 mb-1">No Microphone Found</p>
+              <p className="text-sm text-gray-500">Please plug in a microphone or use a device with a built-in microphone.</p>
+              <button onClick={onDismiss} className="mt-4 px-6 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-sm hover:bg-gray-200 transition-colors">
+                Close
+              </button>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="text-center py-4">
+              <AlertCircle size={36} className="text-amber-500 mx-auto mb-3" />
+              <p className="font-bold text-gray-900 mb-1">Something Went Wrong</p>
+              <p className="text-sm text-gray-500">Please try again or contact our support.</p>
+              <button onClick={() => setStatus("idle")} className="mt-4 px-6 py-2.5 rounded-xl bg-[#1a3d2b] text-white font-semibold text-sm hover:bg-[#15322a] transition-colors">
+                Try Again
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ───────────────────────────────────────────────
 export default function PatientDashboard() {
   const [, nav] = useLocation();
@@ -581,6 +736,7 @@ export default function PatientDashboard() {
   const [joinPopup, setJoinPopup] = useState<{ apptId: number } | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
+  const [permissionRequest, setPermissionRequest] = useState<{ apptId: number } | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions" | "docs">("appointments");
   const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
@@ -755,6 +911,10 @@ export default function PatientDashboard() {
       // Show donation popup exactly once; LiveKit's onCallEnded will be suppressed by sessionEndedRef
       setDonationPopup(prev => prev ?? { apptId: data.apptId, qrObjectPath: data.qrObjectPath });
     });
+    es.addEventListener("permission_request", (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      setPermissionRequest({ apptId: data.apptId });
+    });
     return () => { es.close(); stopChiming(); };
   }, [loadData]);
 
@@ -801,6 +961,9 @@ export default function PatientDashboard() {
       <AnimatePresence>
         {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} apptId={donationPopup.apptId} patientCode={patient?.patientCode} onClose={() => setDonationPopup(null)} />}
+        {permissionRequest && (
+          <PermissionRequestOverlay onDismiss={() => setPermissionRequest(null)} />
+        )}
         {showBooking && (
           <BookingWizard
             patient={patient}

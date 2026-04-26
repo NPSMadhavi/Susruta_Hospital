@@ -35,6 +35,15 @@ export function notifyPatientSessionEnded(patientId: number, apptId: number, qrO
   }
 }
 
+export function notifyPatientPermissionRequest(patientId: number, apptId: number) {
+  const payload = `event: permission_request\ndata: ${JSON.stringify({ apptId })}\n\n`;
+  for (const client of patientSseClients) {
+    if (client.patientId === patientId) {
+      try { client.res.write(payload); } catch { patientSseClients.delete(client); }
+    }
+  }
+}
+
 // ── Patient ID counter helper ─────────────────────────────────
 async function assignPatientCode(): Promise<string | null> {
   try {

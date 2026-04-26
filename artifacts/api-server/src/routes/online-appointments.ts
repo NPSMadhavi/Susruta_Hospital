@@ -10,7 +10,7 @@ import { requireAdmin } from "../lib/auth";
 import { requireDoctor } from "../lib/doctor-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
 import type { DocumentFile } from "@workspace/db";
-import { notifyPatientJoinEnabled, notifyPatientSessionEnded } from "./patient";
+import { notifyPatientJoinEnabled, notifyPatientSessionEnded, notifyPatientPermissionRequest } from "./patient";
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
 import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated } from "../lib/appointmentSse";
 
@@ -304,6 +304,17 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
 
   res.json({ ok: true, joinEnabled: false });
+});
+
+// ── POST /api/online-appointments/admin/:id/request-permissions ─
+// Admin sends a permission-check prompt to the patient's browser via SSE
+router.post("/admin/:id/request-permissions", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  if (!appt.joinEnabled) { res.status(409).json({ error: "session_not_active" }); return; }
+  notifyPatientPermissionRequest(appt.patientId, id);
+  res.json({ ok: true });
 });
 
 // ── POST /api/online-appointments/admin/:id/reset-pending ─────
