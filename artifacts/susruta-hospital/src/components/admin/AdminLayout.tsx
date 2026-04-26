@@ -62,7 +62,13 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       try {
         const data = JSON.parse(e.data);
         if (data.type === "call_ended") {
-          notify("Video Call Ended", "The consultation call has finished. You can now review the appointment.");
+          const title = data.patientName
+            ? `Call ended — ${data.patientName}`
+            : "Video Call Ended";
+          const body = data.patientName
+            ? `${data.patientName}'s consultation has finished. Please upload their prescription.`
+            : "The consultation call has finished. You can now review the appointment.";
+          notify(title, body);
         } else if (data.type === "new_appointment") {
           // Handled by polling but also surfaces here for immediacy
         }

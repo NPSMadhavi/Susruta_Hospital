@@ -203,8 +203,9 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
   const [preview, setPreview] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [err, setErr] = useState("");
+  const [uploaded, setUploaded] = useState(false);
 
-  function handleFile(file: File) { setErr(""); setPreview(URL.createObjectURL(file)); setPendingFile(file); }
+  function handleFile(file: File) { setErr(""); setUploaded(false); setPreview(URL.createObjectURL(file)); setPendingFile(file); }
 
   async function confirmUpload() {
     if (!pendingFile) return;
@@ -226,46 +227,83 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
       });
       if (!saveRes.ok) throw new Error("Save failed");
       const rx = await saveRes.json();
-      setPreview(null); setPendingFile(null); onUploaded(rx);
+      setUploaded(true);
+      setTimeout(() => { setPreview(null); setPendingFile(null); setUploaded(false); onUploaded(rx); }, 800);
     } catch (e: any) { setErr(e.message || "Upload failed"); }
     finally { setUploading(false); }
   }
 
+  const existingImg = prescription?.photoObjectPath
+    ? `${BASE}/api/storage${prescription.photoObjectPath}`
+    : null;
+
   return (
     <div className="space-y-3">
-      {prescription?.photoObjectPath && !preview && (
-        <div className="bg-gray-50 rounded-xl overflow-hidden border border-border">
-          <img src={`${BASE}/api/storage${prescription.photoObjectPath}`} alt="Rx" className="w-full max-h-40 object-contain" />
+      {/* Preview selected file */}
+      {preview ? (
+        <div className="space-y-3">
+          <div className="relative rounded-2xl overflow-hidden border-2 border-[#1a3d2b]/25 bg-gray-50 shadow-sm">
+            <img src={preview} alt="Preview" className="w-full max-h-52 object-contain" />
+            {!uploading && !uploaded && (
+              <button
+                onClick={() => { setPreview(null); setPendingFile(null); }}
+                className="absolute top-2 right-2 w-7 h-7 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          {err && (
+            <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2 flex items-center gap-1.5">
+              <AlertCircle size={11} />{err}
+            </p>
+          )}
+          <button
+            onClick={confirmUpload}
+            disabled={uploading || uploaded}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+              uploaded
+                ? "bg-emerald-500 text-white"
+                : "bg-[#1a3d2b] text-white hover:bg-[#15322a] disabled:opacity-70"
+            )}
+          >
+            {uploading
+              ? <><Loader2 size={14} className="animate-spin" /> Uploading…</>
+              : uploaded
+                ? <><CheckCircle2 size={14} /> Saved!</>
+                : <><Upload size={14} /> Save Prescription</>
+            }
+          </button>
         </div>
-      )}
-      {preview && (
+      ) : (
+        /* Upload zone */
         <div className="space-y-2">
-          <div className="bg-gray-50 rounded-xl overflow-hidden border-2 border-[#1a3d2b]/30">
-            <img src={preview} alt="Preview" className="w-full max-h-48 object-contain" />
+          {existingImg && (
+            <div className="relative rounded-2xl overflow-hidden border border-border bg-gray-50 group">
+              <img src={existingImg} alt="Prescription" className="w-full max-h-44 object-contain" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col items-center justify-center gap-2 py-4 bg-[#1a3d2b]/5 hover:bg-[#1a3d2b]/10 border border-[#1a3d2b]/20 hover:border-[#1a3d2b]/40 rounded-xl cursor-pointer transition-all group">
+              <Camera size={20} className="text-[#1a3d2b]/70 group-hover:text-[#1a3d2b] transition-colors" />
+              <span className="text-xs font-semibold text-[#1a3d2b]/70 group-hover:text-[#1a3d2b]">Take Photo</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+            </label>
+            <label className="flex flex-col items-center justify-center gap-2 py-4 bg-muted/30 hover:bg-muted/60 border border-border hover:border-muted-foreground/30 rounded-xl cursor-pointer transition-all group">
+              <Upload size={20} className="text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+              <span className="text-xs font-semibold text-muted-foreground/60 group-hover:text-muted-foreground">
+                {existingImg ? "Replace File" : "Upload File"}
+              </span>
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+            </label>
           </div>
-          <div className="flex gap-2">
-            <button onClick={confirmUpload} disabled={uploading}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1a3d2b] text-white font-bold rounded-xl text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60 transition-colors">
-              {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><CheckCircle2 size={13} /> Upload</>}
-            </button>
-            <button onClick={() => { setPreview(null); setPendingFile(null); }} disabled={uploading}
-              className="px-3 py-2 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted/40 transition-colors">
-              <X size={13} />
-            </button>
-          </div>
-        </div>
-      )}
-      {err && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
-      {!preview && (
-        <div className="flex gap-2">
-          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-[#1a3d2b]/30 rounded-xl text-xs text-[#1a3d2b] font-semibold cursor-pointer hover:bg-[#1a3d2b]/5 transition-colors">
-            <Camera size={13} /> Camera
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-          </label>
-          <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-border rounded-xl text-xs text-muted-foreground font-semibold cursor-pointer hover:bg-muted/30 transition-colors">
-            <Upload size={13} /> {prescription?.photoObjectPath ? "Replace" : "Upload"}
-            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-          </label>
+          {existingImg && prescription?.updatedAt && (
+            <p className="text-[10px] text-center text-muted-foreground">
+              Last updated {new Date(prescription.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+            </p>
+          )}
         </div>
       )}
     </div>

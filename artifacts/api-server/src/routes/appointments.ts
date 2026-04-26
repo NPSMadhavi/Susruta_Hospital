@@ -18,8 +18,8 @@ export function notifyNewAppointment(appt: any) {
   }
 }
 
-export function notifyAdminCallEnded(apptId: number) {
-  const payload = JSON.stringify({ type: "call_ended", apptId });
+export function notifyAdminCallEnded(apptId: number, patientName?: string) {
+  const payload = JSON.stringify({ type: "call_ended", apptId, patientName: patientName ?? null });
   for (const client of sseClients) {
     try { client.write(`data: ${payload}\n\n`); } catch { sseClients.delete(client); }
   }

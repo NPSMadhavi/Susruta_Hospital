@@ -13,6 +13,7 @@ import type { DocumentFile } from "@workspace/db";
 import { notifyPatientJoinEnabled, notifyPatientSessionEnded, notifyPatientPermissionRequest } from "./patient";
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
 import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated } from "../lib/appointmentSse";
+import { notifyAdminCallEnded } from "./appointments";
 
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -284,8 +285,14 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
 router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
 
-  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
-  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+  const rows = await db
+    .select({ appt: onlineAppointmentsTable, patient: patientsTable })
+    .from(onlineAppointmentsTable)
+    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  if (rows.length === 0) { res.status(404).json({ error: "not_found" }); return; }
+  const { appt, patient } = rows[0];
 
   const [settings] = await db.select().from(siteSettingsTable);
 
@@ -302,6 +309,7 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
 
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
   broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
+  notifyAdminCallEnded(id, patient.name);
 
   res.json({ ok: true, joinEnabled: false });
 });

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
-import { db, onlineAppointmentsTable, siteSettingsTable } from "@workspace/db";
+import { db, onlineAppointmentsTable, siteSettingsTable, patientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { notifyAdminCallEnded } from "./appointments";
 import { notifyPatientSessionEnded } from "./patient";
@@ -168,8 +168,14 @@ router.post(
         if (roomName?.startsWith("susruta-appt-")) {
           const apptId = parseInt(roomName.replace("susruta-appt-", ""), 10);
           if (!isNaN(apptId)) {
-            const [appt] = await db.select().from(onlineAppointmentsTable)
+            const rows = await db
+              .select({ appt: onlineAppointmentsTable, patient: patientsTable })
+              .from(onlineAppointmentsTable)
+              .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
               .where(eq(onlineAppointmentsTable.id, apptId));
+
+            const appt = rows[0]?.appt;
+            const patientName = rows[0]?.patient?.name;
 
             // Only act if it wasn't already ended by the doctor/admin (to avoid double-notifications)
             const wasStillJoinEnabled = appt?.joinEnabled ?? false;
@@ -178,8 +184,8 @@ router.post(
               .set({ joinEnabled: false, status: "completed" })
               .where(eq(onlineAppointmentsTable.id, apptId));
 
-            // Notify admin panel
-            notifyAdminCallEnded(apptId);
+            // Notify admin panel immediately with patient name
+            notifyAdminCallEnded(apptId, patientName);
 
             if (wasStillJoinEnabled && appt) {
               // Room closed by LiveKit itself (network blip, timeout, etc.) — notify everyone
