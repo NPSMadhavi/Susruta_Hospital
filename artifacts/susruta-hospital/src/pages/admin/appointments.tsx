@@ -7,8 +7,10 @@ import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
   Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
-  AlertCircle, FileText, MapPin, User
+  AlertCircle, FileText, MapPin, User, Mic, Eye, LogOut, RotateCcw, Trash2
 } from "lucide-react";
+import { LiveKitRoom, VideoConference, RoomAudioRenderer } from "@livekit/components-react";
+import "@livekit/components-styles";
 import { cn } from "@/lib/utils";
 import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
 
@@ -270,16 +272,84 @@ function PrescriptionUpload({ apptId, prescription, onUploaded }: {
   );
 }
 
-// ── Online Appointment Card ──────────────────────────────────────
-function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded }: {
+// ── Admin Call Overlay + Online Appointment Card ─────────────────
+function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; patientName: string; onLeave: () => void }) {
+  const [creds, setCreds] = useState<{ token: string; roomName: string; serverUrl: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${BASE}/api/livekit/admin-token/${apptId}`, { credentials: "include" });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.message || "Could not join"); }
+        setCreds(await r.json());
+      } catch (e: any) { setError(e.message || "Could not join the call"); }
+      finally { setLoading(false); }
+    })();
+  }, [apptId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-gray-950">
+      <div className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="font-bold text-white text-sm truncate">Monitoring: {patientName}</span>
+          <span className="hidden sm:inline text-[11px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full shrink-0">Admin · Audio only by default</span>
+        </div>
+        <button onClick={onLeave} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shrink-0">
+          <LogOut size={13} /> Leave Call
+        </button>
+      </div>
+      <div className="flex-1 min-h-0">
+        {loading && (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 size={32} className="animate-spin text-emerald-400 mx-auto mb-3" />
+              <p className="text-gray-300 text-sm">Joining call…</p>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="h-full flex items-center justify-center p-6">
+            <div className="text-center max-w-sm">
+              <AlertCircle size={32} className="text-red-400 mx-auto mb-3" />
+              <p className="text-white font-semibold mb-1">Could not join</p>
+              <p className="text-gray-400 text-sm">{error}</p>
+              <button onClick={onLeave} className="mt-4 px-4 py-2 rounded-xl bg-gray-700 text-white text-sm hover:bg-gray-600 transition-colors">Close</button>
+            </div>
+          </div>
+        )}
+        {creds && (
+          <LiveKitRoom token={creds.token} serverUrl={creds.serverUrl} connect={true} video={false} audio={false}
+            onDisconnected={onLeave} data-lk-theme="default" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <RoomAudioRenderer />
+            <VideoConference />
+          </LiveKitRoom>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onDelete }: {
   appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onRenotify: (id: number) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
+  onJoinCall: (id: number, patientName: string) => void;
+  onRequestPermissions: (id: number) => Promise<void>;
+  onReset: (id: number) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [renotifying, setRenotifying] = useState(false);
+  const [requestingPerm, setRequestingPerm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [permSent, setPermSent] = useState(false);
   const sc = ONLINE_STATUS_COLORS[appt.status] ?? ONLINE_STATUS_COLORS.confirmed;
 
   async function toggleJoin() {
@@ -292,6 +362,28 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
     setRenotifying(true);
     await onRenotify(appt.id);
     setRenotifying(false);
+  }
+
+  async function handleRequestPermissions() {
+    setRequestingPerm(true);
+    setPermSent(false);
+    await onRequestPermissions(appt.id);
+    setRequestingPerm(false);
+    setPermSent(true);
+    setTimeout(() => setPermSent(false), 4000);
+  }
+
+  async function handleReset() {
+    setResetting(true);
+    await onReset(appt.id);
+    setResetting(false);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    await onDelete(appt.id);
+    setDeleting(false);
+    setConfirmDelete(false);
   }
 
   return (
@@ -372,6 +464,86 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
         )}
       </div>
 
+      {/* Live session controls — only shown during active calls */}
+      {appt.joinEnabled && (
+        <div className="mx-4 mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-3">
+          <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Session Controls
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => onJoinCall(appt.id, appt.patient.name)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#1a3d2b] text-white hover:bg-[#15322a] transition-colors shadow-sm"
+            >
+              <Eye size={12} /> Monitor Call
+            </button>
+            <button
+              onClick={handleRequestPermissions}
+              disabled={requestingPerm || permSent}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors border",
+                permSent
+                  ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                  : "bg-white text-[#1a3d2b] border-[#1a3d2b]/30 hover:bg-[#1a3d2b]/5"
+              )}
+            >
+              {requestingPerm
+                ? <><Loader2 size={12} className="animate-spin" /> Sending…</>
+                : permSent
+                  ? <><CheckCircle2 size={12} /> Sent to Patient</>
+                  : <><Mic size={12} /> Request Mic &amp; Camera Check</>
+              }
+            </button>
+          </div>
+          {permSent && (
+            <p className="text-[11px] text-emerald-600 mt-2">
+              A prompt was sent to the patient's screen asking them to check their microphone and camera.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Admin actions — Reset to Pending / Delete */}
+      <div className="mx-4 mb-3 flex flex-wrap items-center gap-2">
+        {["completed", "cancelled"].includes(appt.status) && !appt.joinEnabled && (
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+          >
+            {resetting ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+            Reset to Pending
+          </button>
+        )}
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors ml-auto"
+          >
+            <Trash2 size={11} /> Delete
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[11px] text-red-600 font-semibold">Permanently delete this appointment?</span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-red-600 text-white hover:bg-red-700 transition-colors"
+            >
+              {deleting ? <Loader2 size={10} className="animate-spin" /> : null}
+              Yes, Delete
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Prescription toggle */}
       <button onClick={() => setOpen(v => !v)}
         className={cn(
@@ -419,6 +591,7 @@ export default function AdminAppointments() {
   const [onlineErr, setOnlineErr] = useState("");
   const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevOnlineCountRef = useRef<number | null>(null);
+  const [adminCall, setAdminCall] = useState<{ apptId: number; patientName: string } | null>(null);
 
   // ── Load online appointments ──
   const loadOnline = useCallback(async (silent = false) => {
@@ -469,6 +642,32 @@ export default function AdminAppointments() {
         method: "POST", credentials: "include",
       });
     } catch { setOnlineErr("Re-notify failed. Please try again."); }
+  }
+
+  async function requestPermissions(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/request-permissions`, {
+        method: "POST", credentials: "include",
+      });
+    } catch { setOnlineErr("Could not send the permission request. Please try again."); }
+  }
+
+  async function resetAppt(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/reset-pending`, {
+        method: "POST", credentials: "include",
+      });
+      await loadOnline(true);
+    } catch { setOnlineErr("Reset failed. Please try again."); }
+  }
+
+  async function deleteAppt(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}`, {
+        method: "DELETE", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.filter(a => a.id !== id));
+    } catch { setOnlineErr("Delete failed. Please try again."); }
   }
 
   // ── Load in-person appointments ──
@@ -531,6 +730,13 @@ export default function AdminAppointments() {
 
   return (
     <AdminLayout>
+      {adminCall && (
+        <AdminCallOverlay
+          apptId={adminCall.apptId}
+          patientName={adminCall.patientName}
+          onLeave={() => setAdminCall(null)}
+        />
+      )}
       {payModal && <PayModal appt={payModal} onClose={() => setPayModal(null)} onPaid={a => { mutate(a); setPayModal(null); }} />}
       {rescheduleModal && <RescheduleModal appt={rescheduleModal} onClose={() => setRescheduleModal(null)} onProposed={a => { mutate(a); }} />}
       {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={a => { mutate(a); }} />}
@@ -689,6 +895,10 @@ export default function AdminAppointments() {
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+                    onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
+                    onRequestPermissions={requestPermissions}
+                    onReset={resetAppt}
+                    onDelete={deleteAppt}
                   />
                 ))}
               </div>
@@ -707,6 +917,10 @@ export default function AdminAppointments() {
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+                    onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
+                    onRequestPermissions={requestPermissions}
+                    onReset={resetAppt}
+                    onDelete={deleteAppt}
                   />
                 ))}
               </div>

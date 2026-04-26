@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, MonitorPlay, Heart } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 
@@ -87,7 +87,6 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/admin", icon: <LayoutDashboard size={20}/>, label: "Dashboard" },
     { href: "/admin/appointments", icon: <Calendar size={20}/>, label: "Appointments" },
-    { href: "/admin/online-appointments", icon: <MonitorPlay size={20}/>, label: "Online Consults" },
     { href: "/admin/availability", icon: <Clock size={20}/>, label: "Offline Slots" },
     { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
     { href: "/admin/patients", icon: <UserCheck size={20}/>, label: "Patients" },
