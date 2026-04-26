@@ -7,10 +7,9 @@ import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
   Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
-  AlertCircle, FileText, MapPin, User, Mic, Eye, LogOut, RotateCcw, Trash2
+  AlertCircle, FileText, MapPin, User, Mic, Eye, RotateCcw, Trash2
 } from "lucide-react";
-import { LiveKitRoom, VideoConference, RoomAudioRenderer } from "@livekit/components-react";
-import "@livekit/components-styles";
+import { AdminVideoRoom } from "@/components/VideoCall";
 import { cn } from "@/lib/utils";
 import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
 
@@ -328,44 +327,30 @@ function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; pa
   }, [apptId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gray-950">
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-          <span className="font-bold text-white text-sm truncate">Monitoring: {patientName}</span>
-          <span className="hidden sm:inline text-[11px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full shrink-0">Admin · Audio only by default</span>
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#111]">
+      {loading && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 size={32} className="animate-spin text-emerald-400 mx-auto mb-3" />
+            <p className="text-white/60 text-sm">Joining call…</p>
+          </div>
         </div>
-        <button onClick={onLeave} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shrink-0">
-          <LogOut size={13} /> Leave Call
-        </button>
-      </div>
-      <div className="flex-1 min-h-0">
-        {loading && (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <Loader2 size={32} className="animate-spin text-emerald-400 mx-auto mb-3" />
-              <p className="text-gray-300 text-sm">Joining call…</p>
-            </div>
+      )}
+      {error && (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-sm">
+            <AlertCircle size={32} className="text-red-400 mx-auto mb-3" />
+            <p className="text-white font-semibold mb-1">Could not join</p>
+            <p className="text-white/40 text-sm">{error}</p>
+            <button onClick={onLeave} className="mt-4 px-4 py-2 rounded-xl bg-white/10 text-white text-sm hover:bg-white/20 transition-colors">Close</button>
           </div>
-        )}
-        {error && (
-          <div className="h-full flex items-center justify-center p-6">
-            <div className="text-center max-w-sm">
-              <AlertCircle size={32} className="text-red-400 mx-auto mb-3" />
-              <p className="text-white font-semibold mb-1">Could not join</p>
-              <p className="text-gray-400 text-sm">{error}</p>
-              <button onClick={onLeave} className="mt-4 px-4 py-2 rounded-xl bg-gray-700 text-white text-sm hover:bg-gray-600 transition-colors">Close</button>
-            </div>
-          </div>
-        )}
-        {creds && (
-          <LiveKitRoom token={creds.token} serverUrl={creds.serverUrl} connect={true} video={false} audio={false}
-            onDisconnected={onLeave} data-lk-theme="default" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <RoomAudioRenderer />
-            <VideoConference />
-          </LiveKitRoom>
-        )}
-      </div>
+        </div>
+      )}
+      {creds && (
+        <div className="flex-1 min-h-0">
+          <AdminVideoRoom token={creds.token} serverUrl={creds.serverUrl} onLeave={onLeave} />
+        </div>
+      )}
     </div>
   );
 }
