@@ -380,7 +380,7 @@ function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; pa
   );
 }
 
-function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onDelete }: {
+function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onDelete }: {
   appt: OnlineAppt;
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onRenotify: (id: number) => Promise<void>;
@@ -388,6 +388,7 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
   onJoinCall: (id: number, patientName: string) => void;
   onRequestPermissions: (id: number) => Promise<void>;
   onReset: (id: number) => Promise<void>;
+  onMarkDone: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -395,6 +396,7 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
   const [renotifying, setRenotifying] = useState(false);
   const [requestingPerm, setRequestingPerm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [markingDone, setMarkingDone] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [permSent, setPermSent] = useState(false);
@@ -425,6 +427,12 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
     setResetting(true);
     await onReset(appt.id);
     setResetting(false);
+  }
+
+  async function handleMarkDone() {
+    setMarkingDone(true);
+    await onMarkDone(appt.id);
+    setMarkingDone(false);
   }
 
   async function handleDelete() {
@@ -553,7 +561,7 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
         </div>
       )}
 
-      {/* Admin actions — Reset to Pending / Delete */}
+      {/* Admin actions — Reset to Pending / Mark as Done / Delete */}
       <div className="mx-4 mb-3 flex flex-wrap items-center gap-2">
         {["completed", "cancelled"].includes(appt.status) && !appt.joinEnabled && (
           <button
@@ -563,6 +571,16 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
           >
             {resetting ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
             Reset to Pending
+          </button>
+        )}
+        {["pending", "confirmed"].includes(appt.status) && !appt.joinEnabled && (
+          <button
+            onClick={handleMarkDone}
+            disabled={markingDone}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+          >
+            {markingDone ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+            Mark as Done
           </button>
         )}
         {!confirmDelete ? (
@@ -708,6 +726,15 @@ export default function AdminAppointments() {
       });
       await loadOnline(true);
     } catch { setOnlineErr("Reset failed. Please try again."); }
+  }
+
+  async function markDone(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/complete`, {
+        method: "PATCH", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, joinEnabled: false, status: "completed" } : a));
+    } catch { setOnlineErr("Could not mark as done. Please try again."); }
   }
 
   async function deleteAppt(id: number) {
@@ -947,6 +974,7 @@ export default function AdminAppointments() {
                     onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
                     onRequestPermissions={requestPermissions}
                     onReset={resetAppt}
+                    onMarkDone={markDone}
                     onDelete={deleteAppt}
                   />
                 ))}
@@ -969,6 +997,7 @@ export default function AdminAppointments() {
                     onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
                     onRequestPermissions={requestPermissions}
                     onReset={resetAppt}
+                    onMarkDone={markDone}
                     onDelete={deleteAppt}
                   />
                 ))}

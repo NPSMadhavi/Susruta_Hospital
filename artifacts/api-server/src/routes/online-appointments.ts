@@ -519,6 +519,18 @@ router.post("/:id/add-document", async (req: any, res) => {
   res.json({ ok: true, documents: updated });
 });
 
+// ── PATCH /api/online-appointments/admin/:id/complete — Mark as Done ────
+router.patch("/admin/:id/complete", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db
+    .update(onlineAppointmentsTable)
+    .set({ joinEnabled: false, status: "completed" })
+    .where(eq(onlineAppointmentsTable.id, id));
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
+  res.json({ ok: true });
+});
+
 // ── DELETE /api/online-appointments/admin/:id — Admin hard-deletes ──────
 router.delete("/admin/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
