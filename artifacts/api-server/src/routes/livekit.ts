@@ -3,6 +3,7 @@ import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-
 import { db, onlineAppointmentsTable, siteSettingsTable, patientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { notifyAdminCallEnded } from "./appointments";
+import { notifyGuestsSessionEnded } from "../lib/guestSse";
 import { notifyPatientSessionEnded } from "./patient";
 import { broadcastAppointmentUpdated } from "../lib/appointmentSse";
 import { requireAdmin } from "../lib/auth";
@@ -192,6 +193,7 @@ router.post(
               console.log(`[livekit webhook] room closed by LiveKit, notifying patient ${appt.patientId} and doctor portal`);
               const [settings] = await db.select().from(siteSettingsTable);
               notifyPatientSessionEnded(appt.patientId, apptId, settings?.phonepeQrObjectPath ?? null);
+              notifyGuestsSessionEnded(apptId);
               broadcastAppointmentUpdated({ id: apptId, joinEnabled: false, status: "completed" });
             }
           }

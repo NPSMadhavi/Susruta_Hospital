@@ -11,6 +11,7 @@ import { requireDoctor } from "../lib/doctor-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
 import type { DocumentFile } from "@workspace/db";
 import { notifyPatientJoinEnabled, notifyPatientSessionEnded, notifyPatientPermissionRequest } from "./patient";
+import { notifyGuestsJoinEnabled, notifyGuestsSessionEnded } from "../lib/guestSse";
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
 import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated } from "../lib/appointmentSse";
 import { notifyAdminCallEnded } from "./appointments";
@@ -275,6 +276,9 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   // Notify this patient via SSE — include roomName + guestToken so frontend can skip re-fetching
   notifyPatientJoinEnabled(patient.id, id, roomName, guestToken);
 
+  // Notify any guests already waiting in the waiting room
+  notifyGuestsJoinEnabled(id);
+
   // Notify doctor portal in real-time
   broadcastAppointmentUpdated({ id, joinEnabled: true, status: "confirmed" });
 
@@ -308,6 +312,7 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   }
 
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
+  notifyGuestsSessionEnded(id);
   broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
   notifyAdminCallEnded(id, patient.name);
 

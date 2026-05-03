@@ -7,14 +7,39 @@ import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
   Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
-  AlertCircle, FileText, MapPin, User, Mic, Eye, RotateCcw, Trash2
+  AlertCircle, FileText, MapPin, User, Mic, Eye, RotateCcw, Trash2, Users
 } from "lucide-react";
+
 import { AdminVideoRoom } from "@/components/VideoCall";
 import { cn } from "@/lib/utils";
 import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
+
+function GuestCountBadge({ apptId }: { apptId: number }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const r = await fetch(`${BASE}/api/guest/status/${apptId}`);
+        if (!r.ok || !alive) return;
+        const { waitingCount } = await r.json();
+        if (alive) setCount(waitingCount ?? 0);
+      } catch {}
+    }
+    poll();
+    const iv = setInterval(poll, 15000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [apptId]);
+  if (count === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+      <Users size={9} /> {count} guest{count !== 1 ? "s" : ""} waiting
+    </span>
+  );
+}
 
 function apiFetch(path: string, opts: RequestInit = {}) {
   return fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts })
@@ -436,6 +461,7 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
                   ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">⏳ Not Joined Yet</span>
                   : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
               }
+              <GuestCountBadge apptId={appt.id} />
             </div>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1"><Calendar size={11} className="text-[#1a3d2b]" />{fmtFull(appt.slot.date)}</span>

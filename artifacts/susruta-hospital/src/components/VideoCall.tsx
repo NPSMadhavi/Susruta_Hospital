@@ -565,30 +565,72 @@ export function AdminVideoRoom({ token, serverUrl, onLeave }: {
 
 // ── Standalone Guest Call Page ─────────────────────────────────
 export function GuestCallPage({ apptId }: { apptId: number }) {
-  const [name, setName] = useState("");
-  const [step, setStep] = useState<"name" | "call">("name");
+  const [nameInput, setNameInput] = useState("");
+  // committedName is set once the user submits — stable for SSE closure
+  const [committedName, setCommittedName] = useState("");
+  const [step, setStep] = useState<"name" | "waiting" | "joining" | "call" | "ended">("name");
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [ended, setEnded] = useState(false);
 
-  async function join() {
-    if (!name.trim()) { setError("Please enter your name"); return; }
+  // When in waiting room, subscribe to SSE and auto-join when call is enabled
+  useEffect(() => {
+    if (step !== "waiting") return;
+    const es = new EventSource(`${BASE}/api/guest/sse/${apptId}`);
+    es.addEventListener("join_enabled", () => {
+      es.close();
+      setStep("joining");
+    });
+    es.addEventListener("session_ended", () => {
+      es.close();
+      setStep("ended");
+    });
+    return () => es.close();
+  }, [step, apptId]);
+
+  // Fetch token when step becomes "joining"
+  useEffect(() => {
+    if (step !== "joining") return;
+    let cancelled = false;
+    (async () => {
+      // Small delay so the server has time to set joinEnabled = true
+      await new Promise(r => setTimeout(r, 800));
+      if (cancelled) return;
+      try {
+        const c = await fetchGuestToken(apptId, committedName || "Guest");
+        if (!cancelled) { setCreds(c); setStep("call"); }
+      } catch (e: any) {
+        if (!cancelled) { setError(e.message || "Could not join call"); setStep("waiting"); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, apptId, committedName]);
+
+  async function handleNameSubmit() {
+    const trimmed = nameInput.trim();
+    if (!trimmed) { setError("Please enter your name"); return; }
     setLoading(true); setError("");
     try {
-      const c = await fetchGuestToken(apptId, name.trim());
-      setCreds(c); setStep("call");
-    } catch (e: any) { setError(e.message || "Call is not currently active."); }
+      const statusRes = await fetch(`${BASE}/api/guest/status/${apptId}`);
+      if (!statusRes.ok) throw new Error("Appointment not found.");
+      const { joinEnabled } = await statusRes.json();
+      setCommittedName(trimmed);
+      if (joinEnabled) {
+        setStep("joining");
+      } else {
+        setStep("waiting");
+      }
+    } catch (e: any) { setError(e.message || "Could not connect."); }
     finally { setLoading(false); }
   }
 
-  if (ended) {
+  if (step === "ended") {
     return (
       <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
         <div className="text-center text-white">
           <CheckCircle2 size={48} className="text-emerald-400 mx-auto mb-4" />
-          <p className="text-xl font-bold">Call Ended</p>
-          <p className="text-white/40 mt-2">Thank you for joining the consultation.</p>
+          <p className="text-xl font-bold">Consultation Ended</p>
+          <p className="text-white/40 mt-2">Thank you for joining. You may close this window.</p>
         </div>
       </div>
     );
@@ -600,9 +642,9 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
         <LiveKitRoom
           token={creds.token} serverUrl={creds.serverUrl}
           connect={true} video={true} audio={true}
-          onDisconnected={() => setEnded(true)}
+          onDisconnected={() => setStep("ended")}
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <SusrutaVideoRoom role="guest" onLeave={() => setEnded(true)} />
+          <SusrutaVideoRoom role="guest" onLeave={() => setStep("ended")} />
         </LiveKitRoom>
         <div className="px-4 py-3 bg-[#1c1c1e] shrink-0 border-t border-white/5">
           <CallDocumentUpload apptId={apptId} />
@@ -611,6 +653,38 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
     );
   }
 
+  if (step === "waiting" || step === "joining") {
+    return (
+      <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm text-center">
+          <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4">
+            <Clock size={28} className="text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 mb-1">Waiting Room</h1>
+          <p className="text-sm text-gray-500 mb-1">
+            Hi <strong>{committedName}</strong>, you're all set.
+          </p>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            The doctor hasn't started the call yet. This page will automatically open the video room the moment they do — just keep it open.
+          </p>
+          <div className="flex items-center justify-center gap-2.5 py-3.5 bg-blue-50 rounded-xl border border-blue-100">
+            <Loader2 size={16} className="animate-spin text-blue-500 shrink-0" />
+            <span className="text-sm text-blue-700 font-medium">
+              {step === "joining" ? "Joining call…" : "Waiting for doctor…"}
+            </span>
+          </div>
+          {error && (
+            <div className="mt-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 text-left">
+              <AlertCircle size={14} className="shrink-0" /> {error}
+            </div>
+          )}
+          <p className="text-[11px] text-gray-400 mt-5">Susruta Hospital · Do not close this tab</p>
+        </div>
+      </div>
+    );
+  }
+
+  // step === "name"
   return (
     <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm text-center">
@@ -624,14 +698,19 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
             <AlertCircle size={14} className="shrink-0" /> {error}
           </div>
         )}
-        <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && join()}
+        <input
+          value={nameInput} onChange={e => setNameInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleNameSubmit()}
           placeholder="Your name (e.g. Ravi — Father)"
           className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 mb-4"
         />
-        <button onClick={join} disabled={loading}
+        <button onClick={handleNameSubmit} disabled={loading}
           className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl transition-colors text-sm">
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Joining…</> : <><Video size={16} /> Join Consultation</>}
+          {loading
+            ? <><Loader2 size={16} className="animate-spin" /> Checking…</>
+            : <><Video size={16} /> Enter Waiting Room</>}
         </button>
+        <p className="text-xs text-gray-400 mt-4">If the call is already active, you'll join immediately.</p>
       </div>
     </div>
   );

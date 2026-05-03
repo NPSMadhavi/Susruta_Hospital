@@ -382,11 +382,14 @@ function HeroAppointment({ appt, type, videoCallApptId, onJoin, onCallEnded }: {
               <GuestLinkCard apptId={onlineAppt!.id} guestToken={onlineAppt!.guestToken} />
             </>
           ) : isOnline && (status === "confirmed" || status === "pending") ? (
-            <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
-              <Clock size={18} className="text-blue-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-blue-700 font-medium leading-snug">
-                Your booking is confirmed. Keep this page open on the day — you will hear a chime when the doctor is ready.
-              </p>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+                <Clock size={18} className="text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-blue-700 font-medium leading-snug">
+                  Your booking is confirmed. Keep this page open on the day — you will hear a chime when the doctor is ready.
+                </p>
+              </div>
+              <GuestLinkCard apptId={onlineAppt!.id} />
             </div>
           ) : !isOnline ? (
             <div className="flex items-start gap-3 bg-green-50 border border-green-100 rounded-2xl px-4 py-3">
