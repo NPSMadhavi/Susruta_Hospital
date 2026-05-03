@@ -572,6 +572,7 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [permWarning, setPermWarning] = useState("");
 
   // When in waiting room, subscribe to SSE and auto-join when call is enabled
   useEffect(() => {
@@ -609,7 +610,24 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
   async function handleNameSubmit() {
     const trimmed = nameInput.trim();
     if (!trimmed) { setError("Please enter your name"); return; }
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setPermWarning("");
+
+    // Request camera + mic permissions NOW while we're still inside a user gesture.
+    // The browser grants this immediately; LiveKit will re-acquire the tracks when joining.
+    // If the guest is in the waiting room for 10 minutes before the call starts, these
+    // permissions remain granted for the entire page session, so the auto-join works silently.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach(t => t.stop());
+    } catch (permErr: any) {
+      // Denied or no device — warn but don't block entry (audio-only or observe is still useful)
+      if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
+        setPermWarning("Camera or microphone access was denied. Others may not be able to see or hear you — check your browser settings.");
+      } else if (permErr.name === "NotFoundError") {
+        setPermWarning("No camera or microphone found. You can still join and listen.");
+      }
+    }
+
     try {
       const statusRes = await fetch(`${BASE}/api/guest/status/${apptId}`);
       if (!statusRes.ok) throw new Error("Appointment not found.");
@@ -673,6 +691,11 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
               {step === "joining" ? "Joining call…" : "Waiting for doctor…"}
             </span>
           </div>
+          {permWarning && (
+            <div className="mt-4 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-sm text-amber-800 text-left">
+              <VideoOff size={14} className="shrink-0 mt-0.5" /> {permWarning}
+            </div>
+          )}
           {error && (
             <div className="mt-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 text-left">
               <AlertCircle size={14} className="shrink-0" /> {error}
