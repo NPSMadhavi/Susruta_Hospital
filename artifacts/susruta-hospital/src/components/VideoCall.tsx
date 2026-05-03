@@ -567,25 +567,18 @@ export function AdminVideoRoom({ token, serverUrl, onLeave }: {
 export function GuestCallPage({ apptId }: { apptId: number }) {
   const [nameInput, setNameInput] = useState("");
   const [committedName, setCommittedName] = useState("");
-  const [step, setStep] = useState<"name" | "permissions" | "waiting" | "joining" | "call" | "ended">("name");
+  const [step, setStep] = useState<"name" | "waiting" | "joining" | "call" | "ended">("name");
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  // Permission state
-  const [permRequesting, setPermRequesting] = useState(false);
-  const [camGranted, setCamGranted] = useState<boolean | null>(null);
-  const [micGranted, setMicGranted] = useState<boolean | null>(null);
-  // Status of the appointment (fetched on mount)
-  const [joinEnabled, setJoinEnabled] = useState(false);
+  const [permWarning, setPermWarning] = useState("");
 
-  // On mount: fetch patient name to pre-fill and check call status
+  // On mount: fetch patient name to pre-fill
   useEffect(() => {
     fetch(`${BASE}/api/guest/status/${apptId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data) return;
-        setJoinEnabled(!!data.joinEnabled);
-        if (data.patientFirstName) {
+        if (data?.patientFirstName) {
           setNameInput(`${data.patientFirstName}'s Guest`);
         }
       })
@@ -618,53 +611,29 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
     return () => { cancelled = true; };
   }, [step, apptId, committedName]);
 
-  // Step 1: Name submit → go to permissions screen
-  function handleNameSubmit() {
+  // Continue tap: request permissions (user gesture) then go straight to waiting/joining
+  async function handleNameSubmit() {
     const trimmed = nameInput.trim() || "Guest";
     setCommittedName(trimmed);
-    setError("");
-    setStep("permissions");
-  }
+    setLoading(true); setError(""); setPermWarning("");
 
-  // Step 2: Grant permissions (called from our custom button)
-  async function handleAllowAccess() {
-    setPermRequesting(true);
-    setCamGranted(null); setMicGranted(null);
+    // Ask for camera + mic while still inside the click handler (user gesture required)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      const hasVideo = stream.getVideoTracks().length > 0;
-      const hasAudio = stream.getAudioTracks().length > 0;
       stream.getTracks().forEach(t => t.stop());
-      setCamGranted(hasVideo);
-      setMicGranted(hasAudio);
-    } catch (e: any) {
-      // Try audio only as fallback
-      try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioStream.getTracks().forEach(t => t.stop());
-        setCamGranted(false);
-        setMicGranted(true);
-      } catch {
-        setCamGranted(false);
-        setMicGranted(false);
+    } catch (permErr: any) {
+      if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
+        setPermWarning("Camera or microphone was not allowed. Others may not see or hear you.");
+      } else if (permErr.name === "NotFoundError") {
+        setPermWarning("No camera or microphone found. You can still join and listen.");
       }
-    } finally {
-      setPermRequesting(false);
     }
-  }
 
-  // Step 2 → 3: proceed to waiting room or call
-  async function handleContinue() {
-    setLoading(true); setError("");
     try {
       const statusRes = await fetch(`${BASE}/api/guest/status/${apptId}`);
       if (!statusRes.ok) throw new Error("Appointment not found.");
-      const data = await statusRes.json();
-      if (data.joinEnabled) {
-        setStep("joining");
-      } else {
-        setStep("waiting");
-      }
+      const { joinEnabled } = await statusRes.json();
+      if (joinEnabled) setStep("joining"); else setStep("waiting");
     } catch (e: any) { setError(e.message || "Could not connect."); }
     finally { setLoading(false); }
   }
@@ -724,99 +693,6 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
             </div>
           )}
           <p className="text-[11px] text-gray-400 mt-5">Susruta Hospital · Do not close this tab</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "permissions") {
-    const bothGranted = camGranted === true && micGranted === true;
-    const anyChecked = camGranted !== null || micGranted !== null;
-
-    function PermTile({ icon, label, granted }: { icon: React.ReactNode; label: string; granted: boolean | null }) {
-      return (
-        <div className={cn(
-          "flex-1 flex flex-col items-center gap-2 py-5 px-3 rounded-2xl border-2 transition-all",
-          granted === true ? "border-emerald-400 bg-emerald-50"
-            : granted === false ? "border-red-300 bg-red-50"
-            : "border-gray-200 bg-gray-50"
-        )}>
-          <div className={cn(
-            "w-12 h-12 rounded-xl flex items-center justify-center",
-            granted === true ? "bg-emerald-500" : granted === false ? "bg-red-400" : "bg-gray-300"
-          )}>
-            {React.cloneElement(icon as React.ReactElement, { size: 22, className: "text-white" })}
-          </div>
-          <span className="text-xs font-bold text-gray-700">{label}</span>
-          <span className={cn(
-            "text-[11px] font-semibold",
-            granted === true ? "text-emerald-600" : granted === false ? "text-red-500" : "text-gray-400"
-          )}>
-            {granted === true ? "✓ Allowed" : granted === false ? "✗ Denied" : "Waiting…"}
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-7 w-full max-w-sm text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[#1a3d2b] flex items-center justify-center mx-auto mb-4">
-            <UserCheck size={28} className="text-white" />
-          </div>
-          <h1 className="text-lg font-bold text-gray-900 mb-1">Camera &amp; Microphone</h1>
-          <p className="text-sm text-gray-500 mb-5 leading-relaxed">
-            Tap the button below to allow access.<br />
-            <span className="text-gray-400 text-xs">A small popup will appear — tap <strong>Allow</strong>.</span>
-          </p>
-
-          <div className="flex gap-3 mb-5">
-            <PermTile icon={<Video />} label="Camera" granted={camGranted} />
-            <PermTile icon={<Mic />} label="Microphone" granted={micGranted} />
-          </div>
-
-          {!anyChecked ? (
-            <button
-              onClick={handleAllowAccess}
-              disabled={permRequesting}
-              className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#1a3d2b] hover:bg-[#15322a] disabled:opacity-60 text-white font-bold rounded-xl transition-colors text-sm mb-3">
-              {permRequesting
-                ? <><Loader2 size={16} className="animate-spin" /> Opening permissions…</>
-                : <><UserCheck size={16} /> Allow Camera &amp; Microphone</>}
-            </button>
-          ) : (
-            <button
-              onClick={handleContinue}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl transition-colors text-sm mb-3">
-              {loading
-                ? <><Loader2 size={16} className="animate-spin" /> Connecting…</>
-                : <><Video size={16} /> {bothGranted ? "Join Now →" : "Continue Anyway →"}</>}
-            </button>
-          )}
-
-          {!anyChecked && (
-            <button onClick={handleContinue} disabled={loading}
-              className="text-xs text-gray-400 hover:text-gray-600 underline transition-colors">
-              Skip — join without camera or mic
-            </button>
-          )}
-
-          {anyChecked && !bothGranted && (
-            <p className="text-xs text-amber-600 mt-1">
-              {camGranted === false && micGranted === false
-                ? "Both were denied — you can still join and observe."
-                : camGranted === false
-                  ? "Camera denied — you can still be heard."
-                  : "Microphone denied — others won't hear you."}
-            </p>
-          )}
-
-          {error && (
-            <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 text-left">
-              <AlertCircle size={14} className="shrink-0" /> {error}
-            </div>
-          )}
         </div>
       </div>
     );
