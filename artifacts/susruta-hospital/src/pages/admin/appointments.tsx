@@ -17,6 +17,33 @@ import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
+type ParticipantPerm = {
+  name: string;
+  role: "patient" | "guest";
+  camera: boolean | null;
+  mic: boolean | null;
+  updatedAt: number;
+};
+
+function PermBadge({ icon, granted }: { icon: "cam" | "mic"; granted: boolean | null }) {
+  const Icon = icon === "cam" ? Camera : Mic;
+  if (granted === true) return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+      <Icon size={9} /> ✓
+    </span>
+  );
+  if (granted === false) return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+      <Icon size={9} /> ✗
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-gray-400 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded">
+      <Icon size={9} /> ?
+    </span>
+  );
+}
+
 function GuestCountBadge({ apptId }: { apptId: number }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -80,6 +107,7 @@ type OnlineAppt = {
   slot: { id: number; date: string; startTime: string; endTime: string };
   patient: { id: number; patientCode: string | null; name: string; email: string; phone: string | null };
   prescription: Prescription | null;
+  permissions: ParticipantPerm[];
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -380,8 +408,9 @@ function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; pa
   );
 }
 
-function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onDelete }: {
+function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onDelete }: {
   appt: OnlineAppt;
+  permissions: ParticipantPerm[];
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
   onRenotify: (id: number) => Promise<void>;
   onPrescriptionUploaded: (id: number, rx: Prescription) => void;
@@ -528,36 +557,45 @@ function OnlineApptCard({ appt, onJoinToggle, onRenotify, onPrescriptionUploaded
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Session Controls
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-3">
             <button
               onClick={() => onJoinCall(appt.id, appt.patient.name)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#1a3d2b] text-white hover:bg-[#15322a] transition-colors shadow-sm"
             >
               <Eye size={12} /> Monitor Call
             </button>
-            <button
-              onClick={handleRequestPermissions}
-              disabled={requestingPerm || permSent}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors border",
-                permSent
-                  ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-                  : "bg-white text-[#1a3d2b] border-[#1a3d2b]/30 hover:bg-[#1a3d2b]/5"
-              )}
-            >
-              {requestingPerm
-                ? <><Loader2 size={12} className="animate-spin" /> Sending…</>
-                : permSent
-                  ? <><CheckCircle2 size={12} /> Sent to Patient</>
-                  : <><Mic size={12} /> Request Mic &amp; Camera Check</>
-              }
-            </button>
           </div>
-          {permSent && (
-            <p className="text-[11px] text-emerald-600 mt-2">
-              A prompt was sent to the patient's screen asking them to check their microphone and camera.
-            </p>
-          )}
+
+          {/* Device permission status grid */}
+          <div className="rounded-xl border border-emerald-200 bg-white overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-emerald-100 bg-emerald-50/40">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Device Status</span>
+              <button
+                onClick={handleRequestPermissions}
+                disabled={requestingPerm}
+                className="text-[10px] text-emerald-600 hover:text-emerald-900 underline disabled:opacity-50 transition-colors"
+              >
+                {requestingPerm ? "Sending…" : permSent ? "✓ Sent" : "Re-check"}
+              </button>
+            </div>
+            {permissions.length === 0 ? (
+              <p className="px-3 py-2.5 text-[11px] text-gray-400 italic">
+                No status reported yet — click Re-check to prompt the patient
+              </p>
+            ) : (
+              permissions.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 last:border-0">
+                  <User size={10} className="text-gray-400 shrink-0" />
+                  <span className="text-[11px] font-medium text-gray-800 flex-1 truncate min-w-0">
+                    {p.name}{" "}
+                    <span className="text-gray-400 font-normal text-[10px]">({p.role})</span>
+                  </span>
+                  <PermBadge icon="cam" granted={p.camera} />
+                  <PermBadge icon="mic" granted={p.mic} />
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -659,6 +697,7 @@ export default function AdminAppointments() {
   const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevOnlineCountRef = useRef<number | null>(null);
   const [adminCall, setAdminCall] = useState<{ apptId: number; patientName: string } | null>(null);
+  const [allPermissions, setAllPermissions] = useState<Record<number, ParticipantPerm[]>>({});
 
   // ── Load online appointments ──
   const loadOnline = useCallback(async (silent = false) => {
@@ -688,6 +727,21 @@ export default function AdminAppointments() {
     onlineIntervalRef.current = setInterval(() => loadOnline(true), 5_000);
     return () => { if (onlineIntervalRef.current) clearInterval(onlineIntervalRef.current); };
   }, [mainTab, loadOnline]);
+
+  // Real-time SSE for permission updates
+  useEffect(() => {
+    if (mainTab !== "online") return;
+    const es = new EventSource(`${BASE}/api/online-appointments/admin/stream`, { withCredentials: true });
+    es.addEventListener("appointment_updated", (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      setOnlineAppts(prev => prev.map(a => a.id === data.id ? { ...a, ...data } : a));
+    });
+    es.addEventListener("permission_update", (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      setAllPermissions(prev => ({ ...prev, [data.apptId]: data.participants }));
+    });
+    return () => es.close();
+  }, [mainTab]);
 
   async function toggleJoin(id: number, enable: boolean) {
     try {
@@ -968,6 +1022,7 @@ export default function AdminAppointments() {
                 {onlinePendingList.map(appt => (
                   <OnlineApptCard
                     key={appt.id} appt={appt}
+                    permissions={allPermissions[appt.id] ?? appt.permissions ?? []}
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
@@ -991,6 +1046,7 @@ export default function AdminAppointments() {
                 {onlineCompletedList.map(appt => (
                   <OnlineApptCard
                     key={appt.id} appt={appt}
+                    permissions={allPermissions[appt.id] ?? appt.permissions ?? []}
                     onJoinToggle={toggleJoin}
                     onRenotify={renotify}
                     onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}

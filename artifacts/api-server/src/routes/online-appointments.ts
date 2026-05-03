@@ -13,7 +13,8 @@ import type { DocumentFile } from "@workspace/db";
 import { notifyPatientJoinEnabled, notifyPatientSessionEnded, notifyPatientPermissionRequest } from "./patient";
 import { notifyGuestsJoinEnabled, notifyGuestsSessionEnded } from "../lib/guestSse";
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
-import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated } from "../lib/appointmentSse";
+import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated, broadcastPermissionUpdate, addAppointmentSseClient } from "../lib/appointmentSse";
+import { setPermission, getPermissions } from "../lib/permissionStore";
 import { notifyAdminCallEnded } from "./appointments";
 
 function fmtTime(t: string) {
@@ -163,6 +164,11 @@ router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
   res.json({ ok: true });
 });
 
+// ── GET /api/online-appointments/admin/stream — Admin SSE stream ─
+router.get("/admin/stream", requireAdmin, (req, res) => {
+  addAppointmentSseClient(res);
+});
+
 // ── GET /api/online-appointments/admin — Admin: list all ──────
 router.get("/admin", requireAdmin, async (_req, res) => {
   const rows = await db
@@ -205,6 +211,7 @@ router.get("/admin", requireAdmin, async (_req, res) => {
       notes: r.prescription.notes ?? null,
       updatedAt: r.prescription.updatedAt.toISOString(),
     } : null,
+    permissions: getPermissions(r.appt.id),
   })));
 });
 
@@ -317,6 +324,30 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
   notifyAdminCallEnded(id, patient.name);
 
   res.json({ ok: true, joinEnabled: false });
+});
+
+// ── POST /api/online-appointments/:id/report-permissions ─────
+// Patient's browser silently reports its camera/mic permission state
+router.post("/:id/report-permissions", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const { camera, mic } = req.body;
+
+  const [appt] = await db.select({ id: onlineAppointmentsTable.id })
+    .from(onlineAppointmentsTable)
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
+  if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  setPermission(id, `patient-${patient.id}`, {
+    name: patient.name,
+    role: "patient",
+    camera: typeof camera === "boolean" ? camera : null,
+    mic: typeof mic === "boolean" ? mic : null,
+    updatedAt: Date.now(),
+  });
+  broadcastPermissionUpdate(id, getPermissions(id));
+  res.json({ ok: true });
 });
 
 // ── POST /api/online-appointments/admin/:id/request-permissions ─

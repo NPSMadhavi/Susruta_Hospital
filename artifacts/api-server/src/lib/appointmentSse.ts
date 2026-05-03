@@ -35,3 +35,7 @@ export function broadcastNewOnlineAppointment(appt: object) {
 export function broadcastAppointmentUpdated(payload: { id: number; joinEnabled: boolean; status: string }) {
   broadcast("appointment_updated", payload);
 }
+
+export function broadcastPermissionUpdate(apptId: number, participants: object[]) {
+  broadcast("permission_update", { apptId, participants });
+}

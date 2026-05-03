@@ -821,6 +821,25 @@ export default function PatientDashboard() {
     setVerifyResending(false);
   }
 
+  // Silently query camera/mic permission state and report to server
+  async function reportPermissions(apptId: number) {
+    let camera: boolean | null = null;
+    let mic: boolean | null = null;
+    try {
+      const camPerm = await navigator.permissions.query({ name: "camera" as PermissionName });
+      camera = camPerm.state === "granted";
+    } catch {}
+    try {
+      const micPerm = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      mic = micPerm.state === "granted";
+    } catch {}
+    fetch(`${BASE}/api/online-appointments/${apptId}/report-permissions`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera, mic }),
+    }).catch(() => {});
+  }
+
   const loadData = useCallback(async () => {
     setLoading(true);
     const [me, myOnline, myPhysical, settings, myDocs] = await Promise.all([
@@ -832,11 +851,15 @@ export default function PatientDashboard() {
     ]);
     if (!me) return;
     setPatient(me);
-    setOnlineAppts(myOnline ?? []);
+    const onlineList = myOnline ?? [];
+    setOnlineAppts(onlineList);
     setPhysicalAppts(myPhysical ?? []);
     setPatientDocs(myDocs ?? []);
     phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
     setLoading(false);
+    // If there's an active session, silently report permission state
+    const active = onlineList.find((a: { joinEnabled: boolean; id: number }) => a.joinEnabled);
+    if (active) reportPermissions(active.id);
   }, []);
 
   async function uploadPatientDoc(file: File) {
@@ -908,6 +931,8 @@ export default function PatientDashboard() {
           : a
       ));
       setJoinPopup({ apptId: data.apptId });
+      // Report permission state so admin sees camera/mic status immediately
+      reportPermissions(data.apptId);
     });
     es.addEventListener("session_ended", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
@@ -923,6 +948,8 @@ export default function PatientDashboard() {
     es.addEventListener("permission_request", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       setPermissionRequest({ apptId: data.apptId });
+      // Silently re-check and report the current permission state
+      reportPermissions(data.apptId);
     });
     return () => { es.close(); stopChiming(); };
   }, [loadData]);

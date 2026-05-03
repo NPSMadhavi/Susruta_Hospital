@@ -614,14 +614,31 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
   // Permission button inside the waiting room (user gesture required for getUserMedia)
   async function handleAllowAccess() {
     setPermAsking(true);
+    let cam = false;
+    let mic = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      cam = stream.getVideoTracks().length > 0;
+      mic = stream.getAudioTracks().length > 0;
       stream.getTracks().forEach(t => t.stop());
       setPermStatus("granted");
     } catch (e: any) {
-      if (e.name === "NotFoundError") setPermStatus("unavailable");
+      // Try audio-only fallback
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mic = audioStream.getAudioTracks().length > 0;
+        audioStream.getTracks().forEach(t => t.stop());
+      } catch {}
+      if ((e as any).name === "NotFoundError") setPermStatus("unavailable");
       else setPermStatus("denied");
     } finally { setPermAsking(false); }
+    // Report permission status to server so admin can see it in real-time
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/guest/permissions/${apptId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: guestName.current, camera: cam, mic }),
+    }).catch(() => {});
   }
 
   // ── Renders ──────────────────────────────────────────────────
