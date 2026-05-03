@@ -565,24 +565,24 @@ export function AdminVideoRoom({ token, serverUrl, onLeave }: {
 
 // ── Standalone Guest Call Page ─────────────────────────────────
 export function GuestCallPage({ apptId }: { apptId: number }) {
-  const [nameInput, setNameInput] = useState("");
-  const [committedName, setCommittedName] = useState("");
-  const [step, setStep] = useState<"name" | "waiting" | "joining" | "call" | "ended">("name");
+  const guestName = useRef("Guest");
+  const [step, setStep] = useState<"loading" | "waiting" | "joining" | "call" | "ended">("loading");
   const [creds, setCreds] = useState<CallCredentials | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [permWarning, setPermWarning] = useState("");
+  // Permission: null = not asked, true = granted, false = denied
+  const [permStatus, setPermStatus] = useState<null | "granted" | "denied" | "unavailable">(null);
+  const [permAsking, setPermAsking] = useState(false);
 
-  // On mount: fetch patient name to pre-fill
+  // On mount: fetch status + patient name, then go straight to waiting/joining
   useEffect(() => {
     fetch(`${BASE}/api/guest/status/${apptId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.patientFirstName) {
-          setNameInput(`${data.patientFirstName}'s Guest`);
-        }
+        if (!data) { setError("This appointment link is not valid."); setStep("waiting"); return; }
+        if (data.patientFirstName) guestName.current = `${data.patientFirstName}'s Guest`;
+        if (data.joinEnabled) setStep("joining"); else setStep("waiting");
       })
-      .catch(() => {});
+      .catch(() => { setError("Could not connect. Check your internet."); setStep("waiting"); });
   }, [apptId]);
 
   // SSE subscription while waiting
@@ -594,7 +594,7 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
     return () => es.close();
   }, [step, apptId]);
 
-  // Auto-fetch token when step becomes "joining"
+  // Fetch token when step becomes "joining"
   useEffect(() => {
     if (step !== "joining") return;
     let cancelled = false;
@@ -602,40 +602,26 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
       await new Promise(r => setTimeout(r, 800));
       if (cancelled) return;
       try {
-        const c = await fetchGuestToken(apptId, committedName || "Guest");
+        const c = await fetchGuestToken(apptId, guestName.current);
         if (!cancelled) { setCreds(c); setStep("call"); }
       } catch (e: any) {
         if (!cancelled) { setError(e.message || "Could not join call"); setStep("waiting"); }
       }
     })();
     return () => { cancelled = true; };
-  }, [step, apptId, committedName]);
+  }, [step, apptId]);
 
-  // Continue tap: request permissions (user gesture) then go straight to waiting/joining
-  async function handleNameSubmit() {
-    const trimmed = nameInput.trim() || "Guest";
-    setCommittedName(trimmed);
-    setLoading(true); setError(""); setPermWarning("");
-
-    // Ask for camera + mic while still inside the click handler (user gesture required)
+  // Permission button inside the waiting room (user gesture required for getUserMedia)
+  async function handleAllowAccess() {
+    setPermAsking(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       stream.getTracks().forEach(t => t.stop());
-    } catch (permErr: any) {
-      if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
-        setPermWarning("Camera or microphone was not allowed. Others may not see or hear you.");
-      } else if (permErr.name === "NotFoundError") {
-        setPermWarning("No camera or microphone found. You can still join and listen.");
-      }
-    }
-
-    try {
-      const statusRes = await fetch(`${BASE}/api/guest/status/${apptId}`);
-      if (!statusRes.ok) throw new Error("Appointment not found.");
-      const { joinEnabled } = await statusRes.json();
-      if (joinEnabled) setStep("joining"); else setStep("waiting");
-    } catch (e: any) { setError(e.message || "Could not connect."); }
-    finally { setLoading(false); }
+      setPermStatus("granted");
+    } catch (e: any) {
+      if (e.name === "NotFoundError") setPermStatus("unavailable");
+      else setPermStatus("denied");
+    } finally { setPermAsking(false); }
   }
 
   // ── Renders ──────────────────────────────────────────────────
@@ -669,67 +655,59 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
     );
   }
 
-  if (step === "waiting" || step === "joining") {
-    return (
-      <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm text-center">
-          <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4">
-            <Clock size={28} className="text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-1">Waiting Room</h1>
-          <p className="text-sm text-gray-500 mb-1">Hi <strong>{committedName}</strong>, you're all set.</p>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            The doctor hasn't started the call yet. This page will open the video room automatically — just keep it open.
-          </p>
-          <div className="flex items-center justify-center gap-2.5 py-3.5 bg-blue-50 rounded-xl border border-blue-100">
-            <Loader2 size={16} className="animate-spin text-blue-500 shrink-0" />
-            <span className="text-sm text-blue-700 font-medium">
-              {step === "joining" ? "Joining call…" : "Waiting for doctor…"}
-            </span>
-          </div>
-          {error && (
-            <div className="mt-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 text-left">
-              <AlertCircle size={14} className="shrink-0" /> {error}
-            </div>
-          )}
-          <p className="text-[11px] text-gray-400 mt-5">Susruta Hospital · Do not close this tab</p>
-        </div>
-      </div>
-    );
-  }
-
-  // step === "name"
+  // loading / waiting / joining — all show the same waiting room card
   return (
     <div className="min-h-screen bg-[#111] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm text-center">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-600 flex items-center justify-center mx-auto mb-4">
-          <Users size={28} className="text-white" />
+        {/* Hospital badge */}
+        <div className="w-16 h-16 rounded-2xl bg-[#1a3d2b] flex items-center justify-center mx-auto mb-4">
+          <Clock size={28} className="text-white" />
         </div>
-        <h1 className="text-xl font-bold text-gray-900 mb-1">Join as Guest</h1>
-        <p className="text-sm text-gray-500 mb-5">Susruta Hospital — Video Consultation</p>
+        <h1 className="text-xl font-bold text-gray-900 mb-1">Susruta Hospital</h1>
+        <p className="text-sm text-gray-500 mb-6">Video Consultation — Waiting Room</p>
 
-        <div className="mb-5 text-left">
-          <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Your name</label>
-          <input
-            value={nameInput} onChange={e => setNameInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleNameSubmit()}
-            placeholder="Guest"
-            className="w-full px-4 py-3.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-          />
-          <p className="text-[11px] text-gray-400 mt-1.5">You can change this or just tap Continue.</p>
+        {/* Status indicator */}
+        <div className="flex items-center justify-center gap-2.5 py-3.5 bg-blue-50 rounded-xl border border-blue-100 mb-5">
+          <Loader2 size={16} className={cn("text-blue-500 shrink-0", step !== "loading" && "animate-spin")} />
+          <span className="text-sm text-blue-700 font-medium">
+            {step === "loading" ? "Connecting…"
+              : step === "joining" ? "Joining call…"
+              : "Waiting for doctor…"}
+          </span>
         </div>
+
+        {/* Camera / mic permission prompt */}
+        {permStatus === null && step !== "loading" && (
+          <button onClick={handleAllowAccess} disabled={permAsking}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-[#1a3d2b] hover:bg-[#15322a] disabled:opacity-60 text-white font-semibold rounded-xl transition-colors text-sm mb-3">
+            {permAsking
+              ? <><Loader2 size={15} className="animate-spin" /> Opening…</>
+              : <><Video size={15} /> Allow Camera &amp; Microphone</>}
+          </button>
+        )}
+        {permStatus === "granted" && (
+          <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 font-medium mb-3">
+            <CheckCircle2 size={15} /> Camera &amp; Microphone ready
+          </div>
+        )}
+        {permStatus === "denied" && (
+          <div className="flex items-start gap-2 py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 text-left mb-3">
+            <VideoOff size={15} className="shrink-0 mt-0.5" /> Access was denied. Others may not see or hear you.
+          </div>
+        )}
+        {permStatus === "unavailable" && (
+          <div className="flex items-start gap-2 py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 text-left mb-3">
+            <VideoOff size={15} className="shrink-0 mt-0.5" /> No camera or microphone found. You can still listen.
+          </div>
+        )}
 
         {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mb-4 text-sm text-red-700 text-left">
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 text-left">
             <AlertCircle size={14} className="shrink-0" /> {error}
           </div>
         )}
 
-        <button onClick={handleNameSubmit}
-          className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors text-sm">
-          <Video size={16} /> Continue →
-        </button>
-        <p className="text-[11px] text-gray-400 mt-3">If the call is already active, you'll join immediately.</p>
+        <p className="text-[11px] text-gray-400 mt-5">Susruta Hospital · Do not close this tab</p>
       </div>
     </div>
   );
