@@ -408,7 +408,7 @@ function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; pa
   );
 }
 
-function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onDelete }: {
+function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onCancel, onDelete }: {
   appt: OnlineAppt;
   permissions: ParticipantPerm[];
   onJoinToggle: (id: number, enable: boolean) => Promise<void>;
@@ -418,6 +418,7 @@ function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescri
   onRequestPermissions: (id: number) => Promise<void>;
   onReset: (id: number) => Promise<void>;
   onMarkDone: (id: number) => Promise<void>;
+  onCancel: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -426,6 +427,8 @@ function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescri
   const [requestingPerm, setRequestingPerm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [markingDone, setMarkingDone] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [permSent, setPermSent] = useState(false);
@@ -450,6 +453,13 @@ function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescri
     setRequestingPerm(false);
     setPermSent(true);
     setTimeout(() => setPermSent(false), 4000);
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    await onCancel(appt.id);
+    setCancelling(false);
+    setConfirmCancel(false);
   }
 
   async function handleReset() {
@@ -599,7 +609,7 @@ function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescri
         </div>
       )}
 
-      {/* Admin actions — Reset to Pending / Mark as Done / Delete */}
+      {/* Admin actions — Reset to Pending / Mark as Done / Cancel / Delete */}
       <div className="mx-4 mb-3 flex flex-wrap items-center gap-2">
         {["completed", "cancelled"].includes(appt.status) && !appt.joinEnabled && (
           <button
@@ -620,6 +630,33 @@ function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescri
             {markingDone ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
             Mark as Done
           </button>
+        )}
+        {["pending", "confirmed"].includes(appt.status) && !appt.joinEnabled && !confirmCancel && (
+          <button
+            onClick={() => setConfirmCancel(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors"
+          >
+            <XCircle size={11} /> Cancel Appointment
+          </button>
+        )}
+        {confirmCancel && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-orange-700 font-semibold">Cancel this appointment?</span>
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-orange-600 text-white hover:bg-orange-700 transition-colors"
+            >
+              {cancelling ? <Loader2 size={10} className="animate-spin" /> : null}
+              Yes, Cancel
+            </button>
+            <button
+              onClick={() => setConfirmCancel(false)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+            >
+              Keep
+            </button>
+          </div>
         )}
         {!confirmDelete ? (
           <button
@@ -789,6 +826,15 @@ export default function AdminAppointments() {
       });
       setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, joinEnabled: false, status: "completed" } : a));
     } catch { setOnlineErr("Could not mark as done. Please try again."); }
+  }
+
+  async function cancelAppt(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/cancel`, {
+        method: "PATCH", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, status: "cancelled", joinEnabled: false } : a));
+    } catch { setOnlineErr("Cancel failed. Please try again."); }
   }
 
   async function deleteAppt(id: number) {
@@ -1030,6 +1076,7 @@ export default function AdminAppointments() {
                     onRequestPermissions={requestPermissions}
                     onReset={resetAppt}
                     onMarkDone={markDone}
+                    onCancel={cancelAppt}
                     onDelete={deleteAppt}
                   />
                 ))}
@@ -1054,6 +1101,7 @@ export default function AdminAppointments() {
                     onRequestPermissions={requestPermissions}
                     onReset={resetAppt}
                     onMarkDone={markDone}
+                    onCancel={cancelAppt}
                     onDelete={deleteAppt}
                   />
                 ))}
