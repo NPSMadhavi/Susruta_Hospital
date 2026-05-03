@@ -743,7 +743,7 @@ export default function PatientDashboard() {
   const [showBooking, setShowBooking] = useState(false);
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions" | "docs">("appointments");
   const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
-  const [docsUploading, setDocsUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [docsError, setDocsError] = useState("");
   const docFileRef = useRef<HTMLInputElement>(null);
   const docCamRef = useRef<HTMLInputElement>(null);
@@ -863,43 +863,50 @@ export default function PatientDashboard() {
   }, []);
 
   async function uploadPatientDoc(file: File) {
-    // Camera photos on some Android devices report an empty type — fall back to JPEG
-    const contentType = file.type || "image/jpeg";
-    // Camera photos may lack a proper extension — append one based on content type
-    let fileName = file.name || "document";
-    if (!fileName.includes(".")) {
-      const ext = contentType === "application/pdf" ? "pdf"
-        : contentType.startsWith("image/png") ? "png"
-        : "jpg";
-      fileName = `${fileName}.${ext}`;
+    setUploadingCount(prev => prev + 1);
+    try {
+      // Camera photos on some Android devices report an empty type — fall back to JPEG
+      const contentType = file.type || "image/jpeg";
+      // Camera photos may lack a proper extension — append one based on content type
+      let fileName = file.name || "document";
+      if (!fileName.includes(".")) {
+        const ext = contentType === "application/pdf" ? "pdf"
+          : contentType.startsWith("image/png") ? "png"
+          : "jpg";
+        fileName = `${fileName}.${ext}`;
+      }
+      const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fileName, contentType, size: file.size }),
+      });
+      if (!urlRes.ok) throw new Error("Could not get upload URL");
+      const { uploadURL, objectPath } = await urlRes.json();
+      const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+      if (!putRes.ok) throw new Error("File upload failed — please try again");
+      const saveRes = await fetch(`${BASE}/api/patient/documents`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fileName, objectPath, contentType, size: file.size }),
+      });
+      if (!saveRes.ok) throw new Error("Could not save document");
+      const doc = await saveRes.json();
+      setPatientDocs(prev => [doc, ...prev]);
+    } finally {
+      setUploadingCount(prev => prev - 1);
     }
-    const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fileName, contentType, size: file.size }),
-    });
-    if (!urlRes.ok) throw new Error("Could not get upload URL");
-    const { uploadURL, objectPath } = await urlRes.json();
-    const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-    if (!putRes.ok) throw new Error("File upload failed — please try again");
-    const saveRes = await fetch(`${BASE}/api/patient/documents`, {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fileName, objectPath, contentType, size: file.size }),
-    });
-    if (!saveRes.ok) throw new Error("Could not save document");
-    const doc = await saveRes.json();
-    setPatientDocs(prev => [doc, ...prev]);
   }
 
   async function uploadPatientDocs(files: FileList | File[]) {
-    setDocsUploading(true); setDocsError("");
-    try {
-      for (const file of Array.from(files)) {
-        await uploadPatientDoc(file);
-      }
-    } catch (e: any) { setDocsError(e.message || "Upload failed"); }
-    finally { setDocsUploading(false); }
+    setDocsError("");
+    // Upload all files in parallel so selecting 5 PDFs uploads all 5 simultaneously
+    const results = await Promise.allSettled(Array.from(files).map(f => uploadPatientDoc(f)));
+    const failures = results.filter(r => r.status === "rejected") as PromiseRejectedResult[];
+    if (failures.length > 0) {
+      setDocsError(failures.length === 1
+        ? (failures[0].reason?.message || "Upload failed")
+        : `${failures.length} file(s) failed to upload — please try again`);
+    }
   }
 
   async function deletePatientDoc(id: number) {
@@ -1324,15 +1331,15 @@ export default function PatientDashboard() {
             {mobileTab === "docs" && (
               <motion.div key="m-docs" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <label className={cn("flex flex-col items-center justify-center gap-2 py-5 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center", docsUploading && "opacity-60 pointer-events-none")}>
-                    {docsUploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
-                    <span>Take Photo</span>
+                  <label className="flex flex-col items-center justify-center gap-2 py-5 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center">
+                    {uploadingCount > 0 ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
+                    <span>{uploadingCount > 0 ? `Uploading ${uploadingCount}…` : "Take Photo"}</span>
                     <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
                       onChange={e => { if (e.target.files?.length) { uploadPatientDocs(e.target.files); e.target.value = ""; } }} />
                   </label>
-                  <label className={cn("flex flex-col items-center justify-center gap-2 py-5 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center", docsUploading && "opacity-60 pointer-events-none")}>
-                    <Upload size={22} />
-                    <span>Upload File</span>
+                  <label className="flex flex-col items-center justify-center gap-2 py-5 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer active:scale-95 transition-transform text-center">
+                    {uploadingCount > 0 ? <Loader2 size={22} className="animate-spin text-[#1a3d2b]" /> : <Upload size={22} />}
+                    <span>{uploadingCount > 0 ? `Uploading ${uploadingCount}…` : "Upload File"}</span>
                     <input ref={docFileRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
                       onChange={e => { if (e.target.files?.length) { uploadPatientDocs(e.target.files); e.target.value = ""; } }} />
                   </label>
@@ -1667,13 +1674,13 @@ export default function PatientDashboard() {
                 ) : mainTab === "docs" ? (
                   <motion.div key="docs" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
                     <div className="grid grid-cols-2 gap-3 mb-5">
-                      <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
-                        {docsUploading ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-                        <span>Take Photo</span>
+                      <label className="flex flex-col items-center justify-center gap-2 py-4 px-3 bg-[#1a3d2b] text-white rounded-2xl text-sm font-semibold cursor-pointer hover:bg-[#1a3d2b]/90 transition-colors text-center active:scale-95">
+                        {uploadingCount > 0 ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+                        <span>{uploadingCount > 0 ? `Uploading ${uploadingCount}…` : "Take Photo"}</span>
                         <input ref={docCamRef} type="file" accept="image/*" capture="environment" className="hidden"
                           onChange={e => { if (e.target.files?.length) { uploadPatientDocs(e.target.files); e.target.value = ""; } }} />
                       </label>
-                      <label className={cn("flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95", docsUploading && "opacity-60 pointer-events-none")}>
+                      <label className="flex flex-col items-center justify-center gap-2 py-4 px-3 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold cursor-pointer hover:border-[#1a3d2b]/30 hover:text-[#1a3d2b] transition-colors text-center active:scale-95">
                         <Upload size={20} />
                         <span>Upload File</span>
                         <input ref={docFileRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
