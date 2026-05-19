@@ -1,0 +1,43 @@
+User-agent: *
+Allow: /
+
+# Block admin, doctor, portal, and pharmacy portals from indexing
+Disallow: /admin/
+Disallow: /doctor/
+Disallow: /portal/
+Disallow: /pharmacy/
+Disallow: /guest-call/
+
+# Allow public pages
+Allow: /treatments/
+Allow: /conditions/
+Allow: /appointments
+Allow: /medical-disclaimer
+Allow: /terms
+Allow: /privacy-policy
+
+# Block AI training scrapers while allowing search crawlers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+# Allow search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+# Sitemap
+Sitemap: https://susruta.replit.app/sitemap.xml

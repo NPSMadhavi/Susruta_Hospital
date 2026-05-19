@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import fs from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const rawPort = process.env.PORT;
@@ -26,9 +27,34 @@ if (!basePath) {
   );
 }
 
+const publicDir = path.resolve(import.meta.dirname, "public");
+
+function publicDirIndexPlugin() {
+  return {
+    name: "public-dir-index",
+    configureServer(server: any) {
+      server.middlewares.use((req: any, res: any, next: any) => {
+        const url = (req.url || "").split("?")[0];
+        if (!url.includes(".")) {
+          const normalized = url.endsWith("/") ? url : url + "/";
+          const candidate = path.join(publicDir, normalized, "index.html");
+          if (fs.existsSync(candidate)) {
+            res.setHeader("Content-Type", "text/html; charset=utf-8");
+            res.setHeader("Cache-Control", "no-cache");
+            res.end(fs.readFileSync(candidate, "utf-8"));
+            return;
+          }
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
   plugins: [
+    publicDirIndexPlugin(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
