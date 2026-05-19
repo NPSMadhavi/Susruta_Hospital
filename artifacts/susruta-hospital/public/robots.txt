@@ -40,4 +40,4 @@ User-agent: OAI-SearchBot
 Allow: /
 
 # Sitemap
-Sitemap: https://susruta.replit.app/sitemap.xml
+Sitemap: https://susrutahospital.com/sitemap.xml
