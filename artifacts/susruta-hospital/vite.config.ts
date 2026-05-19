@@ -27,26 +27,43 @@ if (!basePath) {
   );
 }
 
-const publicDir = path.resolve(import.meta.dirname, "public");
-
 function publicDirIndexPlugin() {
+  let resolvedPublicDir = "";
+
+  function makeHandler(getPublicDir: () => string) {
+    return function (req: any, res: any, next: any) {
+      const publicDir = getPublicDir();
+      if (!publicDir) return next();
+
+      const rawUrl = req.url || "";
+      const url = rawUrl.split("?")[0];
+
+      if (url.includes(".")) return next();
+
+      const normalized = url.endsWith("/") ? url : url + "/";
+      const candidate = path.join(publicDir, normalized, "index.html");
+
+      try {
+        const content = fs.readFileSync(candidate, "utf-8");
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(content);
+      } catch {
+        next();
+      }
+    };
+  }
+
   return {
     name: "public-dir-index",
+    configResolved(config: any) {
+      resolvedPublicDir = config.publicDir as string;
+    },
     configureServer(server: any) {
-      server.middlewares.use((req: any, res: any, next: any) => {
-        const url = (req.url || "").split("?")[0];
-        if (!url.includes(".")) {
-          const normalized = url.endsWith("/") ? url : url + "/";
-          const candidate = path.join(publicDir, normalized, "index.html");
-          if (fs.existsSync(candidate)) {
-            res.setHeader("Content-Type", "text/html; charset=utf-8");
-            res.setHeader("Cache-Control", "no-cache");
-            res.end(fs.readFileSync(candidate, "utf-8"));
-            return;
-          }
-        }
-        next();
-      });
+      server.middlewares.use(makeHandler(() => resolvedPublicDir));
+    },
+    configurePreviewServer(server: any) {
+      server.middlewares.use(makeHandler(() => resolvedPublicDir));
     },
   };
 }
