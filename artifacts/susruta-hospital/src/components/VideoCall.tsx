@@ -8,8 +8,9 @@ import {
   useIsSpeaking,
   useTrackToggle,
   useDisconnectButton,
+  useRoomContext,
 } from "@livekit/components-react";
-import { Track, type Participant } from "livekit-client";
+import { RoomEvent, Track, type Participant } from "livekit-client";
 import {
   Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users,
   Paperclip, FileText, Upload, Mic, MicOff, VideoOff, PhoneOff,
@@ -139,9 +140,10 @@ function ParticipantTile({ participant, colourIdx, isLocal }: {
 }
 
 // ── Participants Sidebar ───────────────────────────────────────
-function ParticipantsSidebar({ participants, localParticipant }: {
+function ParticipantsSidebar({ participants, localParticipant, onAskToUnmute }: {
   participants: Participant[];
   localParticipant: Participant;
+  onAskToUnmute?: (participant: Participant) => void;
 }) {
   return (
     <div className="flex flex-col h-full bg-[#1c1c1e] border-l border-white/5">
@@ -181,6 +183,15 @@ function ParticipantsSidebar({ participants, localParticipant }: {
                   ? <Video size={12} className="text-white/40" />
                   : <VideoOff size={12} className="text-red-400" />}
               </div>
+              {onAskToUnmute && !isLocal && !isMicOn && (
+                <button
+                  onClick={() => onAskToUnmute(p)}
+                  title={`Ask ${p.name || "patient"} to unmute`}
+                  className="text-[9px] font-bold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/30 border border-amber-400/20 rounded-md px-1.5 py-1 whitespace-nowrap transition-colors"
+                >
+                  Ask to unmute
+                </button>
+              )}
             </div>
           );
         })}
@@ -219,12 +230,15 @@ function CtrlBtn({ icon, label, active, danger, onClick, disabled }: {
 function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void }) {
   const participants        = useParticipants();
   const { localParticipant } = useLocalParticipant();
+  const room                = useRoomContext();
   const { buttonProps: leaveProps } = useDisconnectButton({});
   const { enabled: micOn, toggle: toggleMic } = useTrackToggle({ source: Track.Source.Microphone });
   const { enabled: camOn, toggle: toggleCam } = useTrackToggle({ source: Track.Source.Camera });
 
   const [showPeople, setShowPeople] = useState(true);
   const [elapsed, setElapsed] = useState(0);
+  const [unmuteRequest, setUnmuteRequest] = useState<string | null>(null);
+  const [unmuteBusy, setUnmuteBusy] = useState(false);
   const startRef = useRef(Date.now());
 
   // Timer
@@ -236,6 +250,49 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
   const canPublish = role !== "admin";
   const allParticipants = participants; // includes local
 
+  useEffect(() => {
+    if (role !== "patient") return;
+    function handleData(payload: Uint8Array, participant?: Participant) {
+      try {
+        const message = JSON.parse(new TextDecoder().decode(payload));
+        if (message?.type === "request-unmute" &&
+            (!message.target || message.target === localParticipant.identity)) {
+          setUnmuteRequest(participant?.name || "The care team");
+        }
+      } catch {
+        // Ignore unrelated room data messages.
+      }
+    }
+    room.on(RoomEvent.DataReceived, handleData as any);
+    return () => { room.off(RoomEvent.DataReceived, handleData as any); };
+  }, [room, role, localParticipant.identity]);
+
+  async function askToUnmute(participant: Participant) {
+    try {
+      await localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify({
+          type: "request-unmute",
+          target: participant.identity,
+        })),
+        { reliable: true, destinationIdentities: [participant.identity], topic: "susruta-call-control" },
+      );
+    } catch {
+      // The participant can still use their own in-call microphone control.
+    }
+  }
+
+  async function acceptUnmuteRequest() {
+    setUnmuteBusy(true);
+    try {
+      await localParticipant.setMicrophoneEnabled(true);
+      setUnmuteRequest(null);
+    } catch {
+      setUnmuteRequest("Microphone access was blocked. Please allow it in your browser settings.");
+    } finally {
+      setUnmuteBusy(false);
+    }
+  }
+
   // Grid columns
   const count = allParticipants.length;
   const cols = count <= 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
@@ -246,7 +303,7 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#111] select-none" style={{ fontFamily: "system-ui, sans-serif" }}>
+    <div className="relative flex flex-col w-full h-full bg-[#111] select-none" style={{ fontFamily: "system-ui, sans-serif" }}>
       {/* ── Audio renderer (invisible) */}
       <RoomAudioRenderer />
 
@@ -313,10 +370,41 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
             <ParticipantsSidebar
               participants={allParticipants}
               localParticipant={localParticipant}
+              onAskToUnmute={role === "admin" ? askToUnmute : undefined}
             />
           </div>
         )}
       </div>
+
+      {role === "patient" && unmuteRequest && (
+        <div className="absolute left-4 right-4 bottom-[100px] z-20 mx-auto max-w-md rounded-2xl bg-white shadow-2xl border border-amber-200 p-3.5 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <Mic size={17} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-gray-900 text-sm font-bold">Please turn on your microphone</p>
+            <p className="text-gray-500 text-xs truncate">
+              {unmuteRequest.includes("blocked") ? unmuteRequest : `${unmuteRequest} is asking you to unmute.`}
+            </p>
+          </div>
+          {!unmuteRequest.includes("blocked") && (
+            <button
+              onClick={acceptUnmuteRequest}
+              disabled={unmuteBusy}
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap disabled:opacity-60"
+            >
+              {unmuteBusy ? "Enabling…" : "Unmute"}
+            </button>
+          )}
+          <button
+            onClick={() => setUnmuteRequest(null)}
+            className="text-gray-400 hover:text-gray-700 p-1"
+            aria-label="Dismiss microphone request"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Bottom control bar ──────────────────────────────── */}
       <div className="shrink-0 h-[88px] bg-[#1c1c1e]/90 backdrop-blur border-t border-white/5 flex items-center justify-between px-6">

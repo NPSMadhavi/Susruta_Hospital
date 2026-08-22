@@ -227,7 +227,9 @@ router.get("/direct-admin-token/:callId", requireAdmin, async (req, res) => {
     name: "Admin",
     ttl: 3 * 60 * 60,
   });
-  at.addGrant({ roomJoin: true, room: call.roomName, canPublish: false, canSubscribe: true, roomAdmin: true });
+  // The monitor never enables camera or microphone in the UI, but needs data-channel
+  // publishing permission to send a patient-only "please unmute" request.
+  at.addGrant({ roomJoin: true, room: call.roomName, canPublish: true, canSubscribe: true, roomAdmin: true });
   res.json({ token: await at.toJwt(), roomName: call.roomName, serverUrl: LK_URL });
 });
 
