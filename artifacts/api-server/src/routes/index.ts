@@ -14,6 +14,7 @@ import pharmacyRouter from "./pharmacy";
 import medicineOrdersRouter from "./medicine-orders";
 import livekitRouter from "./livekit";
 import guestRouter from "./guest";
+import directCallsRouter from "./direct-calls";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use("/online-appointments", onlineAppointmentsRouter);
 router.use("/pharmacy", pharmacyRouter);
 router.use("/medicine-orders", medicineOrdersRouter);
 router.use("/guest", guestRouter);
+router.use("/direct-calls", directCallsRouter);
 router.use(storageRouter);
 
 export default router;

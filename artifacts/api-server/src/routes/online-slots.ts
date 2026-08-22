@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable } from "@workspace/db";
-import { eq, desc, and, gte, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, gte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 import { z } from "zod/v4";
 
@@ -22,26 +22,58 @@ function generateSlots(startTime: string, endTime: string, intervalMinutes: numb
   return slots;
 }
 
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function parseSessionId(value: string | string[]): number {
+  return parseInt(Array.isArray(value) ? value[0] : value, 10);
+}
+
+const TimeString = z.string()
+  .regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format")
+  .refine((value) => {
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+  }, "Time must be a valid clock time");
+
 // ── Admin: POST /api/online-slots/sessions ────────────────────
 const CreateSessionBody = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: TimeString,
+  endTime: TimeString,
   intervalMinutes: z.coerce.number().refine((v) => v === 15 || v === 30, {
     message: "intervalMinutes must be 15 or 30",
   }),
 });
 
-router.post("/sessions", requireAdmin, async (req, res) => {
+const ExtendSessionBody = z.object({
+  endTime: TimeString,
+});
+
+router.post("/sessions", requireAdmin, async (req, res): Promise<void> => {
   const parsed = CreateSessionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "validation_error", issues: parsed.error.issues }); return; }
 
   const { date, startTime, endTime, intervalMinutes } = parsed.data;
 
-  // Prevent duplicate sessions for the same date
+  if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+    res.status(400).json({ error: "invalid_range", message: "Session end time must be later than the start time." });
+    return;
+  }
+
+  // Multiple sessions may share a date, but their time ranges must not overlap.
   const existing = await db.select().from(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.date, date));
-  if (existing.length > 0) {
-    res.status(409).json({ error: "duplicate", message: `A session already exists for ${date}. Delete it first before creating a new one.` });
+  const overlaps = existing.find((session) =>
+    timeToMinutes(startTime) < timeToMinutes(session.endTime) &&
+    timeToMinutes(endTime) > timeToMinutes(session.startTime)
+  );
+  if (overlaps) {
+    res.status(409).json({
+      error: "overlap",
+      message: `This time overlaps the existing ${overlaps.startTime}–${overlaps.endTime} session. Choose a different time range.`,
+    });
     return;
   }
 
@@ -66,12 +98,98 @@ router.post("/sessions", requireAdmin, async (req, res) => {
   res.status(201).json({ session, slots: createdSlots });
 });
 
+// ── Admin: PATCH /api/online-slots/sessions/:id ────────────────
+// Extends a session by appending slots after its current end time.
+// Existing slots, including booked ones, are never changed.
+router.patch("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseSessionId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  const parsed = ExtendSessionBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "validation_error", issues: parsed.error.issues }); return; }
+
+  const [session] = await db
+    .select()
+    .from(onlineSlotSessionsTable)
+    .where(eq(onlineSlotSessionsTable.id, id));
+
+  if (!session) {
+    res.status(404).json({ error: "not_found", message: "Slot session not found." });
+    return;
+  }
+
+  const { endTime } = parsed.data;
+  if (timeToMinutes(endTime) <= timeToMinutes(session.endTime)) {
+    res.status(400).json({
+      error: "invalid_extension",
+      message: `The new end time must be later than the current end time (${session.endTime}).`,
+    });
+    return;
+  }
+
+  const otherSessions = await db
+    .select()
+    .from(onlineSlotSessionsTable)
+    .where(eq(onlineSlotSessionsTable.date, session.date));
+  const conflictingSession = otherSessions.find((other) =>
+    other.id !== session.id &&
+    timeToMinutes(session.startTime) < timeToMinutes(other.endTime) &&
+    timeToMinutes(endTime) > timeToMinutes(other.startTime)
+  );
+  if (conflictingSession) {
+    res.status(409).json({
+      error: "overlap",
+      message: `The extension overlaps the existing ${conflictingSession.startTime}–${conflictingSession.endTime} session.`,
+    });
+    return;
+  }
+
+  const newSlots = generateSlots(session.endTime, endTime, session.intervalMinutes);
+  if (newSlots.length === 0) {
+    res.status(400).json({
+      error: "no_slots",
+      message: `The extension must be at least ${session.intervalMinutes} minutes long.`,
+    });
+    return;
+  }
+
+  const existingSlots = await db
+    .select()
+    .from(onlineSlotsTable)
+    .where(eq(onlineSlotsTable.sessionId, session.id));
+
+  await db.insert(onlineSlotsTable).values(
+    newSlots.map((slot) => ({
+      sessionId: session.id,
+      date: session.date,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    }))
+  );
+
+  const [updatedSession] = await db
+    .update(onlineSlotSessionsTable)
+    .set({
+      endTime,
+      maxBookings: existingSlots.length + newSlots.length,
+    })
+    .where(eq(onlineSlotSessionsTable.id, session.id))
+    .returning();
+
+  const updatedSlots = await db
+    .select()
+    .from(onlineSlotsTable)
+    .where(eq(onlineSlotsTable.sessionId, session.id));
+
+  res.json({ session: updatedSession, slots: updatedSlots, addedSlots: newSlots.length });
+});
+
 // ── Admin: GET /api/online-slots/sessions ────────────────────
-router.get("/sessions", requireAdmin, async (_req, res) => {
+router.get("/sessions", requireAdmin, async (_req, res): Promise<void> => {
   const sessions = await db
     .select()
     .from(onlineSlotSessionsTable)
-    .orderBy(desc(onlineSlotSessionsTable.date));
+    .orderBy(desc(onlineSlotSessionsTable.date), asc(onlineSlotSessionsTable.startTime));
 
   const allSlots = await db.select().from(onlineSlotsTable);
   const allAppts = await db.select().from(onlineAppointmentsTable);
@@ -101,8 +219,8 @@ router.get("/sessions", requireAdmin, async (_req, res) => {
 // ── Admin: DELETE /api/online-slots/sessions/:id ──────────────
 // Deletes a session and all its slots.
 // First removes all appointment records for those slots (FK would otherwise block CASCADE).
-router.delete("/sessions/:id", requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id);
+router.delete("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseSessionId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
 
   try {

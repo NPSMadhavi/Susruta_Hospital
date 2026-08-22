@@ -64,6 +64,9 @@ export default function AdminOnlineSlots() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [extending, setExtending] = useState<number | null>(null);
+  const [extensionSessionId, setExtensionSessionId] = useState<number | null>(null);
+  const [extensionEndTime, setExtensionEndTime] = useState("");
   const [creating, setCreating] = useState(false);
   const [preview, setPreview] = useState<SlotPreview[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -149,6 +152,38 @@ export default function AdminOnlineSlots() {
     }
   }
 
+  async function extendSession(e: React.FormEvent, session: Session) {
+    e.preventDefault();
+    setErr("");
+    if (!extensionEndTime || extensionEndTime <= session.endTime) {
+      setErr(`Choose an end time later than ${fmtTime(session.endTime)}.`);
+      return;
+    }
+
+    setExtending(session.id);
+    try {
+      const r = await apiFetch(`/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endTime: extensionEndTime }),
+      });
+      let data: Record<string, unknown> = {};
+      try { data = await r.json(); } catch { /* non-JSON body */ }
+      if (!r.ok) {
+        setErr((data?.message as string) || `Server error (${r.status}). Please try again.`);
+        return;
+      }
+      notify("Session Extended", `Added ${(data.addedSlots as number) ?? 0} new slots to ${fmtDate(session.date)}.`);
+      setExtensionSessionId(null);
+      setExtensionEndTime("");
+      await load();
+    } catch (error) {
+      setErr(error instanceof Error ? `Error: ${error.message}` : "Network error. Please try again.");
+    } finally {
+      setExtending(null);
+    }
+  }
+
   return (
     <AdminLayout>
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -209,6 +244,16 @@ export default function AdminOnlineSlots() {
                 </div>
               </div>
             </div>
+
+            {form.date && sessions.some((session) => session.date === form.date) && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <Calendar size={15} className="mt-0.5 shrink-0" />
+                <span>
+                  This date already has {sessions.filter((session) => session.date === form.date).length} session(s).
+                  You can add another one by choosing a time range that does not overlap the existing sessions.
+                </span>
+              </div>
+            )}
 
             {/* Slot Count Preview */}
             <div className={cn(
@@ -297,10 +342,25 @@ export default function AdminOnlineSlots() {
                       </div>
 
                       <button onClick={() => setExpanded(isExpanded ? null : sess.id)}
+                        type="button"
                         className="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </button>
-                      <button onClick={() => deleteSession(sess.id)} disabled={deleting === sess.id}
+                      <button
+                        type="button"
+                        title="Extend this session"
+                        aria-label={`Extend session ending ${fmtTime(sess.endTime)}`}
+                        onClick={() => {
+                          setExpanded(sess.id);
+                          setExtensionSessionId(sess.id);
+                          setExtensionEndTime(sess.endTime);
+                          setErr("");
+                        }}
+                        className="p-2 rounded-xl text-[#1a3d2b] hover:bg-green-50 transition-colors"
+                      >
+                        <Plus size={18} />
+                      </button>
+                      <button type="button" onClick={() => deleteSession(sess.id)} disabled={deleting === sess.id}
                         className="p-2 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40">
                         {deleting === sess.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                       </button>
@@ -309,6 +369,46 @@ export default function AdminOnlineSlots() {
 
                   {isExpanded && (
                     <div className="border-t border-border px-5 pb-5 pt-4">
+                      {extensionSessionId === sess.id && (
+                        <form onSubmit={(e) => extendSession(e, sess)} className="mb-5 rounded-xl border border-green-200 bg-green-50/70 p-4">
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                              <p className="text-sm font-bold text-green-900">Extend this session</p>
+                              <p className="text-xs text-green-700 mt-0.5">
+                                Existing slots stay unchanged. New {sess.intervalMinutes}-minute slots will be added after {fmtTime(sess.endTime)}.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setExtensionSessionId(null)}
+                              className="text-xs font-semibold text-green-700 hover:text-green-950"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                            <label className="text-xs font-semibold text-green-900">
+                              New session end time
+                              <input
+                                type="time"
+                                min={sess.endTime}
+                                value={extensionEndTime}
+                                onChange={(e) => setExtensionEndTime(e.target.value)}
+                                className={`${inputCls} mt-1 min-w-0 sm:w-[180px]`}
+                                required
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              disabled={extending === sess.id}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3d2b] text-white rounded-xl font-bold text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60"
+                            >
+                              {extending === sess.id ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                              {extending === sess.id ? "Adding slots…" : "Add slots"}
+                            </button>
+                          </div>
+                        </form>
+                      )}
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Individual Slots</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                         {sess.slots.map(sl => {

@@ -39,3 +39,7 @@ export function broadcastAppointmentUpdated(payload: { id: number; joinEnabled: 
 export function broadcastPermissionUpdate(apptId: number, participants: object[]) {
   broadcast("permission_update", { apptId, participants });
 }
+
+export function broadcastDirectCallUpdated(payload: object) {
+  broadcast("direct_call_updated", payload);
+}

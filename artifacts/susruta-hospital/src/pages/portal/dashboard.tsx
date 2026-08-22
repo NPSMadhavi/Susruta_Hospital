@@ -33,6 +33,14 @@ type PhysicalAppt = {
   reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
 };
 type Patient = { id: number; patientCode: string | null; name: string; email: string; phone?: string; emailVerified: boolean };
+type DirectCall = {
+  id: number;
+  status: string;
+  roomName: string;
+  startedAt: string;
+  patientJoinedAt: string | null;
+  patient: { id: number; name: string; patientCode: string | null };
+};
 
 // ── Helpers ─────────────────────────────────────────────────────
 const IST = "Asia/Kolkata";
@@ -111,6 +119,36 @@ function JoinPopup({ apptId, onJoin, onClose }: {
         <button onClick={handleJoin}
           className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg">
           Join Video Call →
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
+function DirectCallPopup({ call, onJoin, onClose }: {
+  call: DirectCall;
+  onJoin: (id: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center">
+        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
+          <div className="w-14 h-14 rounded-full bg-emerald-200 flex items-center justify-center animate-pulse">
+            <Video size={28} className="text-emerald-700" />
+          </div>
+        </div>
+        <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Doctor is calling</h2>
+        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+          Dr. P. Murali Krishna would like to speak with you now.
+        </p>
+        <button onClick={() => onJoin(call.id)}
+          className="block w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-base transition-colors shadow-lg">
+          Answer Video Call →
+        </button>
+        <button onClick={onClose} className="mt-3 text-sm font-semibold text-gray-400 hover:text-gray-600">
+          Not now
         </button>
       </motion.div>
     </div>
@@ -737,8 +775,11 @@ export default function PatientDashboard() {
   const [physicalAppts, setPhysicalAppts] = useState<PhysicalAppt[]>([]);
   const [loading, setLoading] = useState(true);
   const [joinPopup, setJoinPopup] = useState<{ apptId: number } | null>(null);
+  const [directCall, setDirectCall] = useState<DirectCall | null>(null);
+  const [directCallPopup, setDirectCallPopup] = useState<DirectCall | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
   const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
+  const [videoCallDirectId, setVideoCallDirectId] = useState<number | null>(null);
   const [permissionRequest, setPermissionRequest] = useState<{ apptId: number } | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [mainTab, setMainTab] = useState<"appointments" | "prescriptions" | "docs">("appointments");
@@ -751,6 +792,7 @@ export default function PatientDashboard() {
   const [verifySent, setVerifySent] = useState(false);
   const [mobileTab, setMobileTab] = useState<"home" | "appointments" | "prescriptions" | "docs">("home");
   const sseRef = useRef<EventSource | null>(null);
+  const directSseRef = useRef<EventSource | null>(null);
   const chimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldChimeRef = useRef(false);
   const chimeCountRef = useRef(0);
@@ -806,6 +848,19 @@ export default function PatientDashboard() {
     sessionEndedRef.current = false;
   }
 
+  function handleDirectCallJoined(callId: number) {
+    stopChiming();
+    setDirectCallPopup(null);
+    setVideoCallDirectId(callId);
+    fetch(`${BASE}/api/direct-calls/${callId}/patient-joined`, {
+      method: "POST", credentials: "include",
+    }).catch(() => {});
+  }
+
+  function handleDirectCallEnded() {
+    setVideoCallDirectId(null);
+  }
+
   async function patientFetch(path: string, opts?: RequestInit) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
     if (r.status === 401) { nav("/portal"); return null; }
@@ -842,12 +897,13 @@ export default function PatientDashboard() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [me, myOnline, myPhysical, settings, myDocs] = await Promise.all([
+    const [me, myOnline, myPhysical, settings, myDocs, activeDirect] = await Promise.all([
       patientFetch("/me"),
       fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
       patientFetch("/appointments"),
       fetch(`${BASE}/api/admin/settings`).then(r => r.ok ? r.json() : {}),
       fetch(`${BASE}/api/patient/documents`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/api/direct-calls/patient/active`, { credentials: "include" }).then(r => r.ok ? r.json() : null),
     ]);
     if (!me) return;
     setPatient(me);
@@ -855,6 +911,7 @@ export default function PatientDashboard() {
     setOnlineAppts(onlineList);
     setPhysicalAppts(myPhysical ?? []);
     setPatientDocs(myDocs ?? []);
+    setDirectCall(activeDirect ?? null);
     phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
     setLoading(false);
     // If there's an active session, silently report permission state
@@ -961,6 +1018,25 @@ export default function PatientDashboard() {
     return () => { es.close(); stopChiming(); };
   }, [loadData]);
 
+  useEffect(() => {
+    const es = new EventSource(`${BASE}/api/direct-calls/patient/sse`, { withCredentials: true });
+    directSseRef.current = es;
+    es.addEventListener("direct_call_started", (e) => {
+      const data = JSON.parse((e as MessageEvent).data) as DirectCall;
+      playChime();
+      startChiming();
+      setDirectCall(data);
+      setDirectCallPopup(data);
+    });
+    es.addEventListener("direct_call_ended", () => {
+      stopChiming();
+      setDirectCall(null);
+      setDirectCallPopup(null);
+      setVideoCallDirectId(null);
+    });
+    return () => { es.close(); directSseRef.current = null; };
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   async function logout() {
@@ -997,12 +1073,14 @@ export default function PatientDashboard() {
   const prescriptions = onlineAppts.filter(a => a.prescription?.photoObjectPath);
   const hasLiveAppt = onlineAppts.some(a => a.joinEnabled);
   const liveAppt = onlineAppts.find(a => a.joinEnabled);
+  const hasLiveDirect = directCall?.status === "active";
 
   return (
     <div className="min-h-[100dvh] bg-[#f4f7f5] overflow-x-hidden">
       {/* Popups — shared between mobile & desktop */}
       <AnimatePresence>
         {joinPopup && <JoinPopup apptId={joinPopup.apptId} onJoin={handlePatientJoined} onClose={() => setJoinPopup(null)} />}
+        {directCallPopup && <DirectCallPopup call={directCallPopup} onJoin={handleDirectCallJoined} onClose={() => { stopChiming(); setDirectCallPopup(null); }} />}
         {donationPopup && <DonationPopup qrObjectPath={donationPopup.qrObjectPath} apptId={donationPopup.apptId} patientCode={patient?.patientCode} onClose={() => setDonationPopup(null)} />}
         {permissionRequest && (
           <PermissionRequestOverlay onDismiss={() => setPermissionRequest(null)} />
@@ -1031,6 +1109,11 @@ export default function PatientDashboard() {
           </div>
         );
       })()}
+      {videoCallDirectId !== null && (
+        <div className="fixed inset-0 z-40 bg-black flex flex-col overflow-hidden">
+          <VideoCall directCallId={videoCallDirectId} role="patient" onCallEnded={handleDirectCallEnded} autoJoin />
+        </div>
+      )}
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="bg-[#1a3d2b] sticky top-0 z-30 shadow-none sm:shadow-md">
@@ -1052,7 +1135,7 @@ export default function PatientDashboard() {
           )}
 
           {/* Live indicator — desktop only; on mobile the sidebar card shows this */}
-          {hasLiveAppt && (
+          {(hasLiveAppt || hasLiveDirect) && (
             <div className="hidden sm:flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-lg px-2.5 py-1.5 shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-emerald-300 text-xs font-bold">Live</span>
@@ -1107,6 +1190,20 @@ export default function PatientDashboard() {
                 )}
 
                 {/* Live alert — top priority */}
+                {hasLiveDirect && directCall && (
+                  <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}
+                    className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                      <p className="text-white font-black text-lg">Doctor is calling</p>
+                    </div>
+                    <p className="text-emerald-100 text-sm mb-4 leading-snug">A direct video call is ready for you now.</p>
+                    <button onClick={() => handleDirectCallJoined(directCall.id)}
+                      className="flex items-center justify-center gap-2 w-full py-4 bg-white text-emerald-700 font-extrabold rounded-2xl text-base active:scale-95 transition-transform">
+                      <Video size={20} /> Answer Video Call →
+                    </button>
+                  </motion.div>
+                )}
                 {hasLiveAppt && liveAppt && (
                   <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}
                     className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-lg">
@@ -1484,6 +1581,20 @@ export default function PatientDashboard() {
                   <button onClick={() => handlePatientJoined(liveAppt.id)}
                     className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
                     <Video size={18} /> Join Video Call →
+                  </button>
+                </motion.div>
+              )}
+              {hasLiveDirect && directCall && (
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  className="bg-emerald-600 rounded-3xl px-5 py-5 shadow-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bell size={18} className="text-white animate-pulse" />
+                    <p className="text-white font-black text-base">Doctor is calling</p>
+                  </div>
+                  <p className="text-emerald-100 text-sm mb-4">A direct video call is ready for you now.</p>
+                  <button onClick={() => handleDirectCallJoined(directCall.id)}
+                    className="flex items-center justify-center gap-2 w-full py-3.5 bg-white text-emerald-700 font-bold rounded-2xl text-base hover:bg-emerald-50 transition-colors">
+                    <Video size={18} /> Answer Video Call →
                   </button>
                 </motion.div>
               )}

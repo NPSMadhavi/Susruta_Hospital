@@ -57,6 +57,14 @@ type DonationRow = {
   id: number; patientCode: string | null; patientName: string | null; patientEmail: string | null;
   amount: string; lastSixDigits: string; status: string; thankYouSent: boolean; createdAt: string;
 };
+type DirectCall = {
+  id: number;
+  status: string;
+  roomName: string;
+  startedAt: string;
+  patientJoinedAt: string | null;
+  patient: { id: number; patientCode: string | null; name: string; email: string; phone: string | null };
+};
 
 // ── Helpers ─────────────────────────────────────────────────────
 const IST = "Asia/Kolkata";
@@ -841,6 +849,9 @@ export default function DoctorPortal() {
   const [donationsLoading, setDonationsLoading] = useState(false);
   const [donationSearch, setDonationSearch] = useState("");
   const [donationToast, setDonationToast] = useState<string | null>(null);
+  const [directCalls, setDirectCalls] = useState<DirectCall[]>([]);
+  const [directCallOpenId, setDirectCallOpenId] = useState<number | null>(null);
+  const [endingDirectCall, setEndingDirectCall] = useState(false);
 
   // mobile: are we in a detail view?
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
@@ -853,13 +864,16 @@ export default function DoctorPortal() {
     if (!silent) setLoading(true);
     setErr("");
     try {
-      const [apptData, patientsData] = await Promise.all([
+      const [apptData, patientsData, directCallData] = await Promise.all([
         doctorFetch("/all-appointments"),
         doctorFetch("/patients"),
+        fetch(`${BASE}/api/direct-calls/doctor/active`, { credentials: "include" })
+          .then(async r => r.ok ? r.json() : []),
       ]);
       setOnline(apptData.online ?? []);
       setOffline(apptData.offline ?? []);
       setRegisteredPatients(patientsData ?? []);
+      setDirectCalls(Array.isArray(directCallData) ? directCallData : []);
       setLastRefresh(new Date());
     } catch { if (!silent) setErr("Failed to load data"); }
     finally { if (!silent) setLoading(false); }
@@ -894,8 +908,17 @@ export default function DoctorPortal() {
         ),
       })));
     });
+    es.addEventListener("direct_call_updated", (e) => {
+      const payload = JSON.parse((e as MessageEvent).data) as { id: number; status: string };
+      if (payload.status === "ended") {
+        setDirectCalls(prev => prev.filter(call => call.id !== payload.id));
+        setDirectCallOpenId(prev => prev === payload.id ? null : prev);
+      } else {
+        load(true);
+      }
+    });
     return () => es.close();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/doctor/donations/sse`, { withCredentials: true });
@@ -965,11 +988,28 @@ export default function DoctorPortal() {
     try { await doctorFetch(`/online-appointments/${apptId}/complete`, { method: "POST" }); } catch {}
   }
 
+  async function endDirectCall(callId: number) {
+    setEndingDirectCall(true);
+    try {
+      const r = await fetch(`${BASE}/api/direct-calls/doctor/${callId}/end`, {
+        method: "POST", credentials: "include",
+      });
+      if (!r.ok) throw new Error();
+      setDirectCalls(prev => prev.filter(call => call.id !== callId));
+      setDirectCallOpenId(null);
+    } catch {
+      // The active-call banner remains visible so the doctor can retry.
+    } finally {
+      setEndingDirectCall(false);
+    }
+  }
+
   // ── Derived ──────────────────────────────────────────────────────
   const upcomingOnline = online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
   const upcomingOffline = offline.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date));
   const rxNeeded = online.filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath).sort((a, b) => b.date.localeCompare(a.date));
   const liveCount = online.filter(a => a.joinEnabled).length;
+  const activeDirectCall = directCalls[0] ?? null;
 
   const selectedAppt = online.find(a => a.id === selectedApptId) ?? null;
   const selectedPatient = registeredPatients.find(p => p.id === selectedPatientId) ?? null;
@@ -1158,10 +1198,10 @@ export default function DoctorPortal() {
             <span className="text-amber-200 text-xs font-semibold sm:hidden">{rxNeeded.length}</span>
           </div>
         )}
-        {liveCount > 0 && (
+        {(liveCount > 0 || activeDirectCall) && (
           <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-lg px-2.5 py-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-300 text-xs font-semibold">{liveCount} Live</span>
+            <span className="text-emerald-300 text-xs font-semibold">{liveCount + (activeDirectCall ? 1 : 0)} Live</span>
           </div>
         )}
         <p className="text-white/40 text-[12px] hidden lg:block font-medium">
@@ -1173,6 +1213,40 @@ export default function DoctorPortal() {
         </button>
         <button onClick={logout} className="sm:hidden p-2 text-white/50 hover:text-red-300 rounded-lg hover:bg-white/10 transition-colors"><LogOut size={16} /></button>
       </header>
+
+      {activeDirectCall && (
+        <div className="shrink-0 bg-emerald-50 border-b border-emerald-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0"><Video size={16} /></span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-emerald-950 truncate">Direct call for {activeDirectCall.patient.name}</p>
+              <p className="text-xs text-emerald-700">{activeDirectCall.patientJoinedAt ? "Patient has joined." : "Waiting for patient to join."}</p>
+            </div>
+          </div>
+          <button onClick={() => setDirectCallOpenId(activeDirectCall.id)}
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors">
+            Join direct call
+          </button>
+        </div>
+      )}
+
+      {directCallOpenId !== null && activeDirectCall && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+          <div className="h-14 px-4 flex items-center gap-3 bg-[#1c1c1e] border-b border-white/10 shrink-0">
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-bold truncate">Direct call with {activeDirectCall.patient.name}</p>
+              <p className="text-white/50 text-xs">No appointment required</p>
+            </div>
+            <button onClick={() => endDirectCall(activeDirectCall.id)} disabled={endingDirectCall}
+              className="px-3 py-2 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white disabled:opacity-60">
+              {endingDirectCall ? "Ending…" : "End call"}
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <VideoCall directCallId={activeDirectCall.id} role="doctor" autoJoin onCallEnded={() => setDirectCallOpenId(null)} className="h-full rounded-none border-0" />
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {donationToast && (

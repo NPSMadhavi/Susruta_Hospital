@@ -40,6 +40,16 @@ async function fetchGuestToken(apptId: number, name?: string): Promise<CallCrede
   if (!r.ok) throw new Error("Call is not active");
   return r.json();
 }
+async function fetchDirectPatientToken(callId: number): Promise<CallCredentials> {
+  const r = await fetch(`${BASE}/api/livekit/direct-patient-token/${callId}`, { credentials: "include" });
+  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.message || "This direct call is no longer active"); }
+  return r.json();
+}
+async function fetchDirectDoctorToken(callId: number): Promise<CallCredentials> {
+  const r = await fetch(`${BASE}/api/livekit/direct-doctor-token/${callId}`, { credentials: "include" });
+  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.message || "This direct call is no longer active"); }
+  return r.json();
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function getInitials(name?: string) {
@@ -470,7 +480,8 @@ export function CallDocumentUpload({ apptId }: { apptId: number }) {
 
 // ── Main VideoCall Component ───────────────────────────────────
 interface VideoCallProps {
-  apptId: number;
+  apptId?: number;
+  directCallId?: number;
   role: Role;
   guestToken?: string | null;
   onCallEnded?: () => void;
@@ -478,7 +489,7 @@ interface VideoCallProps {
   autoJoin?: boolean;
 }
 
-export function VideoCall({ apptId, role, guestToken, onCallEnded, className, autoJoin }: VideoCallProps) {
+export function VideoCall({ apptId, directCallId, role, guestToken, onCallEnded, className, autoJoin }: VideoCallProps) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -489,13 +500,21 @@ export function VideoCall({ apptId, role, guestToken, onCallEnded, className, au
     setLoading(true); setError("");
     try {
       let c: CallCredentials;
-      if (role === "patient") c = await fetchPatientToken(apptId);
-      else if (role === "doctor") c = await fetchDoctorToken(apptId);
-      else c = await fetchGuestToken(apptId);
+      if (directCallId !== undefined) {
+        if (role === "patient") c = await fetchDirectPatientToken(directCallId);
+        else if (role === "doctor") c = await fetchDirectDoctorToken(directCallId);
+        else throw new Error("This call does not support guest access");
+      } else if (apptId !== undefined) {
+        if (role === "patient") c = await fetchPatientToken(apptId);
+        else if (role === "doctor") c = await fetchDoctorToken(apptId);
+        else c = await fetchGuestToken(apptId);
+      } else {
+        throw new Error("No call was selected");
+      }
       setCreds(c); setInCall(true);
     } catch (e: any) { setError(e.message || "Could not join call"); }
     finally { setLoading(false); }
-  }, [apptId, role]);
+  }, [apptId, directCallId, role]);
 
   useEffect(() => {
     if (autoJoin && !autoJoinFired.current) { autoJoinFired.current = true; join(); }
