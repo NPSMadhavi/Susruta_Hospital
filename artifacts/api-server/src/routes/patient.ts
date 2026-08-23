@@ -203,12 +203,19 @@ router.get("/auth/verify", async (req, res) => {
   const token = req.query.token as string | undefined;
   if (!token) { res.redirect(`${frontendUrl}/portal?error=invalid_token`); return; }
 
-  const [row] = await db.select().from(loginTokensTable).where(eq(loginTokensTable.token, token));
-  if (!row || row.used || row.expiresAt < new Date()) {
+  const [row] = await db.update(loginTokensTable)
+    .set({ used: true })
+    .where(and(
+      eq(loginTokensTable.token, token),
+      eq(loginTokensTable.used, false),
+      ne(loginTokensTable.nextUrl, "__password_reset__"),
+      sql`${loginTokensTable.expiresAt} > NOW()`,
+    ))
+    .returning();
+  if (!row) {
     res.redirect(`${frontendUrl}/portal?error=expired_token`); return;
   }
 
-  await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.id, row.id));
   await db.update(patientsTable).set({ emailVerified: true }).where(eq(patientsTable.id, row.patientId));
 
   const sessionToken = await createPatientSession(row.patientId);

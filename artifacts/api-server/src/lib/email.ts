@@ -222,28 +222,34 @@ export async function sendMagicLink(opts: {
   name: string;
   verifyUrl: string;
   isNewAccount: boolean;
+  isVerificationReminder?: boolean;
 }) {
-  const { to, name, verifyUrl, isNewAccount } = opts;
-  const subject = isNewAccount
-    ? "Verify your Susruta Hospital Patient Account"
-    : "Your Susruta Hospital Login Link";
+  const { to, name, verifyUrl, isNewAccount, isVerificationReminder = false } = opts;
+  const isVerificationEmail = isNewAccount || isVerificationReminder;
+  const subject = isVerificationReminder
+    ? "Reminder: Verify your Susruta Hospital Patient Account"
+    : isNewAccount
+      ? "Verify your Susruta Hospital Patient Account"
+      : "Your Susruta Hospital Login Link";
 
   const bodyHtml = `
     <tr><td style="padding:36px 36px 24px;">
       <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
       <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 28px;font-family:Arial,sans-serif;">
-        ${isNewAccount
-          ? "Welcome! Please click the button below to verify your email and activate your patient account."
+        ${isVerificationEmail
+          ? isVerificationReminder
+            ? "This is a friendly reminder to verify your email so you can access your Susruta Hospital patient portal."
+            : "Welcome! Please click the button below to verify your email and activate your patient account."
           : "Click the button below to securely log in to your patient portal. This link is valid for <strong>15 minutes</strong>."}
       </p>
       <div style="text-align:center;margin:0 0 28px;">
         <a href="${verifyUrl}" style="display:inline-block;background:#2d6a4f;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;">
-          ${isNewAccount ? "Verify Email &amp; Continue" : "Log In to Portal"}
+          ${isVerificationEmail ? "Verify Email &amp; Continue" : "Log In to Portal"}
         </a>
       </div>
       <p style="color:#999;font-size:12px;line-height:1.6;margin:0;font-family:Arial,sans-serif;">
         If you did not request this, you can safely ignore this email.<br>
-        This link expires in 15 minutes and can only be used once.
+        This link expires in ${isVerificationEmail ? "24 hours" : "15 minutes"} and can only be used once.
       </p>
     </td></tr>`;
 
@@ -251,14 +257,16 @@ export async function sendMagicLink(opts: {
   const text = [
     `Namaste, ${name}`,
     "",
-    isNewAccount
-      ? "Welcome! Please visit the link below to verify your email and activate your patient account."
+    isVerificationEmail
+      ? isVerificationReminder
+        ? "This is a friendly reminder to verify your email so you can access your Susruta Hospital patient portal."
+        : "Welcome! Please visit the link below to verify your email and activate your patient account."
       : "Visit the link below to securely log in to your patient portal. This link is valid for 15 minutes.",
     "",
     verifyUrl,
     "",
     "If you did not request this, please ignore this email.",
-    "This link expires in 15 minutes and can only be used once.",
+    `This link expires in ${isVerificationEmail ? "24 hours" : "15 minutes"} and can only be used once.`,
     "",
     "─────────────────────────────────────────",
     "Susruta Hospital · Tirupati · +91 9492068180",
@@ -267,13 +275,8 @@ export async function sendMagicLink(opts: {
   const cfg = await getSmtpConfig();
 
   if (!cfg) {
-    console.log("\n========================================");
-    console.log("MAGIC LINK (SMTP not configured)");
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Verify URL: ${verifyUrl}`);
-    console.log("========================================\n");
-    return;
+    console.warn("[email] Verification email skipped because SMTP is not configured.");
+    return false;
   }
 
   await buildTransport(cfg).sendMail({
@@ -284,6 +287,7 @@ export async function sendMagicLink(opts: {
     text,
     attachments: logoAttachments(),
   });
+  return true;
 }
 
 // ── Password reset email ──────────────────────────────────────
@@ -330,11 +334,7 @@ export async function sendPasswordResetEmail(opts: {
   const cfg = await getSmtpConfig();
 
   if (!cfg) {
-    console.log("\n========================================");
-    console.log("PASSWORD RESET (SMTP not configured)");
-    console.log(`To: ${to}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log("========================================\n");
+    console.warn("[email] Password reset email skipped because SMTP is not configured.");
     return;
   }
 

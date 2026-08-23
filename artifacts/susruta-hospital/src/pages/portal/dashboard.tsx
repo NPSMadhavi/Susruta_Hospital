@@ -155,6 +155,54 @@ function DirectCallPopup({ call, onJoin, onClose }: {
   );
 }
 
+function EmailVerificationNotice({
+  email,
+  sent,
+  sending,
+  onResend,
+}: {
+  email: string;
+  sent: boolean;
+  sending: boolean;
+  onResend: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="border border-amber-300 bg-amber-100 rounded-2xl px-4 py-3.5 shadow-sm"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-amber-200 flex items-center justify-center shrink-0">
+            <Bell size={18} className="text-amber-700" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-amber-950 font-extrabold text-sm">Action required: verify your email</p>
+            <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
+              Verify <span className="font-semibold break-all">{email}</span> to unlock appointment booking and all patient portal features.
+            </p>
+          </div>
+        </div>
+        {sent ? (
+          <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shrink-0">
+            Verification email sent
+          </span>
+        ) : (
+          <button
+            onClick={onResend}
+            disabled={sending}
+            className="self-stretch sm:self-auto flex items-center justify-center gap-1.5 text-xs font-extrabold text-amber-950 bg-amber-200 hover:bg-amber-300 border border-amber-400 rounded-xl px-3.5 py-2.5 transition-colors shrink-0 disabled:opacity-60"
+          >
+            {sending ? <RefreshCw size={13} className="animate-spin" /> : <Bell size={13} aria-hidden="true" />}
+            {sending ? "Sending…" : "Resend verification email"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Donation Popup ──────────────────────────────────────────────
 function DonationPopup({
   qrObjectPath, apptId, patientCode, onClose,
@@ -1167,33 +1215,21 @@ export default function PatientDashboard() {
       <div className="md:hidden fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden bg-[#f4f7f5]" style={{ top: "64px" }}>
         {/* Scrollable content — nav height is ~64px, pb ensures content isn't hidden */}
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-0 overscroll-contain">
+          {patient && !patient.emailVerified && (
+            <div className="mb-4">
+              <EmailVerificationNotice
+                email={patient.email}
+                sent={verifySent}
+                sending={verifyResending}
+                onResend={resendVerificationEmail}
+              />
+            </div>
+          )}
           <AnimatePresence mode="wait">
 
             {/* ── Home tab ── */}
             {mobileTab === "home" && (
               <motion.div key="m-home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
-
-                {/* Email verification banner */}
-                {patient && !patient.emailVerified && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-2">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
-                        <p className="text-amber-700 text-xs mt-0.5">Check your inbox for the verification link.</p>
-                      </div>
-                    </div>
-                    {verifySent ? (
-                      <span className="text-xs font-semibold text-emerald-700">✓ Verification email sent!</span>
-                    ) : (
-                      <button onClick={resendVerificationEmail} disabled={verifyResending}
-                        className="self-start flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 rounded-xl px-3 py-1.5 disabled:opacity-60">
-                        {verifyResending ? <RefreshCw size={11} className="animate-spin" /> : <Bell size={11} />}
-                        Resend Verification
-                      </button>
-                    )}
-                  </div>
-                )}
 
                 {/* Live alert — top priority */}
                 {hasLiveDirect && directCall && (
@@ -1652,23 +1688,13 @@ export default function PatientDashboard() {
             {/* ── MAIN CONTENT ── */}
             <div ref={mainContentRef}>
               {patient && !patient.emailVerified && (
-                <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-amber-900 font-semibold text-sm">Email not verified</p>
-                      <p className="text-amber-700 text-xs mt-0.5">Please verify your email address to enable all features. Check your inbox for the verification link.</p>
-                    </div>
-                  </div>
-                  {verifySent ? (
-                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shrink-0">Email sent! Check your inbox.</span>
-                  ) : (
-                    <button onClick={resendVerificationEmail} disabled={verifyResending}
-                      className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl px-3 py-2 transition-colors shrink-0 disabled:opacity-60">
-                      {verifyResending ? <RefreshCw size={12} className="animate-spin" /> : <Bell size={12} />}
-                      Resend Verification
-                    </button>
-                  )}
+                <div className="mb-4">
+                  <EmailVerificationNotice
+                    email={patient.email}
+                    sent={verifySent}
+                    sending={verifyResending}
+                    onResend={resendVerificationEmail}
+                  />
                 </div>
               )}
 
