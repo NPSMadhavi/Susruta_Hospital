@@ -580,9 +580,19 @@ interface VideoCallProps {
   onCallEnded?: () => void;
   className?: string;
   autoJoin?: boolean;
+  keepOpenOnDisconnect?: boolean;
 }
 
-export function VideoCall({ apptId, directCallId, role, guestToken, onCallEnded, className, autoJoin }: VideoCallProps) {
+export function VideoCall({
+  apptId,
+  directCallId,
+  role,
+  guestToken,
+  onCallEnded,
+  className,
+  autoJoin,
+  keepOpenOnDisconnect = false,
+}: VideoCallProps) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -613,7 +623,21 @@ export function VideoCall({ apptId, directCallId, role, guestToken, onCallEnded,
     if (autoJoin && !autoJoinFired.current) { autoJoinFired.current = true; join(); }
   }, [autoJoin, join]);
 
-  function handleDisconnect() { setInCall(false); setCreds(null); onCallEnded?.(); }
+  function handleDisconnect() {
+    setInCall(false);
+    setCreds(null);
+    if (keepOpenOnDisconnect) {
+      setError("The call connection was interrupted. Please try joining again.");
+      return;
+    }
+    onCallEnded?.();
+  }
+
+  function handleUserLeave() {
+    setInCall(false);
+    setCreds(null);
+    onCallEnded?.();
+  }
 
   if (inCall && creds) {
     return (
@@ -624,7 +648,7 @@ export function VideoCall({ apptId, directCallId, role, guestToken, onCallEnded,
           connect={true} video={true} audio={true}
           onDisconnected={handleDisconnect}
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <SusrutaVideoRoom role={role} onLeave={handleDisconnect} />
+          <SusrutaVideoRoom role={role} onLeave={handleUserLeave} />
         </LiveKitRoom>
       </div>
     );

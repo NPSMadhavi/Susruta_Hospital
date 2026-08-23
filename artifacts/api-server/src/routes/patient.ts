@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable } from "@workspace/db";
-import { eq, and, desc, ne } from "drizzle-orm";
+import { eq, and, desc, ne, sql } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
   hashPassword, verifyPassword,
@@ -123,7 +123,8 @@ router.post("/auth/register", async (req, res) => {
   const email = parsed.data.email.toLowerCase().trim();
   const phone = parsed.data.phone?.trim() || null;
 
-  const [existingEmail] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
+  const [existingEmail] = await db.select().from(patientsTable)
+    .where(sql`lower(${patientsTable.email}) = ${email}`);
   if (existingEmail) {
     res.status(409).json({ error: "email_taken", message: "An account with this email already exists. Please sign in." });
     return;
@@ -173,7 +174,8 @@ router.post("/auth/login", async (req, res) => {
   const { password } = parsed.data;
   const email = parsed.data.email.toLowerCase().trim();
 
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email));
+  const [patient] = await db.select().from(patientsTable)
+    .where(sql`lower(${patientsTable.email}) = ${email}`);
   if (!patient || !patient.passwordHash) {
     res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password." });
     return;
@@ -251,7 +253,8 @@ router.post("/auth/forgot-password", async (req, res) => {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, normalizedEmail));
+  const [patient] = await db.select().from(patientsTable)
+    .where(sql`lower(${patientsTable.email}) = ${normalizedEmail}`);
 
   // Always respond success to prevent email enumeration
   if (!patient) {

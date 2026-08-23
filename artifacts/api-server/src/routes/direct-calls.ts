@@ -53,9 +53,11 @@ export async function endDirectCall(id: number) {
     .returning();
 
   if (!updated) return false;
-  roomService.deleteRoom(row.call.roomName).catch(err =>
-    console.error("[livekit] direct room delete failed:", err)
-  );
+  roomService.deleteRoom(row.call.roomName).catch((err: { status?: number }) => {
+    // A room is only created when someone joins. It is normal for an
+    // unanswered direct call to have no LiveKit room to delete.
+    if (err?.status !== 404) console.error("[livekit] direct room delete failed:", err);
+  });
   notifyPatientDirectCallEnded(row.patient.id, id);
   broadcastDirectCallUpdated({ id, status: "ended" });
   return true;
@@ -103,11 +105,9 @@ router.post("/admin", requireAdmin, async (req, res) => {
     status: "active",
   }).returning();
 
-  try {
-    await roomService.createRoom({ name: roomName, emptyTimeout: 10 * 60, maxParticipants: 3 });
-  } catch (err) {
-    console.error("[livekit] direct room create failed:", err);
-  }
+  // LiveKit creates the room when the patient, doctor, or admin first joins.
+  // Avoid pre-creating an empty room: hosted LiveKit can expire an empty room
+  // before the patient has had time to answer the call.
 
   const serialized = serializeCall(call, patient);
   notifyPatientDirectCallStarted(patient.id, serialized);

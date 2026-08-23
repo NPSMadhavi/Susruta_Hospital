@@ -1111,7 +1111,13 @@ export default function PatientDashboard() {
       })()}
       {videoCallDirectId !== null && (
         <div className="fixed inset-0 z-40 bg-black flex flex-col overflow-hidden">
-          <VideoCall directCallId={videoCallDirectId} role="patient" onCallEnded={handleDirectCallEnded} autoJoin />
+          <VideoCall
+            directCallId={videoCallDirectId}
+            role="patient"
+            onCallEnded={handleDirectCallEnded}
+            autoJoin
+            keepOpenOnDisconnect
+          />
         </div>
       )}
 
