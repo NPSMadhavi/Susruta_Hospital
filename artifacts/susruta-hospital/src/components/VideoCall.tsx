@@ -247,7 +247,10 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
     return () => clearInterval(t);
   }, []);
 
-  const canPublish = role !== "admin";
+  // Admins join as observers by default, but can still speak when they
+  // explicitly enable their own microphone. Camera remains monitor-only.
+  const canUseMicrophone = true;
+  const canUseCamera = role !== "admin";
   const allParticipants = participants; // includes local
 
   useEffect(() => {
@@ -416,14 +419,16 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
 
         {/* Centre: controls */}
         <div className="flex items-center gap-2">
-          {canPublish && (
+          {canUseMicrophone && (
+            <CtrlBtn
+              icon={micOn ? <Mic size={20} /> : <MicOff size={20} />}
+              label={micOn ? "Mute" : "Unmute"}
+              active={micOn}
+              onClick={() => toggleMic()}
+            />
+          )}
+          {canUseCamera && (
             <>
-              <CtrlBtn
-                icon={micOn ? <Mic size={20} /> : <MicOff size={20} />}
-                label={micOn ? "Mute" : "Unmute"}
-                active={micOn}
-                onClick={() => toggleMic()}
-              />
               <CtrlBtn
                 icon={camOn ? <Video size={20} /> : <VideoOff size={20} />}
                 label={camOn ? "Stop Video" : "Start Video"}
