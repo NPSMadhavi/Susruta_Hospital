@@ -23,3 +23,10 @@ id = "xL0MY3VqdymgZRg-XSQ7o"
 uri = "file://attached_assets/patient_portal_desktop_mockup.png"
 type = "image"
 title = "Patient Portal — Desktop Design Concept"
+
+[[outputs]]
+id = "M3XsSLNXhxZllbiDe4hhL"
+uri = "file://susruta_hospital_schema.sql"
+type = "unspecified"
+title = "Susruta Hospital database schema"
+description = "Schema-only PostgreSQL export for redevelopment: 21 tables, sequences, defaults, unique constraints, and foreign keys; no table data, privileges, ownership statements, or credentials included."
