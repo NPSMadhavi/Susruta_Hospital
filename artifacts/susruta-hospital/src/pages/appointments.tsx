@@ -29,7 +29,7 @@ const CHECKER_BG: React.CSSProperties = {
 
 function TexturedSection({ id, className = "", children }: { id?: string; className?: string; children: React.ReactNode }) {
   const sRef = useRef<HTMLElement>(null);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);

@@ -50,6 +50,12 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+type QueryOptions<TQueryFnData, TError, TData> = Omit<
+  UseQueryOptions<TQueryFnData, TError, TData>,
+  "queryKey" | "queryFn"
+> & {
+  queryKey?: QueryKey;
+};
 
 /**
  * @summary Health check
@@ -75,7 +81,7 @@ export const getHealthCheckQueryOptions = <
   TData = Awaited<ReturnType<typeof healthCheck>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof healthCheck>>,
     TError,
     TData
@@ -110,7 +116,7 @@ export function useHealthCheck<
   TData = Awaited<ReturnType<typeof healthCheck>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof healthCheck>>,
     TError,
     TData
@@ -253,7 +259,7 @@ export const getListAppointmentsQueryOptions = <
 >(
   params?: ListAppointmentsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof listAppointments>>,
       TError,
       TData
@@ -292,7 +298,7 @@ export function useListAppointments<
 >(
   params?: ListAppointmentsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof listAppointments>>,
       TError,
       TData
@@ -336,7 +342,7 @@ export const getGetAppointmentQueryOptions = <
 >(
   id: number,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getAppointment>>,
       TError,
       TData
@@ -379,7 +385,7 @@ export function useGetAppointment<
 >(
   id: number,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getAppointment>>,
       TError,
       TData
@@ -606,7 +612,7 @@ export const getGetAvailabilityQueryOptions = <
 >(
   params: GetAvailabilityParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getAvailability>>,
       TError,
       TData
@@ -644,7 +650,7 @@ export function useGetAvailability<
 >(
   params: GetAvailabilityParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getAvailability>>,
       TError,
       TData
@@ -700,7 +706,7 @@ export const getGetSlotsQueryOptions = <
 >(
   params: GetSlotsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getSlots>>,
       TError,
       TData
@@ -738,7 +744,7 @@ export function useGetSlots<
 >(
   params: GetSlotsParams,
   options?: {
-    query?: UseQueryOptions<
+    query?: QueryOptions<
       Awaited<ReturnType<typeof getSlots>>,
       TError,
       TData
@@ -779,7 +785,7 @@ export const getListBlockedDatesQueryOptions = <
   TData = Awaited<ReturnType<typeof listBlockedDates>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listBlockedDates>>,
     TError,
     TData
@@ -814,7 +820,7 @@ export function useListBlockedDates<
   TData = Awaited<ReturnType<typeof listBlockedDates>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listBlockedDates>>,
     TError,
     TData
@@ -1024,7 +1030,7 @@ export const getListOpenMonthsQueryOptions = <
   TData = Awaited<ReturnType<typeof listOpenMonths>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listOpenMonths>>,
     TError,
     TData
@@ -1059,7 +1065,7 @@ export function useListOpenMonths<
   TData = Awaited<ReturnType<typeof listOpenMonths>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listOpenMonths>>,
     TError,
     TData
@@ -1269,7 +1275,7 @@ export const getListTestimonialsQueryOptions = <
   TData = Awaited<ReturnType<typeof listTestimonials>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listTestimonials>>,
     TError,
     TData
@@ -1304,7 +1310,7 @@ export function useListTestimonials<
   TData = Awaited<ReturnType<typeof listTestimonials>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof listTestimonials>>,
     TError,
     TData
@@ -1601,7 +1607,7 @@ export const getGetSettingsQueryOptions = <
   TData = Awaited<ReturnType<typeof getSettings>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof getSettings>>,
     TError,
     TData
@@ -1636,7 +1642,7 @@ export function useGetSettings<
   TData = Awaited<ReturnType<typeof getSettings>>,
   TError = ErrorType<unknown>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof getSettings>>,
     TError,
     TData
@@ -1927,7 +1933,7 @@ export const getGetAdminMeQueryOptions = <
   TData = Awaited<ReturnType<typeof getAdminMe>>,
   TError = ErrorType<ErrorResponse>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof getAdminMe>>,
     TError,
     TData
@@ -1962,7 +1968,7 @@ export function useGetAdminMe<
   TData = Awaited<ReturnType<typeof getAdminMe>>,
   TError = ErrorType<ErrorResponse>,
 >(options?: {
-  query?: UseQueryOptions<
+    query?: QueryOptions<
     Awaited<ReturnType<typeof getAdminMe>>,
     TError,
     TData

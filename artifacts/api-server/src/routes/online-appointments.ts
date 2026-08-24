@@ -161,7 +161,7 @@ router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
     .set({ patientJoinedAt: new Date() })
     .where(eq(onlineAppointmentsTable.id, id));
 
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ── GET /api/online-appointments/admin/stream — Admin SSE stream ─
@@ -281,7 +281,7 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
     .returning();
 
   // Notify this patient via SSE — include roomName + guestToken so frontend can skip re-fetching
-  notifyPatientJoinEnabled(patient.id, id, roomName, guestToken);
+  notifyPatientJoinEnabled(patient.id, id, roomName, guestToken ?? undefined);
 
   // Notify any guests already waiting in the waiting room
   notifyGuestsJoinEnabled(id);

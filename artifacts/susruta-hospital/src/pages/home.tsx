@@ -40,7 +40,7 @@ function TexturedSection({
   children: React.ReactNode;
 }) {
   const sRef = useRef<HTMLElement>(null);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);

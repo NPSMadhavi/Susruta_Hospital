@@ -949,7 +949,9 @@ export default function PatientDashboard() {
       patientFetch("/me"),
       fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
       patientFetch("/appointments"),
-      fetch(`${BASE}/api/admin/settings`).then(r => r.ok ? r.json() : {}),
+      fetch(`${BASE}/api/admin/settings`).then(async r => r.ok
+        ? await r.json() as { phonepeQrObjectPath?: string | null }
+        : null),
       fetch(`${BASE}/api/patient/documents`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/direct-calls/patient/active`, { credentials: "include" }).then(r => r.ok ? r.json() : null),
     ]);

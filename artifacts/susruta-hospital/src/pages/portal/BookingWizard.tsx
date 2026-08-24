@@ -261,7 +261,14 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         });
         const saved = await saveRes.json().catch(() => null);
         if (saved?.id) {
-          setSavedDocs(prev => [...prev, { id: saved.id, name: file.name, objectPath, contentType: file.type, size: file.size }]);
+          setSavedDocs(prev => [...prev, {
+            id: saved.id,
+            name: file.name,
+            objectPath,
+            contentType: file.type,
+            size: file.size,
+            createdAt: saved.createdAt ?? new Date().toISOString(),
+          }]);
         }
       } catch {
         setOnlineError(`Failed to upload "${file.name}". Please try again.`);
