@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw, Video, PhoneOff, Monitor } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw, Video, PhoneOff, Monitor, Pencil, Save, AlertTriangle } from "lucide-react";
 import { AdminVideoRoom } from "@/components/VideoCall";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -35,6 +36,175 @@ function fmtDate(d: string) {
 
 const POLL_INTERVAL_MS = 20_000;
 
+function EditPatientDialog({
+  patient,
+  onClose,
+  onSaved,
+}: {
+  patient: Patient;
+  onClose: () => void;
+  onSaved: (patient: Patient, message: string, ok: boolean) => void;
+}) {
+  const [name, setName] = useState(patient.name);
+  const [email, setEmail] = useState(patient.email);
+  const [phone, setPhone] = useState(patient.phone ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const emailChanged = email.trim().toLowerCase() !== patient.email.trim().toLowerCase();
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    if (trimmedName.length < 2) {
+      setError("Name must be at least 2 characters.");
+      return;
+    }
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (phone.trim().length > 20) {
+      setError("Phone number must be 20 characters or fewer.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await apiFetch(`/patients/${patient.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: trimmedEmail,
+          phone: phone.trim() || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.message || "Could not update patient. Please try again.");
+        return;
+      }
+
+      onSaved(
+        data.patient,
+        data.message || "Patient record updated successfully.",
+        !(data.emailChanged && data.verificationEmailSent === false),
+      );
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={open => {
+      if (!open && !saving) onClose();
+    }}>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl"
+        onEscapeKeyDown={event => {
+          if (saving) event.preventDefault();
+        }}
+        onPointerDownOutside={event => {
+          if (saving) event.preventDefault();
+        }}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 pb-4 pt-6 pr-14 sm:px-7 sm:pr-14">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-primary mb-1">Patient details</p>
+            <DialogTitle className="text-xl font-bold text-gray-900">Edit {patient.name}</DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-gray-500">{patient.patientCode || "No patient ID assigned"}</DialogDescription>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-5 sm:px-7 py-5 space-y-5">
+          {error && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label htmlFor="edit-patient-name" className="text-sm font-semibold text-gray-800">Full name</label>
+            <input
+              id="edit-patient-name"
+              value={name}
+              onChange={event => setName(event.target.value)}
+              minLength={2}
+              maxLength={100}
+              required
+              autoFocus
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="edit-patient-email" className="text-sm font-semibold text-gray-800">Email address</label>
+            <input
+              id="edit-patient-email"
+              type="email"
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              maxLength={255}
+              required
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+
+          {emailChanged && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
+              <p>
+                <strong>New email requires verification.</strong> Saving this address will mark the patient unverified and send a fresh verification link.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label htmlFor="edit-patient-phone" className="text-sm font-semibold text-gray-800">
+              Phone number <span className="font-normal text-gray-400">(optional)</span>
+            </label>
+            <input
+              id="edit-patient-phone"
+              type="tel"
+              value={phone}
+              onChange={event => setPhone(event.target.value)}
+              maxLength={20}
+              placeholder="Phone number"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminPatients() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +217,7 @@ export default function AdminPatients() {
   const [activeCalls, setActiveCalls] = useState<DirectCall[]>([]);
   const [monitoring, setMonitoring] = useState<MonitorCredentials | null>(null);
   const [monitoringCallId, setMonitoringCallId] = useState<number | null>(null);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function showToast(msg: string, ok = true) {
@@ -131,6 +302,12 @@ export default function AdminPatients() {
     } finally {
       setActionLoading(prev => { const n = { ...prev }; delete n[p.id]; return n; });
     }
+  }
+
+  function handlePatientSaved(updatedPatient: Patient, message: string, ok: boolean) {
+    setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+    setEditingPatient(null);
+    showToast(message, ok);
   }
 
   async function startDirectCall(p: Patient) {
@@ -230,6 +407,14 @@ export default function AdminPatients() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingPatient && (
+        <EditPatientDialog
+          patient={editingPatient}
+          onClose={() => setEditingPatient(null)}
+          onSaved={handlePatientSaved}
+        />
       )}
 
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
@@ -364,7 +549,17 @@ export default function AdminPatients() {
                     }
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                     <div className="flex flex-wrap items-center gap-2">
+                       <button
+                         onClick={() => setEditingPatient(p)}
+                         disabled={!!actionLoading[p.id]}
+                         title={`Edit ${p.name}`}
+                         aria-label={`Edit ${p.name}`}
+                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors disabled:opacity-50"
+                       >
+                         <Pencil size={12} />
+                         <span className="hidden sm:inline">Edit</span>
+                       </button>
                       {!p.emailVerified && (
                         <button
                           onClick={() => resendVerification(p)}

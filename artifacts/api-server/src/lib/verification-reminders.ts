@@ -69,6 +69,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
         .where(and(
           eq(patientsTable.id, candidate.id),
           eq(patientsTable.emailVerified, false),
+          sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
           lte(patientsTable.createdAt, initialCutoff),
           or(
             isNull(patientsTable.verificationReminderSentAt),
@@ -98,6 +99,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
+            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
           ));
 
@@ -112,6 +114,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           token,
           patientId: candidate.id,
           nextUrl: "/portal/dashboard",
+          verificationEmail: candidate.email.toLowerCase(),
           expiresAt,
           used: false,
         }).returning({ id: loginTokensTable.id });
@@ -126,6 +129,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
+            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
           ))
           .returning({ id: patientsTable.id });
@@ -143,6 +147,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
+            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
             eq(patientsTable.verificationReminderPendingAt, now),
           ));
@@ -159,6 +164,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
+            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
             eq(patientsTable.verificationReminderPendingAt, now),
             eq(patientsTable.verificationReminderPendingTokenId, verificationTokenId),

@@ -1,0 +1,1 @@
+- [Verification token email binding](verification-token-email-binding.md) — Email changes require links bound to their issued address, not just token invalidation.

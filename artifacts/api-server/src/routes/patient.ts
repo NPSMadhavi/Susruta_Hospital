@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable } from "@workspace/db";
-import { eq, and, desc, ne, sql } from "drizzle-orm";
+import { eq, and, desc, ne, isNotNull, sql } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
   hashPassword, verifyPassword,
@@ -149,7 +149,14 @@ router.post("/auth/register", async (req, res) => {
   // Send verification email in the background (non-blocking)
   const token = randomBytes(48).toString("hex");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await db.insert(loginTokensTable).values({ token, patientId: patient.id, nextUrl: "/portal/dashboard", expiresAt, used: false });
+  await db.insert(loginTokensTable).values({
+    token,
+    patientId: patient.id,
+    nextUrl: "/portal/dashboard",
+    verificationEmail: email,
+    expiresAt,
+    used: false,
+  });
   const verifyUrl = `${getFrontendUrl(req)}/api/patient/auth/verify?token=${token}`;
   sendMagicLink({ to: email, name, verifyUrl, isNewAccount: true }).catch(() => {});
 
@@ -203,20 +210,32 @@ router.get("/auth/verify", async (req, res) => {
   const token = req.query.token as string | undefined;
   if (!token) { res.redirect(`${frontendUrl}/portal?error=invalid_token`); return; }
 
-  const [row] = await db.update(loginTokensTable)
-    .set({ used: true })
-    .where(and(
-      eq(loginTokensTable.token, token),
-      eq(loginTokensTable.used, false),
-      ne(loginTokensTable.nextUrl, "__password_reset__"),
-      sql`${loginTokensTable.expiresAt} > NOW()`,
-    ))
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [consumedToken] = await tx.update(loginTokensTable)
+      .set({ used: true })
+      .where(and(
+        eq(loginTokensTable.token, token),
+        eq(loginTokensTable.used, false),
+        ne(loginTokensTable.nextUrl, "__password_reset__"),
+        isNotNull(loginTokensTable.verificationEmail),
+        sql`${loginTokensTable.expiresAt} > NOW()`,
+      ))
+      .returning();
+    if (!consumedToken?.verificationEmail) return null;
+
+    const [verifiedPatient] = await tx.update(patientsTable)
+      .set({ emailVerified: true })
+      .where(and(
+        eq(patientsTable.id, consumedToken.patientId),
+        sql`lower(${patientsTable.email}) = ${consumedToken.verificationEmail.toLowerCase()}`,
+      ))
+      .returning({ id: patientsTable.id });
+
+    return verifiedPatient ? consumedToken : null;
+  });
   if (!row) {
     res.redirect(`${frontendUrl}/portal?error=expired_token`); return;
   }
-
-  await db.update(patientsTable).set({ emailVerified: true }).where(eq(patientsTable.id, row.patientId));
 
   const sessionToken = await createPatientSession(row.patientId);
   res.cookie("patient_session", sessionToken, cookieOpts());
@@ -236,7 +255,14 @@ router.post("/auth/resend-verification", requirePatient, async (req: any, res) =
 
   const token = randomBytes(48).toString("hex");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await db.insert(loginTokensTable).values({ token, patientId: patient.id, nextUrl: "/portal/dashboard", expiresAt, used: false });
+  await db.insert(loginTokensTable).values({
+    token,
+    patientId: patient.id,
+    nextUrl: "/portal/dashboard",
+    verificationEmail: patient.email.toLowerCase().trim(),
+    expiresAt,
+    used: false,
+  });
   const verifyUrl = `${getFrontendUrl(req)}/api/patient/auth/verify?token=${token}`;
   sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});
 

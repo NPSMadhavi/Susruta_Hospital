@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable } from "@workspace/db";
-import { eq, desc, inArray, and, gte, lte } from "drizzle-orm";
+import { eq, desc, inArray, and, gte, lte, ne, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
+import { z } from "zod/v4";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
 import { sendMagicLink, testSmtpConnection, sendDonationThankYou, type SmtpConfig } from "../lib/email";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
@@ -221,6 +222,157 @@ router.get("/patients", requireAdmin, async (_req, res) => {
   }
 });
 
+const UpdatePatientBody = z.object({
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(255),
+  phone: z.string().trim().max(20).nullable().optional(),
+});
+
+// ── PATCH /admin/patients/:id — edit patient contact details ───
+router.patch("/patients/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id", message: "Invalid patient ID." }); return; }
+
+  const parsed = UpdatePatientBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "validation_error",
+      message: "Name must be at least 2 characters, and a valid email address is required. Phone number must be 20 characters or fewer.",
+    });
+    return;
+  }
+
+  const name = parsed.data.name;
+  const email = parsed.data.email.toLowerCase();
+  const phone = parsed.data.phone?.trim() || null;
+
+  try {
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
+    if (!patient) { res.status(404).json({ error: "not_found", message: "Patient not found." }); return; }
+
+    const emailChanged = email !== patient.email.toLowerCase().trim();
+    if (emailChanged) {
+      const [duplicate] = await db
+        .select({ id: patientsTable.id })
+        .from(patientsTable)
+        .where(and(
+          sql`lower(${patientsTable.email}) = ${email}`,
+          ne(patientsTable.id, id),
+        ))
+        .limit(1);
+      if (duplicate) {
+        res.status(409).json({
+          error: "email_taken",
+          message: "Another patient is already using that email address.",
+        });
+        return;
+      }
+    }
+
+    const verificationToken = emailChanged ? randomBytes(48).toString("hex") : null;
+    const verificationExpiresAt = emailChanged
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000)
+      : null;
+    let updatedPatient: typeof patientsTable.$inferSelect | undefined;
+
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(patientsTable)
+        .set({
+          name,
+          email,
+          phone,
+          ...(emailChanged ? {
+            emailVerified: false,
+            verificationReminderClaimedAt: null,
+            verificationReminderClaimId: null,
+            verificationReminderPendingAt: null,
+            verificationReminderPendingTokenId: null,
+            verificationReminderDispatchStartedAt: null,
+          } : {}),
+        })
+        .where(eq(patientsTable.id, id))
+        .returning();
+
+      if (!updated) throw new Error("Patient update returned no record.");
+      updatedPatient = updated;
+
+      if (emailChanged && verificationToken && verificationExpiresAt) {
+        await tx
+          .update(loginTokensTable)
+          .set({ used: true })
+          .where(eq(loginTokensTable.patientId, id));
+        await tx.insert(loginTokensTable).values({
+          token: verificationToken,
+          patientId: id,
+          nextUrl: "/portal/dashboard",
+          verificationEmail: email,
+          expiresAt: verificationExpiresAt,
+          used: false,
+        });
+      }
+    });
+
+    let verificationEmailSent: boolean | null = null;
+    if (emailChanged && verificationToken) {
+      let frontendUrl: string;
+      if (process.env.REPLIT_DEPLOYMENT === "1") {
+        frontendUrl = process.env.APP_URL || "https://susrutahospital.com";
+      } else {
+        const domain = process.env.REPLIT_DEV_DOMAIN;
+        frontendUrl = domain ? `https://${domain}` : (process.env.APP_URL || "https://susrutahospital.com");
+      }
+
+      try {
+        verificationEmailSent = await sendMagicLink({
+          to: email,
+          name,
+          verifyUrl: `${frontendUrl}/api/patient/auth/verify?token=${verificationToken}`,
+          isNewAccount: true,
+        });
+      } catch (err) {
+        verificationEmailSent = false;
+        console.error("Admin patient verification email error:", err);
+      }
+    }
+
+    if (!updatedPatient) throw new Error("Patient update failed.");
+    const responsePatient = {
+      id: updatedPatient.id,
+      patientCode: updatedPatient.patientCode,
+      name: updatedPatient.name,
+      email: updatedPatient.email,
+      phone: updatedPatient.phone,
+      emailVerified: updatedPatient.emailVerified,
+      createdAt: updatedPatient.createdAt,
+    };
+
+    const message = !emailChanged
+      ? "Patient record updated successfully."
+      : verificationEmailSent
+        ? `Patient record updated. A verification email was sent to ${email}.`
+        : "Patient record updated, but the verification email could not be sent. Check SMTP settings and resend it when ready.";
+
+    res.json({
+      success: true,
+      patient: responsePatient,
+      emailChanged,
+      verificationEmailSent,
+      message,
+    });
+  } catch (err: any) {
+    if (err?.code === "23505") {
+      res.status(409).json({
+        error: "email_taken",
+        message: "Another patient is already using that email address.",
+      });
+      return;
+    }
+    console.error("Admin patient update error:", err);
+    res.status(500).json({ error: "update_failed", message: "Could not update patient. Please try again." });
+  }
+});
+
 // ── POST /admin/patients/:id/resend-verification ───────────────
 router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
@@ -238,7 +390,14 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
 
   const token = randomBytes(48).toString("hex");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await db.insert(loginTokensTable).values({ token, patientId: id, nextUrl: "/portal/dashboard", expiresAt, used: false });
+  await db.insert(loginTokensTable).values({
+    token,
+    patientId: id,
+    nextUrl: "/portal/dashboard",
+    verificationEmail: patient.email.toLowerCase().trim(),
+    expiresAt,
+    used: false,
+  });
 
   let frontendUrl: string;
   if (process.env.REPLIT_DEPLOYMENT === "1") {
@@ -249,7 +408,28 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
   }
   const verifyUrl = `${frontendUrl}/api/patient/auth/verify?token=${token}`;
 
-  sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});
+  try {
+    const sent = await sendMagicLink({
+      to: patient.email,
+      name: patient.name,
+      verifyUrl,
+      isNewAccount: true,
+    });
+    if (!sent) {
+      res.status(503).json({
+        error: "email_delivery_failed",
+        message: "The verification link was created, but the email could not be sent. Check SMTP settings and try again.",
+      });
+      return;
+    }
+  } catch (error) {
+    console.error("Admin resend verification email error:", error);
+    res.status(503).json({
+      error: "email_delivery_failed",
+      message: "The verification link was created, but the email could not be sent. Check SMTP settings and try again.",
+    });
+    return;
+  }
 
   res.json({ success: true, message: `Verification email sent to ${patient.email}` });
 });
