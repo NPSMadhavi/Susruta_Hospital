@@ -7,6 +7,10 @@ import { z } from "zod/v4";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
 import { sendMagicLink, testSmtpConnection, sendDonationThankYou, type SmtpConfig } from "../lib/email";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
+import {
+  normalizeVerificationEmail,
+  verificationEmailMatchesPatient,
+} from "../lib/verification";
 
 const router = Router();
 
@@ -250,7 +254,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
     if (!patient) { res.status(404).json({ error: "not_found", message: "Patient not found." }); return; }
 
-    const emailChanged = email !== patient.email.toLowerCase().trim();
+    const emailChanged = !verificationEmailMatchesPatient(patient.email, email);
     if (emailChanged) {
       const [duplicate] = await db
         .select({ id: patientsTable.id })
@@ -306,7 +310,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
           token: verificationToken,
           patientId: id,
           nextUrl: "/portal/dashboard",
-          verificationEmail: email,
+          verificationEmail: normalizeVerificationEmail(email),
           expiresAt: verificationExpiresAt,
           used: false,
         });
@@ -394,7 +398,7 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
     token,
     patientId: id,
     nextUrl: "/portal/dashboard",
-    verificationEmail: patient.email.toLowerCase().trim(),
+    verificationEmail: normalizeVerificationEmail(patient.email),
     expiresAt,
     used: false,
   });

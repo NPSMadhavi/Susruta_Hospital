@@ -11,6 +11,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment } from "./appointments";
 import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { normalizeVerificationEmail } from "../lib/verification";
 
 const router = Router();
 
@@ -168,7 +169,7 @@ router.post("/auth/register", async (req, res) => {
     token,
     patientId: patient.id,
     nextUrl: "/portal/dashboard",
-    verificationEmail: email,
+    verificationEmail: normalizeVerificationEmail(email),
     expiresAt,
     used: false,
   });
@@ -242,7 +243,7 @@ router.get("/auth/verify", async (req, res) => {
       .set({ emailVerified: true })
       .where(and(
         eq(patientsTable.id, consumedToken.patientId),
-        sql`lower(${patientsTable.email}) = ${consumedToken.verificationEmail.toLowerCase()}`,
+        sql`lower(trim(${patientsTable.email})) = ${normalizeVerificationEmail(consumedToken.verificationEmail)}`,
       ))
       .returning({ id: patientsTable.id });
 
@@ -274,12 +275,33 @@ router.post("/auth/resend-verification", requirePatient, async (req: any, res) =
     token,
     patientId: patient.id,
     nextUrl: "/portal/dashboard",
-    verificationEmail: patient.email.toLowerCase().trim(),
+    verificationEmail: normalizeVerificationEmail(patient.email),
     expiresAt,
     used: false,
   });
   const verifyUrl = `${getFrontendUrl(req)}/api/patient/auth/verify?token=${token}`;
-  sendMagicLink({ to: patient.email, name: patient.name, verifyUrl, isNewAccount: true }).catch(() => {});
+  try {
+    const sent = await sendMagicLink({
+      to: patient.email,
+      name: patient.name,
+      verifyUrl,
+      isNewAccount: true,
+    });
+    if (!sent) {
+      res.status(503).json({
+        error: "email_delivery_failed",
+        message: "The verification link was created, but the email could not be sent. Check SMTP settings and try again.",
+      });
+      return;
+    }
+  } catch (error) {
+    console.error("Patient resend verification email error:", error);
+    res.status(503).json({
+      error: "email_delivery_failed",
+      message: "The verification link was created, but the email could not be sent. Check SMTP settings and try again.",
+    });
+    return;
+  }
 
   res.json({ success: true, message: `Verification email sent to ${patient.email}` });
 });

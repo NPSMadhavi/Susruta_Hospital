@@ -2,6 +2,7 @@ import { db, loginTokensTable, patientsTable } from "@workspace/db";
 import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendMagicLink } from "./email";
+import { normalizeVerificationEmail } from "./verification";
 
 const INITIAL_DELAY_MS = 24 * 60 * 60 * 1000;
 const REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -114,7 +115,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           token,
           patientId: candidate.id,
           nextUrl: "/portal/dashboard",
-          verificationEmail: candidate.email.toLowerCase(),
+          verificationEmail: normalizeVerificationEmail(candidate.email),
           expiresAt,
           used: false,
         }).returning({ id: loginTokensTable.id });
