@@ -10,6 +10,7 @@ import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment } from "./appointments";
+import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 
 const router = Router();
 
@@ -107,21 +108,35 @@ function getFrontendUrl(req: any) {
 
 // ── Register ───────────────────────────────────────────────────
 const RegisterBody = z.object({
-  name: z.string().min(2).max(100),
-  email: z.string().email(),
-  phone: z.string().optional(),
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().min(1),
+  phone: z.string().trim().min(1),
+  countryCode: z.string().trim().min(1),
   password: z.string().min(6),
 });
 
 router.post("/auth/register", async (req, res) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "validation_error", message: "Name, valid email, and a password (min 6 chars) are required." });
+    res.status(400).json({
+      error: "validation_error",
+      message: "Name, email, country, phone number, and a password (min 6 chars) are required.",
+    });
     return;
   }
   const { name, password } = parsed.data;
-  const email = parsed.data.email.toLowerCase().trim();
-  const phone = parsed.data.phone?.trim() || null;
+  const email = normalizePatientEmail(parsed.data.email);
+  if (!email) {
+    res.status(400).json({ error: "invalid_email", message: "Please enter a valid email address." });
+    return;
+  }
+
+  const phoneValidation = validatePatientPhone(parsed.data.phone, parsed.data.countryCode);
+  if (!phoneValidation.valid) {
+    res.status(400).json({ error: phoneValidation.error, message: phoneValidation.message });
+    return;
+  }
+  const phone = phoneValidation.e164;
 
   const [existingEmail] = await db.select().from(patientsTable)
     .where(sql`lower(${patientsTable.email}) = ${email}`);

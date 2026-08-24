@@ -1,0 +1,20 @@
+{
+  "name": "@workspace/patient-contact",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --test src/index.test.ts"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.12.25",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
+  }
+}

@@ -1,0 +1,92 @@
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
+import { z } from "zod";
+
+export const COUNTRIES = [
+  { code: "IN", name: "India", dial: "+91", flag: "🇮🇳", localFormat: "10 digits" },
+  { code: "AE", name: "UAE", dial: "+971", flag: "🇦🇪", localFormat: "9 digits" },
+  { code: "SA", name: "Saudi Arabia", dial: "+966", flag: "🇸🇦", localFormat: "9 digits" },
+  { code: "QA", name: "Qatar", dial: "+974", flag: "🇶🇦", localFormat: "8 digits" },
+  { code: "KW", name: "Kuwait", dial: "+965", flag: "🇰🇼", localFormat: "8 digits" },
+  { code: "OM", name: "Oman", dial: "+968", flag: "🇴🇲", localFormat: "8 digits" },
+  { code: "BH", name: "Bahrain", dial: "+973", flag: "🇧🇭", localFormat: "8 digits" },
+  { code: "US", name: "United States", dial: "+1", flag: "🇺🇸", localFormat: "10 digits" },
+  { code: "CA", name: "Canada", dial: "+1", flag: "🇨🇦", localFormat: "10 digits" },
+  { code: "GB", name: "United Kingdom", dial: "+44", flag: "🇬🇧", localFormat: "10 digits" },
+  { code: "AU", name: "Australia", dial: "+61", flag: "🇦🇺", localFormat: "9 digits" },
+  { code: "NZ", name: "New Zealand", dial: "+64", flag: "🇳🇿", localFormat: "9 digits" },
+  { code: "SG", name: "Singapore", dial: "+65", flag: "🇸🇬", localFormat: "8 digits" },
+  { code: "MY", name: "Malaysia", dial: "+60", flag: "🇲🇾", localFormat: "9–10 digits" },
+  { code: "ZA", name: "South Africa", dial: "+27", flag: "🇿🇦", localFormat: "9 digits" },
+  { code: "DE", name: "Germany", dial: "+49", flag: "🇩🇪", localFormat: "10–11 digits" },
+  { code: "FR", name: "France", dial: "+33", flag: "🇫🇷", localFormat: "9 digits" },
+  { code: "NL", name: "Netherlands", dial: "+31", flag: "🇳🇱", localFormat: "9 digits" },
+  { code: "CH", name: "Switzerland", dial: "+41", flag: "🇨🇭", localFormat: "9 digits" },
+  { code: "JP", name: "Japan", dial: "+81", flag: "🇯🇵", localFormat: "10 digits" },
+] as const;
+
+export type SupportedCountryCode = typeof COUNTRIES[number]["code"];
+export type PatientContactError = "missing" | "invalid_country" | "invalid_phone";
+
+export type PhoneValidationResult = {
+  valid: true;
+  e164: string;
+  countryCode: SupportedCountryCode;
+} | {
+  valid: false;
+  error: PatientContactError;
+  message: string;
+};
+
+export function getCountry(countryCode: string) {
+  const normalizedCode = countryCode.trim().toUpperCase();
+  return COUNTRIES.find((country) => country.code === normalizedCode);
+}
+
+export function getCountryCode(countryCode: string): SupportedCountryCode | undefined {
+  return getCountry(countryCode)?.code;
+}
+
+export function getPhoneHint(countryCode: string): string {
+  const country = getCountry(countryCode);
+  return country ? `${country.localFormat} after ${country.dial}` : "Enter a valid local phone number";
+}
+
+export function validatePatientPhone(phoneInput: string, countryCode: string): PhoneValidationResult {
+  const country = getCountry(countryCode);
+  if (!country) {
+    return { valid: false, error: "invalid_country", message: "Please select a supported country." };
+  }
+
+  const input = typeof phoneInput === "string" ? phoneInput.trim() : "";
+  if (!input) {
+    return {
+      valid: false,
+      error: "missing",
+      message: `Please enter your phone number (${country.localFormat} after ${country.dial}).`,
+    };
+  }
+
+  try {
+    const phone = parsePhoneNumberFromString(input, country.code as CountryCode);
+    if (!phone || phone.country !== country.code || !phone.isValid()) {
+      return {
+        valid: false,
+        error: "invalid_phone",
+        message: `Enter a valid ${country.name} phone number (${country.localFormat} after ${country.dial}).`,
+      };
+    }
+    return { valid: true, e164: phone.number, countryCode: country.code };
+  } catch {
+    return {
+      valid: false,
+      error: "invalid_phone",
+      message: `Enter a valid ${country.name} phone number (${country.localFormat} after ${country.dial}).`,
+    };
+  }
+}
+
+export function normalizePatientEmail(emailInput: string): string | null {
+  if (typeof emailInput !== "string") return null;
+  const email = emailInput.trim().toLowerCase();
+  return z.string().email().max(254).safeParse(email).success ? email : null;
+}

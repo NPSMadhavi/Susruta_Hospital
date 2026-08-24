@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Globe, KeyRound, CheckCircle2 } from "lucide-react";
 import { useLocation } from "wouter";
+import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 
 const API_BASE = `${import.meta.env.BASE_URL ?? "/"}api/patient`.replace(/\/\//g, "/");
 
@@ -23,29 +24,6 @@ interface Props {
 }
 
 type Mode = "login" | "register" | "forgot";
-
-const COUNTRIES = [
-  { code: "IN", name: "India", dial: "+91", flag: "🇮🇳" },
-  { code: "AE", name: "UAE", dial: "+971", flag: "🇦🇪" },
-  { code: "SA", name: "Saudi Arabia", dial: "+966", flag: "🇸🇦" },
-  { code: "QA", name: "Qatar", dial: "+974", flag: "🇶🇦" },
-  { code: "KW", name: "Kuwait", dial: "+965", flag: "🇰🇼" },
-  { code: "OM", name: "Oman", dial: "+968", flag: "🇴🇲" },
-  { code: "BH", name: "Bahrain", dial: "+973", flag: "🇧🇭" },
-  { code: "US", name: "United States", dial: "+1", flag: "🇺🇸" },
-  { code: "CA", name: "Canada", dial: "+1", flag: "🇨🇦" },
-  { code: "GB", name: "United Kingdom", dial: "+44", flag: "🇬🇧" },
-  { code: "AU", name: "Australia", dial: "+61", flag: "🇦🇺" },
-  { code: "NZ", name: "New Zealand", dial: "+64", flag: "🇳🇿" },
-  { code: "SG", name: "Singapore", dial: "+65", flag: "🇸🇬" },
-  { code: "MY", name: "Malaysia", dial: "+60", flag: "🇲🇾" },
-  { code: "ZA", name: "South Africa", dial: "+27", flag: "🇿🇦" },
-  { code: "DE", name: "Germany", dial: "+49", flag: "🇩🇪" },
-  { code: "FR", name: "France", dial: "+33", flag: "🇫🇷" },
-  { code: "NL", name: "Netherlands", dial: "+31", flag: "🇳🇱" },
-  { code: "CH", name: "Switzerland", dial: "+41", flag: "🇨🇭" },
-  { code: "JP", name: "Japan", dial: "+81", flag: "🇯🇵" },
-];
 
 const defaultForm = { name: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
 
@@ -130,20 +108,34 @@ export function BookingLoginModal({ open, onClose }: Props) {
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
       if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer."); return; }
       if (!agreeTerms) { setError("Please accept the Terms & Conditions and Privacy Policy."); return; }
+
+      const normalizedEmail = normalizePatientEmail(form.email);
+      if (!normalizedEmail) { setError("Please enter a valid email address."); return; }
+      const phoneValidation = validatePatientPhone(form.phone, selectedCountry.code);
+      if (!phoneValidation.valid) { setError(phoneValidation.message); return; }
+
+      setLoading(true);
+      try {
+        await apiPost("/auth/register", {
+          name: form.name.trim(),
+          email: normalizedEmail,
+          phone: phoneValidation.e164,
+          countryCode: selectedCountry.code,
+          password: form.password,
+        });
+        onClose();
+        navigate("/portal/dashboard");
+      } catch (err: any) {
+        setError(err?.message || "Something went wrong. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
     setLoading(true);
     try {
       if (mode === "login") {
         await apiPost("/auth/login", { email: form.email, password: form.password });
-      } else {
-        const fullPhone = `${selectedCountry.dial}${form.phone.trim()}`;
-        await apiPost("/auth/register", {
-          name: form.name,
-          email: form.email,
-          phone: fullPhone,
-          password: form.password,
-          country: selectedCountry.name,
-        });
       }
       onClose();
       navigate("/portal/dashboard");
@@ -313,10 +305,14 @@ export function BookingLoginModal({ open, onClose }: Props) {
                               </div>
                               <input
                                 type="tel" required value={form.phone} onChange={set("phone")}
-                                placeholder="Phone Number *" autoComplete="tel"
+                                placeholder={`${selectedCountry.localFormat} *`}
+                                autoComplete="tel" inputMode="tel"
                                 className="flex-1 px-3 py-3 bg-white text-sm focus:outline-none"
                               />
                             </div>
+                            <p className="mt-1.5 text-xs text-muted-foreground">
+                              Enter {selectedCountry.localFormat} after {selectedCountry.dial}.
+                            </p>
                           </motion.div>
                         )}
                       </AnimatePresence>

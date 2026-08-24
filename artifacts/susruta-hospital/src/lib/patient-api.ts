@@ -13,7 +13,7 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
-  register: (body: { name: string; email: string; phone?: string; password: string }) =>
+  register: (body: { name: string; email: string; phone: string; countryCode: string; password: string }) =>
     req("/auth/register", { method: "POST", body: JSON.stringify(body) }),
 
   login: (body: { email: string; password: string }) =>
