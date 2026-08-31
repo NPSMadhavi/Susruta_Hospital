@@ -889,8 +889,7 @@ export default function PatientDashboard() {
   function handleCallEnded(apptId: number) {
     setVideoCallApptId(null);
     setOnlineAppts(prev => prev.map(a => a.id === apptId ? { ...a, joinEnabled: false } : a));
-    if (!sessionEndedRef.current) {
-      // Patient left voluntarily — doctor hasn't ended the session yet
+    if (sessionEndedRef.current) {
       setDonationPopup(prev => prev ?? { apptId, qrObjectPath: phonepeQrRef.current });
     }
     sessionEndedRef.current = false;

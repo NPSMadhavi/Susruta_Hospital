@@ -124,37 +124,49 @@ function DragHandle({ handlers }: { handlers: { onPointerDown: (e: React.Pointer
 }
 
 // ── Inline Document Viewer ───────────────────────────────────────
-function InlineDocViewer({ doc, docs, onNavigate, onClose }: { doc: DocFile; docs: DocFile[]; onNavigate: (d: DocFile) => void; onClose: () => void }) {
-  const idx = docs.indexOf(doc);
-  const url = `${BASE}/api/storage${doc.objectPath}`;
+function InlineDocViewer({ doc, docs, onNavigate, onClose }: { doc: DocFile | null | undefined; docs: DocFile[]; onNavigate: (d: DocFile) => void; onClose: () => void }) {
+  if (!doc) return null;
+  const safeDocs = (docs || []).filter((d): d is DocFile => Boolean(d && d.objectPath));
+  const idx = safeDocs.indexOf(doc);
+  const rawPath = doc.objectPath || "";
+  const url = rawPath.startsWith("http")
+    ? rawPath
+    : rawPath.startsWith("/api/storage")
+      ? `${BASE}${rawPath}`
+      : `${BASE}/api/storage${rawPath.startsWith("/") ? "" : "/"}${rawPath}`;
+
   return (
     <div className="flex flex-col h-full bg-gray-100">
       <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200 shrink-0">
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"><X size={14} /></button>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-800 truncate">{doc.name}</p>
-          <p className="text-[10px] text-gray-400">{idx + 1} / {docs.length}</p>
+          <p className="text-xs font-semibold text-gray-800 truncate">{doc.name || "Document"}</p>
+          <p className="text-[10px] text-gray-400">{(idx >= 0 ? idx : 0) + 1} / {Math.max(safeDocs.length, 1)}</p>
         </div>
-        <button disabled={idx === 0} onClick={() => onNavigate(docs[idx - 1])} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
-        <button disabled={idx === docs.length - 1} onClick={() => onNavigate(docs[idx + 1])} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
+        <button disabled={idx <= 0} onClick={() => idx > 0 && onNavigate(safeDocs[idx - 1])} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
+        <button disabled={idx < 0 || idx >= safeDocs.length - 1} onClick={() => idx >= 0 && idx < safeDocs.length - 1 && onNavigate(safeDocs[idx + 1])} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
         <a href={url} download className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Download"><Download size={14} /></a>
       </div>
-      {docs.length > 1 && (
+      {safeDocs.length > 1 && (
         <div className="flex gap-2 px-3 py-2 bg-white border-b border-gray-100 overflow-x-auto shrink-0">
-          {docs.map((d, i) => (
-            <button key={i} onClick={() => onNavigate(d)} className={cn("shrink-0 flex flex-col items-center gap-1 p-1 rounded-lg border transition-all", d === doc ? "border-[#1a3d2b] bg-[#1a3d2b]/5" : "border-gray-200 hover:border-gray-300")}>
-              {isImage(d) ? <img src={`${BASE}/api/storage${d.objectPath}`} alt={d.name} className="w-10 h-9 object-cover rounded" /> : <div className="w-10 h-9 rounded bg-blue-50 flex items-center justify-center"><FileText size={15} className="text-blue-500" /></div>}
-              <p className="text-[9px] text-gray-500 max-w-[50px] truncate">{d.name}</p>
-            </button>
-          ))}
+          {safeDocs.map((d, i) => {
+            const dPath = d.objectPath || "";
+            const dUrl = dPath.startsWith("http") ? dPath : dPath.startsWith("/api/storage") ? `${BASE}${dPath}` : `${BASE}/api/storage${dPath.startsWith("/") ? "" : "/"}${dPath}`;
+            return (
+              <button key={i} onClick={() => onNavigate(d)} className={cn("shrink-0 flex flex-col items-center gap-1 p-1 rounded-lg border transition-all", d === doc ? "border-[#1a3d2b] bg-[#1a3d2b]/5" : "border-gray-200 hover:border-gray-300")}>
+                {isImage(d) ? <img src={dUrl} alt={d.name} className="w-10 h-9 object-cover rounded" /> : <div className="w-10 h-9 rounded bg-blue-50 flex items-center justify-center"><FileText size={15} className="text-blue-500" /></div>}
+                <p className="text-[9px] text-gray-500 max-w-[50px] truncate">{d.name}</p>
+              </button>
+            );
+          })}
         </div>
       )}
       <div className="flex-1 overflow-hidden">
         {isImage(doc) ? (
           <div className="w-full h-full flex items-center justify-center p-4">
-            <img src={url} alt={doc.name} className="max-w-full max-h-full object-contain rounded-lg shadow-sm bg-white" />
+            <img src={url} alt={doc.name || "Document"} className="max-w-full max-h-full object-contain rounded-lg shadow-sm bg-white" />
           </div>
-        ) : <iframe src={url} title={doc.name} className="w-full h-full border-0" />}
+        ) : <iframe src={url} title={doc.name || "Document"} className="w-full h-full border-0" />}
       </div>
     </div>
   );
@@ -1399,7 +1411,7 @@ export default function DoctorPortal() {
               </div>
               <DragHandle handlers={detailPanel.handlers} />
               <div className="flex-1 overflow-hidden">
-                <InlineDocViewer doc={previewDoc!} docs={previewDocs} onNavigate={setPreviewDoc} onClose={() => setPreviewDoc(null)} />
+                {previewDoc && <InlineDocViewer doc={previewDoc} docs={previewDocs} onNavigate={setPreviewDoc} onClose={() => setPreviewDoc(null)} />}
               </div>
             </>
           ) : hasDetail ? (

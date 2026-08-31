@@ -219,6 +219,7 @@ function AdminCallOverlay({
             video={false}
             audio={false}
             onDisconnected={onLeave}
+            onError={(err) => console.warn("[LiveKit] Room notice:", err)}
             data-lk-theme="default"
             style={{ height: "100%", display: "flex", flexDirection: "column" }}
           >

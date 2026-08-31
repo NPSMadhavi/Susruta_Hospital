@@ -20,6 +20,18 @@ import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    if (
+      event?.reason?.message?.includes("engine not connected within timeout") ||
+      event?.reason?.message?.includes("publishing rejected")
+    ) {
+      console.warn("[LiveKit] Suppressed engine timeout notice:", event.reason?.message);
+      event.preventDefault();
+    }
+  });
+}
+
 // ── Types ──────────────────────────────────────────────────────
 type CallCredentials = { token: string; serverUrl: string; roomName: string };
 type Role = "patient" | "doctor" | "guest" | "admin";
@@ -647,6 +659,7 @@ export function VideoCall({
           token={creds.token} serverUrl={creds.serverUrl}
           connect={true} video={true} audio={true}
           onDisconnected={handleDisconnect}
+          onError={(err) => console.warn("[LiveKit] Room notice:", err)}
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <SusrutaVideoRoom role={role} onLeave={handleUserLeave} />
         </LiveKitRoom>
@@ -693,6 +706,7 @@ export function AdminVideoRoom({ token, serverUrl, onLeave }: {
       token={token} serverUrl={serverUrl}
       connect={true} video={false} audio={false}
       onDisconnected={onLeave}
+      onError={(err) => console.warn("[LiveKit] Room notice:", err)}
       style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", height: "100%" }}>
       <SusrutaVideoRoom role="admin" onLeave={onLeave} />
     </LiveKitRoom>
@@ -798,6 +812,7 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
           token={creds.token} serverUrl={creds.serverUrl}
           connect={true} video={true} audio={true}
           onDisconnected={() => setStep("ended")}
+          onError={(err) => console.warn("[LiveKit] Room notice:", err)}
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <SusrutaVideoRoom role="guest" onLeave={() => setStep("ended")} />
         </LiveKitRoom>

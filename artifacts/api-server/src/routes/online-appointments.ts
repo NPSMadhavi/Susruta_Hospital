@@ -313,7 +313,7 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
 
   // Close the LiveKit room if it exists
   if (appt.livekitRoomName) {
-    roomService.deleteRoom(appt.livekitRoomName).catch(err =>
+    roomService.deleteRoom(appt.livekitRoomName).catch((err: any) =>
       console.error("[livekit] delete room failed:", err)
     );
   }

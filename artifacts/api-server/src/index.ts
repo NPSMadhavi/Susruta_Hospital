@@ -1,13 +1,14 @@
+import dotenv from "dotenv";
+import path from "path";
+
+// Load root workspace .env file, then local .env
+dotenv.config({ path: path.resolve(import.meta.dirname, "../../.env") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
 import app from "./app";
 import { startVerificationReminderWorker } from "./lib/verification-reminders";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env["PORT"] || "5000";
 
 const port = Number(rawPort);
 

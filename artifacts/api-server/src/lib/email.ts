@@ -42,33 +42,37 @@ export interface SmtpConfig {
 export async function getSmtpConfig(): Promise<SmtpConfig | null> {
   try {
     const [row] = await db.select().from(siteSettingsTable);
-    if (row?.smtpHost && row?.smtpUser && row?.smtpPass) {
+    if (row?.smtpHost?.trim() && row?.smtpUser?.trim() && row?.smtpPass?.trim()) {
       return {
-        host: row.smtpHost,
+        host: row.smtpHost.trim(),
         port: row.smtpPort ?? 587,
-        user: row.smtpUser,
-        pass: row.smtpPass,
+        user: row.smtpUser.trim(),
+        pass: row.smtpPass.replace(/\s+/g, ""),
         secure: row.smtpSecure ?? false,
-        fromName: row.smtpFromName ?? "Susruta Hospital",
-        fromEmail: row.smtpFromEmail ?? "noreply@susrutahospital.com",
-        subscriberFrom: row.smtpSubscriberFrom ?? "updates@susrutahospital.com",
+        fromName: row.smtpFromName || "Susruta Hospital",
+        fromEmail: row.smtpFromEmail || row.smtpUser.trim(),
+        subscriberFrom: row.smtpSubscriberFrom || row.smtpFromEmail || row.smtpUser.trim(),
       };
     }
   } catch {}
 
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "";
   if (host && user && pass) {
+    const port = parseInt(process.env.SMTP_PORT || "587");
+    const secure = process.env.SMTP_SECURE === "true" || port === 465;
+    const fromName = process.env.SMTP_FROM_NAME || "Susruta Hospital";
+    const fromEmail = process.env.SMTP_FROM_EMAIL || user;
     return {
       host,
-      port: parseInt(process.env.SMTP_PORT || "587"),
+      port,
       user,
       pass,
-      secure: process.env.SMTP_PORT === "465",
-      fromName: "Susruta Hospital",
-      fromEmail: process.env.SMTP_FROM_EMAIL || "noreply@susrutahospital.com",
-      subscriberFrom: "updates@susrutahospital.com",
+      secure,
+      fromName,
+      fromEmail,
+      subscriberFrom: fromEmail,
     };
   }
 

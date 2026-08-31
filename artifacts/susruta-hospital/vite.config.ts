@@ -5,13 +5,7 @@ import path from "path";
 import fs from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env.PORT || "5173";
 
 const port = Number(rawPort);
 
@@ -19,13 +13,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+const basePath = process.env.BASE_PATH || "/";
 
 function publicDirIndexPlugin() {
   let resolvedPublicDir = "";
@@ -74,7 +62,7 @@ export default defineConfig({
     publicDirIndexPlugin(),
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
+    // runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -105,6 +93,12 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: process.env.BACKEND_URL || "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
@@ -114,5 +108,11 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: process.env.BACKEND_URL || "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
   },
 });

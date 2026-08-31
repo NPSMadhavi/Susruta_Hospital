@@ -14,13 +14,13 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "crypto": "^1.0.1",
-    "drizzle-orm": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "drizzle-zod": "^0.8.3",
     "pg": "^8.20.0",
-    "zod": "catalog:"
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
+    "@types/node": "^25.3.3",
     "@types/pg": "^8.18.0",
     "drizzle-kit": "^0.31.9"
   }

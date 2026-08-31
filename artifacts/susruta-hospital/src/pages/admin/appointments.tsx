@@ -68,9 +68,18 @@ function GuestCountBadge({ apptId }: { apptId: number }) {
   );
 }
 
-function apiFetch(path: string, opts: RequestInit = {}) {
-  return fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts })
-    .then((r) => r.json());
+async function apiFetch(path: string, opts: RequestInit = {}) {
+  try {
+    const res = await fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || `API Error (${res.status})`);
+    return data;
+  } catch (err: any) {
+    if (err?.name === "TypeError" && err?.message?.includes("fetch")) {
+      throw new Error("Backend server connection failed. Please start the app using npm run dev.");
+    }
+    throw err;
+  }
 }
 
 // ── Audio chime ─────────────────────────────────────────────────
@@ -741,12 +750,17 @@ export default function AdminAppointments() {
     if (!silent) setOnlineLoading(true);
     setOnlineErr("");
     try {
-      const [list, settings] = await Promise.all([
-        fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" }).then(r => r.json()),
-        fetch(`${BASE}/api/admin/settings`, { credentials: "include" }).then(r => r.json()),
-      ]);
+      const res = await fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" });
+      if (!res.ok) {
+        if (res.status === 401) {
+          setOnlineErr("Admin session expired. Please log in to view appointments.");
+          setOnlineAppts([]);
+          return;
+        }
+        throw new Error(`Server error (${res.status})`);
+      }
+      const list = await res.json();
       const appts: OnlineAppt[] = Array.isArray(list) ? list : [];
-      // Play chime when new appointments arrive
       if (prevOnlineCountRef.current !== null && appts.length > prevOnlineCountRef.current) {
         playChime();
         notifyRef.current("New Online Appointment", `${appts.length - prevOnlineCountRef.current} new online booking(s)`);
@@ -754,8 +768,11 @@ export default function AdminAppointments() {
       prevOnlineCountRef.current = appts.length;
       setOnlineAppts(appts);
       setLastRefresh(new Date());
-    } catch { if (!silent) setOnlineErr("Failed to load online appointments"); }
-    finally { if (!silent) setOnlineLoading(false); }
+    } catch (e: any) {
+      if (!silent) setOnlineErr(e.message || "Failed to load online appointments");
+    } finally {
+      if (!silent) setOnlineLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -849,10 +866,15 @@ export default function AdminAppointments() {
   // ── Load in-person appointments ──
   async function fetchAppts() {
     setLoading(true);
-    const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
-    const data = await apiFetch(url);
-    setAppts(Array.isArray(data) ? data : []);
-    setLoading(false);
+    try {
+      const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
+      const data = await apiFetch(url);
+      setAppts(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error("fetchAppts failed:", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { fetchAppts(); }, [filter]);

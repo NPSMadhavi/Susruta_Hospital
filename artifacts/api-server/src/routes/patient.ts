@@ -98,13 +98,27 @@ function serializePatient(p: any) {
 }
 
 function getFrontendUrl(req: any) {
-  // In a deployed environment, REPLIT_DEPLOYMENT=1 — never use the dev preview URL
+  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.replace(/\/$/, "");
+
+  const referer = req.get("referer") || req.get("origin");
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      return u.origin;
+    } catch {}
+  }
+
   if (process.env.REPLIT_DEPLOYMENT === "1") {
     return process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
   }
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}`;
-  return `${req.protocol}://${req.get("host")}`;
+
+  const host = req.get("host") || "";
+  if (host.includes(":5000")) {
+    return `${req.protocol}://${host.replace(":5000", ":5173")}`;
+  }
+  return `${req.protocol}://${host}`;
 }
 
 // ── Register ───────────────────────────────────────────────────
@@ -250,7 +264,18 @@ router.get("/auth/verify", async (req, res) => {
     return verifiedPatient ? consumedToken : null;
   });
   if (!row) {
-    res.redirect(`${frontendUrl}/portal?error=expired_token`); return;
+    const [existingToken] = await db.select().from(loginTokensTable).where(eq(loginTokensTable.token, token));
+    if (existingToken) {
+      const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.id, existingToken.patientId));
+      if (existingPatient?.emailVerified) {
+        const sessionToken = await createPatientSession(existingPatient.id);
+        res.cookie("patient_session", sessionToken, cookieOpts());
+        res.redirect(`${frontendUrl}/portal/dashboard?verified=true`);
+        return;
+      }
+    }
+    res.redirect(`${frontendUrl}/portal?error=expired_token`);
+    return;
   }
 
   const sessionToken = await createPatientSession(row.patientId);
