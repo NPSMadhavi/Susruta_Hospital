@@ -116,3 +116,6 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 input[type="time"]::-webkit-calendar-picker-indicator {
   display: none !important;
 }
+.font-dm-serif-display {
+  font-family: "DM Serif Display", serif;
+}

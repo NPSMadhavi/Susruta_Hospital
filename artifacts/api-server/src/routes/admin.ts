@@ -15,7 +15,7 @@ import {
 const router = Router();
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "susruta2024";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "susruta2026";
 
 const SETTINGS_FIELDS = [
   "testimonialsEnabled", "appointmentBookingEnabled", "clinicPhone1",

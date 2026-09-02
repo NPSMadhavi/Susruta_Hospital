@@ -4,6 +4,7 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useLanguage } from "@/store/use-language";
 import { t as tr } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { CalendarCheck } from "lucide-react";
 import {
   useListOpenMonths,
   useGetAvailability,
@@ -140,8 +141,9 @@ export default function Home() {
     <PublicLayout>
       <HeroSection lang={lang} />
       <AboutSection lang={lang} />
-      <AchievementsSection lang={lang} />
       <ServicesSection lang={lang} />
+      <WhySusrutaSection />
+      <AchievementsSection lang={lang} />
       <TestimonialsSection lang={lang} />
       <ContactSection lang={lang} />
     </PublicLayout>
@@ -149,253 +151,472 @@ export default function Home() {
   );
 }
 
+
+
 // ─── HERO ─────────────────────────────────────────────────────
 const HERO_TEXTS: Array<{ en: string; te: string }> = [
-  { en: "Experience Nature's Touch for Your Health", te: "మీ ఆరోగ్యం కోసం ప్రకృతి స్పర్శను అనుభవించండి" },
-  { en: "Heal with Ancient Wisdom & Modern Care", te: "పురాతన జ్ఞానంతో ఆధునిక సంరక్షణతో స్వస్థత పొందండి" },
-  { en: "30+ Years of Ayurvedic Excellence", te: "30+ సంవత్సరాల ఆయుర్వేద శ్రేష్ఠత" },
-  { en: "Trusted Healing in the Heart of Tirupati", te: "తిరుపతి హృదయంలో విశ్వసనీయ వైద్యం" },
+  {
+    en: "Experience Nature's Touch for Your Health",
+    te: "మీ ఆరోగ్యం కోసం ప్రకృతి స్పర్శను అనుభవించండి",
+  },
+  {
+    en: "Heal with Ancient Wisdom & Modern Care",
+    te: "పురాతన జ్ఞానంతో ఆధునిక సంరక్షణతో స్వస్థత పొందండి",
+  },
+  {
+    en: "30+ Years of Ayurvedic Excellence",
+    te: "30+ సంవత్సరాల ఆయుర్వేద శ్రేష్ఠత",
+  },
+  {
+    en: "Trusted Healing in the Heart of Tirupati",
+    te: "తిరుపతి హృదయంలో విశ్వసనీయ వైద్యం",
+  },
 ];
 
 function HeroSection({ lang }: { lang: "en" | "te" }) {
-  const [textIdx, setTextIdx] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTextIdx((i) => (i + 1) % HERO_TEXTS.length), 3500);
-    return () => clearInterval(id);
-  }, []);
+  const [activeHeroText, setActiveHeroText] = useState(0);
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
-    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 88, behavior: "smooth" });
+    if (el) {
+      window.scrollTo({
+        top: el.getBoundingClientRect().top + window.scrollY - 88,
+        behavior: "smooth",
+      });
+    }
   };
 
+  // Change hero text automatically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveHeroText((prev) => (prev + 1) % HERO_TEXTS.length);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <TexturedSection id="home" className="relative pt-14 pb-20 bg-white">
+    <>
+      <section
+        id="home"
+        className="relative pt-24 pb-32 bg-white overflow-hidden"
+      >
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover scale-125 lg:scale-108 z-0"
+        >
+          <source src="/hero-video.mp4" type="video/mp4" />
+        </video>
 
-      <SC>
-        <div className="flex flex-col lg:flex-row items-stretch gap-10 lg:gap-16 xl:gap-20">
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            background:
+              "linear-gradient(90deg, #F5F2E9 0%, rgba(245, 242, 233, 0.85) 50%, rgba(245, 242, 233, 0.1) 100%)",
+          }}
+        />
 
-          {/* Left: Text */}
-          <div className="flex-1 flex flex-col text-center lg:text-left z-10 min-w-0">
+        <SC>
+          <div className="relative z-10 max-w-2xl flex flex-col items-start text-left">
             <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm self-center lg:self-start mb-6"
+              className="mb-2 md:mb-4 text-[#AB6342] uppercase tracking-[2.53px] text-[11px] md:text-[14px] lg:text-[15px]  leading-[30.92px]"
+              style={{  fontWeight: 700 }}
             >
-              <Leaf size={15} /> {tr("hero.badge", lang)}
+              Authentic Ayurvedic Healing
             </motion.div>
 
-            {/* Rotating headline — min-height reserves space, column stretches to photo height */}
-            <div className="overflow-hidden mb-6" style={{ minHeight: "clamp(7rem, 12vw, 11rem)" }}>
+            {/* Animated Hero Text */}
+            <div className="relative w-full mb-4 md:mb-6">
               <AnimatePresence mode="wait">
                 <motion.h1
-                  key={textIdx}
-                  initial={{ opacity: 0, y: 32 }}
+                  key={activeHeroText}
+                  initial={{ opacity: 0, y: 35 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -32 }}
-                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-                  className="hero-headline text-foreground w-full"
+                  exit={{ opacity: 0, y: -35 }}
+                  transition={{
+                    duration: 0.8,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="text-[#0A2B21] text-[33px] leading-10 md:leading-19 font-semibold md:text-[64px]"
+                  style={{
+                    fontFamily: "DM Serif Display",
+                    letterSpacing: "-0.7px",
+                  }}
                 >
-                  {HERO_TEXTS[textIdx][lang]}
+                  {HERO_TEXTS[activeHeroText][lang]}
                 </motion.h1>
               </AnimatePresence>
             </div>
 
             <motion.p
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }}
-              className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed mb-7"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.7 }}
+              className="text-[#222D28BF] text-[16px] md:text-[18px] leading-[24px] md:leading-[29.25px] mb-7 md:mb-10 max-w-xl"
+              style={{ fontWeight: 400 }}
             >
-              {tr("hero.subtitle", lang)}
+              Led by Dr. P. Murali Krishna — Gold Medalist, Ph.D., and former
+              Principal of S.V. Ayurvedic College — bringing three decades of
+              authentic healing to Tirupati.
             </motion.p>
 
-            {/* Buttons + stats pinned — mt-auto keeps them at bottom regardless of headline height */}
-            <div className="mt-auto space-y-6">
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.6 }}
-                className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
-              >
-                <button
-                  onClick={() => window.dispatchEvent(new CustomEvent("open-booking-modal"))}
-                  className="px-8 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all hover:-translate-y-0.5"
-                >
-                  {tr("btn.book", lang)}
-                </button>
-                <button
-                  onClick={() => scrollTo("about")}
-                  className="px-8 py-3.5 border-2 border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
-                >
-                  {tr("btn.meet", lang)}
-                </button>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.6 }}
-                className="flex flex-wrap gap-8 justify-center lg:justify-start pt-1"
-              >
-                {[
-                  { num: "30+", key: "stat.experience" },
-                  { num: "10+", key: "stat.awards" },
-                  { num: "147+", key: "stat.lectures" },
-                  { num: "30+", key: "stat.publications" },
-                ].map((s) => (
-                  <div key={s.key} className="text-center">
-                    <div className="text-2xl font-bold font-serif text-primary">{s.num}</div>
-                    <div className="text-sm text-muted-foreground font-medium">{tr(s.key as any, lang)}</div>
-                  </div>
-                ))}
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Right: Doctor photo + herbs image */}
-          <div className="flex-shrink-0 w-full max-w-sm lg:max-w-[380px] xl:max-w-[420px] flex flex-col gap-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-              className="relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55, duration: 0.6 }}
+              className="flex flex-row sm:flex-row gap-3 md:gap-4"
             >
-              {/* Glow blob */}
-              <div className="absolute -inset-6 bg-gradient-to-tr from-primary/10 to-green-200/20 rounded-[3rem] blur-3xl -z-10 pointer-events-none" />
+              <button
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("open-booking-modal")
+                  )
+                }
+                className="px-5 md:px-8 py-3 md:py-3.5 bg-[#D95B2F] text-[#F5F2E9] rounded-[10px] text-[13px] md:text-[16px] leading-[20px] shadow-lg hover:opacity-90 transition-all"
+                style={{ fontWeight: 600 }}
+              >
+                Book Appointment
+              </button>
 
-              {/* Photo */}
-              <div className="rounded-[2rem] overflow-hidden border-8 border-white shadow-2xl shadow-primary/10">
-                <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto object-cover" />
-              </div>
-
-              {/* Name + credential card */}
-              <div className="mt-4 bg-white border border-border rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-serif font-bold text-base text-primary leading-tight">
-                    {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D. (Ay), F.R.A.V., D.Yoga</p>
-                </div>
-                <div className="flex-shrink-0 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                  <Award size={14} className="text-yellow-600" />
-                  <span className="text-xs font-bold text-yellow-700">{lang === "en" ? "Gold Medalist" : "గోల్డ్ మెడలిస్ట్"}</span>
-                </div>
-              </div>
+              <button
+                onClick={() => scrollTo("about")}
+                className="px-5 md:px-8 py-3 md:py-3.5 border border-[#D95B2F] text-[#D95B2F] rounded-[10px] text-[13px] md:text-[16px] leading-[20px] hover:bg-[#D95B2F]/5 transition-all"
+                style={{ fontWeight: 600 }}
+              >
+                Meet the doctor
+              </button>
             </motion.div>
-
           </div>
-        </div>
-      </SC>
+        </SC>
+      </section>
 
-      {/* Feature cards */}
-      <SC>
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-5">
-          {[
-            { icon: <ShieldCheck size={26} />, delay: 0, key: "expert", featured: false },
-            { icon: <Leaf size={26} />, delay: 0.1, key: "authentic", featured: true },
-            { icon: <Clock size={26} />, delay: 0.2, key: "booking", featured: false },
-          ].map((f, i) => {
-            const content = [
-              { title: { en: "Expert Doctor", te: "నిపుణుడైన డాక్టర్" }, desc: { en: "Retired Principal with 3+ decades of experience in Ayurveda.", te: "3 దశాబ్దాలకు పైగా అనుభవం గల విశ్రాంత ప్రిన్సిపాల్." } },
-              { title: { en: "Authentic Ayurveda", te: "ప్రామాణిక ఆయుర్వేదం" }, desc: { en: "Traditional Panchakarma and genuine herbal treatments.", te: "సాంప్రదాయ పంచకర్మ మరియు ప్రామాణిక మూలికా చికిత్సలు." } },
-              { title: { en: "Easy Booking", te: "సులభమైన బుకింగ్" }, desc: { en: "Check availability and book your appointment online.", te: "లభ్యతను తనిఖీ చేసి ఆన్‌లైన్‌లో అపాయింట్‌మెంట్ బుక్ చేయండి." } },
-            ][i];
-            return (
-              <Reveal key={i} delay={f.delay}>
-                <div className={`p-7 rounded-3xl flex flex-col items-center text-center gap-4 border transition-shadow hover:shadow-md h-full ${
-                  f.featured ? "bg-primary text-white border-primary shadow-lg shadow-primary/25" : "bg-white border-border/60 shadow-sm"
-                }`}>
-                  <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${f.featured ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
-                    {f.icon}
-                  </div>
-                  <h3 className={`text-base font-serif font-bold ${f.featured ? "text-white" : ""}`}>{content.title[lang]}</h3>
-                  <p className={`text-sm leading-relaxed ${f.featured ? "text-white/80" : "text-muted-foreground"}`}>{content.desc[lang]}</p>
+
+      {/* Stats Section */}
+      <section className="p-3 md:py-6 bg-[#FFFFFF99] border-y border-[#DDD9CF] backdrop-blur-sm">
+        <SC>
+          <div className="flex flex-wrap justify-between items-center gap-7 md:gap-5 lg:gap-12 text-center max-w-6xl mx-auto">
+            {[
+              { num: "30+", label: "YEARS OF EXPERIENCE" },
+              { num: "10+", label: "AWARDS & RECOGNITIONS" },
+              { num: "30+", label: "RESEARCH PUBLICATIONS" },
+              { num: "147+", label: "LECTURES & SESSIONS" },
+            ].map((s, i) => (
+              <div key={i} className="flex-1 min-w-[150px] text-[35px] md:text-[40px] lg:text-[48px]">
+                <div className="text-[#15392D] mb-2" style={{ fontFamily: 'DM Serif Display', lineHeight: '48px', letterSpacing: '-0.48px' }}>
+                  {s.num}
                 </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </SC>
-    </TexturedSection>
+                <div className="text-[#4E5C55] text-[11px] md:text-[11px] lg:text-[12px] uppercase" style={{ fontWeight: 600,  lineHeight: '16px', letterSpacing: '1.68px' }}>
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SC>
+      </section>
+    </>
   );
 }
-
 // ─── ABOUT ────────────────────────────────────────────────────
 function AboutSection({ lang }: { lang: "en" | "te" }) {
   return (
-    <TexturedSection id="about" className="py-24 bg-white">
+    <section id="about" className="py-20 bg-[#F5F2E9]">
       <SC>
-        <SectionHeader label={tr("about.label", lang)} title={tr("about.title", lang)} subtitle={tr("about.subtitle", lang)} />
-        <div className="flex flex-col lg:flex-row gap-12 mt-14">
 
-          {/* Photo + credential card */}
-          <Reveal direction="left" className="w-full lg:w-72 xl:w-80 flex-shrink-0">
-            <div className="sticky top-28">
-              <div className="rounded-2xl overflow-hidden shadow-xl border-4 border-white ring-1 ring-border">
-                <img src={drPhoto} alt="Dr. P. Murali Krishna" className="w-full h-auto" />
-              </div>
-              <div className="mt-5 bg-[#f7f7f7] border border-primary/20 p-6 rounded-2xl">
-                <h3 className="font-serif font-bold text-xl text-primary leading-tight">
-                  {lang === "en" ? "Dr. P. Murali Krishna" : "డా. పి. మురళీకృష్ణ"}
-                </h3>
-                <p className="mt-1.5 text-sm font-medium text-foreground/70 leading-relaxed">
-                  {lang === "en"
-                    ? "B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D. (Ay), F.R.A.V., D.Yoga"
-                    : "బి.ఎ.ఎం.ఎస్. (గోల్డ్ మెడలిస్ట్), ఎం.డి. (ఆయు.), పి.హెచ్.డి. (ఆయు.), ఎఫ్.ఆర్.ఎ.వి., డి.యోగ"}
-                </p>
-                <div className="mt-4 pt-4 border-t border-primary/10">
-                  <p className="text-sm text-muted-foreground font-semibold uppercase tracking-wide mb-1">{tr("about.position", lang)}</p>
-                  <p className="text-sm font-semibold text-foreground">{tr("about.specialist", lang)}</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">Susruta Hospital, Tirupati</p>
-                </div>
-              </div>
+        <div className="flex flex-col lg:flex-row gap-12 max-w-6xl mx-auto">
+
+          {/* Photo */}
+          <div className="w-full lg:w-[400px] flex-shrink-0 relative rounded-3xl mt-12 overflow-hidden min-h-[400px]">
+            <img
+              src={drPhoto}
+              alt="Dr. P. Murali Krishna"
+              className="absolute inset-0 w-full  rounded-3xl h-full object-cover"
+            />
+
+            <div className="absolute bottom-4 left-6 right-6 bg-[#F5F2E9] rounded-2xl p-3 shadow-sm border border-white/20">
+              <h3
+                className="text-[#0A2B21] font-bold"
+                style={{
+                  fontFamily: 'DM Serif Display',
+                  fontSize: '18px',
+                  lineHeight: '28px'
+                }}
+              >
+                Dr. P. Murali Krishna
+              </h3>
+
+              <p
+                className="mt-[3px] text-[#AB6342] uppercase"
+                style={{
+                  fontWeight: 600,
+                  fontSize: '12.5px',
+                  lineHeight: '16.8px',
+                  letterSpacing: '1.34px'
+                }}
+              >
+                B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D. (Ay), F.R.A.V., D.Yoga
+              </p>
             </div>
-          </Reveal>
+          </div>
 
           {/* Bio */}
-          <div className="flex-1 space-y-8">
-            <Reveal>
-              <p className="text-lg leading-relaxed text-foreground/80">{tr("about.intro", lang)}</p>
-            </Reveal>
-            <Reveal delay={0.1}>
-              <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.academic", lang)}</h3>
-              <p className="mt-3 text-foreground/70 leading-relaxed">
-                {lang === "en"
-                  ? "His academic journey has been marked by excellence from the start. He completed his B.A.M.S. as a Gold Medalist — receiving two gold medals from the Governor of Andhra Pradesh at Nagarjuna University Convocation in 1988. He then acquired M.D.(Ay), Ph.D.(Ay), F.R.A.V., and a Diploma in Yoga."
-                  : "అతని విద్యా ప్రయాణం మొదటి నుండే శ్రేష్ఠతతో గుర్తించబడింది. 1988 నాగార్జున విశ్వవిద్యాలయం కన్వొకేషన్‌లో ఆంధ్రప్రదేశ్ గవర్నర్ నుండి రెండు బంగారు పతకాలు స్వీకరించాడు. తరువాత M.D.(Ay), Ph.D.(Ay), F.R.A.V., మరియు యోగ డిప్లొమా పూర్తిచేశారు."}
-              </p>
-            </Reveal>
-            <Reveal delay={0.15}>
-              <h3 className="font-serif text-2xl text-foreground font-bold">{tr("about.experience", lang)}</h3>
-              <ul className="mt-3 space-y-2.5 text-foreground/70">
-                {[
-                  { en: "Principal (Retd.) — S.V. Ayurvedic College & Hospital, T.T. Devasthanams, Tirupati, AP", te: "ప్రిన్సిపాల్ (విశ్రాంత) — ఎస్.వి. ఆయుర్వేద కళాశాల, టి.టి. దేవస్థానాలు, తిరుపతి" },
-                  { en: "Consultant Ayurvedic Specialist — Susruta Hospital, Tirupati", te: "సలహా ఆయుర్వేద నిపుణుడు — సుశ్రుత హాస్పిటల్, తిరుపతి" },
-                  { en: "SBI Authorised Ayurvedic Doctor", te: "ఎస్.బి.ఐ అధికృత ఆయుర్వేద డాక్టర్" },
-                  { en: "Governing Body Member — CCRAS, New Delhi (2015–2018)", te: "పాలక మండలి సభ్యుడు — సిసిఆర్ఎఎస్, న్యూ ఢిల్లీ (2015–2018)" },
-                  { en: "Key Note Speaker — First Australasian Conference on Panchakarma & Yoga, Adelaide (2013)", te: "ముఖ్య వక్త — మొదటి ఆస్ట్రేలియన్ పంచకర్మ & యోగ సమావేశం, అడిలైడ్ (2013)" },
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-primary mt-1.5 text-xs">✦</span>
-                    <span>{item[lang]}</span>
-                  </li>
-                ))}
-              </ul>
-            </Reveal>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { num: "30+", en: "Publications", te: "ప్రచురణలు" },
-                { num: "147+", en: "Guest Lectures", te: "అతిథి ఉపన్యాసాలు" },
-                { num: "25+", en: "Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
-                { num: "10+", en: "Major Awards", te: "ప్రధాన అవార్డులు" },
-              ].map((s, i) => (
-                <Reveal key={i} delay={i * 0.08}>
-                  <div className="bg-[#f7f7f7] border border-primary/20 p-5 rounded-2xl text-center">
-                    <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
-                    <div className="text-sm font-semibold text-muted-foreground">{s[lang]}</div>
-                  </div>
-                </Reveal>
-              ))}
+          <div className="flex-1 flex flex-col">
+
+            {/* Section Heading */}
+            <div
+              className="text-[#AB6342] uppercase mb-7 text-[13px] md:text-[14px] lg:text-[15px]"
+              style={{
+                fontWeight: 700,
+                lineHeight: '17.28px',
+                letterSpacing: '2.53px'
+              }}
+            >
+              About The Doctor
             </div>
+
+            <h2
+              className="text-[#0A2B21] font-semibold text-[38px] mb-4"
+              style={{
+                fontFamily: 'DM Serif Display',
+                lineHeight: '40px'
+              }}
+            >
+              Meet the expert behind Susruta
+            </h2>
+
+            <p
+              className="text-[#1B3227CC] mb-6"
+              style={{
+                fontSize: '16px',
+                lineHeight: '26.3px'
+              }}
+            >
+              Dr. P. Murali Krishna is a highly distinguished Ayurvedic Physician, Academician, and Researcher. He served as Principal of the prestigious S.V. Ayurvedic College, T.T. Devasthanams, Tirupati.
+            </p>
+
+            <h3 className="text-[#0A2B21] font-serif text-2xl font-bold mb-4">
+              Academic Brilliance
+            </h3>
+
+            <p
+              className="text-[#1B3227CC] mb-6"
+              style={{
+                fontSize: '16px',
+                lineHeight: '26.3px'
+              }}
+            >
+              His academic journey has been marked by excellence from the start. He completed his B.A.M.S. as a Gold Medalist — receiving two gold medals from the Governor of Andhra Pradesh at Nagarjuna University Convocation in 1988. He then acquired M.D.(Ay), Ph.D.(Ay), F.R.A.V., and a Diploma in Yoga.
+            </p>
+
+            <h3 className="text-[#0A2B21] font-serif text-2xl font-bold mb-4">
+              Professional Experience
+            </h3>
+
+            <ul
+              className="space-y-3 text-[#1B3227CC]"
+              style={{
+                fontSize: '16px',
+                lineHeight: '20.3px'
+              }}
+            >
+              {[
+                "Principal (Retd.) — S.V. Ayurvedic College & Hospital, T.T. Devasthanams, Tirupati, AP",
+                "Consultant Ayurvedic Specialist — Susruta Hospital, Tirupati",
+                "SBI Authorised Ayurvedic Doctor",
+                "Governing Body Member — CCRAS, New Delhi (2015–2018)",
+                "Key Note Speaker — First Australasian Conference on Panchakarma & Yoga, Adelaide (2013)"
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-[#0A2B21] mt-1 text-xs">✦</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+
           </div>
         </div>
       </SC>
-    </TexturedSection>
+    </section>
+  );
+}
+
+// ─── SERVICES ─────────────────────────────────────────────────
+function ServicesSection({ lang }: { lang: "en" | "te" }) {
+  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+
+  const services = [
+    { image: "/service1.png", title: "Ayurvedic Consultation", desc: "Detailed personal consultation using Nadi Pariksha (Pulse diagnosis) and Prakriti analysis to determine the root cause of ailments." },
+    { image: "/service2.png", title: "Panchakarma Therapy", desc: "Authentic detoxification and rejuvenation therapies including Vamana, Virechana, Basti, Nasya, and Raktamokshana." },
+    { image: "/service3.png", title: "Chronic Disease Management", desc: "Specialized Ayurvedic protocols for Arthritis, Diabetes, Skin disorders, Respiratory conditions, and Gastrointestinal problems." },
+    { image: "/service4.png", title: "Wellness & Rejuvenation", desc: "Rasayana therapies to boost immunity, reduce stress, improve vitality, and promote healthy aging with herbal formulations." },
+  ];
+
+  return (
+    <section id="services" className="py-20 bg-[#FFFFFF99]">
+      <SC>
+        <div className="text-center max-w-3xl mx-auto mb-15">
+          <div className="text-[#AB6342] text-[13px] md:text-[14px] lg:text-[15px] uppercase mb-5" style={{ fontWeight: 700,  lineHeight: '17.28px', letterSpacing: '2.53px' }}>
+            Our Services
+          </div>
+          <h2 className="text-[#0A2B21] text-[30px] md:text-[44px] font-semibold   mb-3" style={{ fontFamily: 'DM Serif Display',  lineHeight: '48.89px', letterSpacing: '-0.44px' }}>
+            Holistic Ayurvedic Care
+          </h2>
+          <p className="text-[#4E5C55] text-[16px] md:text-[20px] " style={{  lineHeight: '29.25px' }}>
+                    Comprehensive treatments tailored to your unique mind-body constitution.          </p>
+        </div>
+        
+        <div className="relative">
+          {/* Dummy grid to maintain exact original height on desktop */}
+          <div className="hidden lg:grid grid-cols-4 gap-6 invisible pointer-events-none" aria-hidden="true">
+            <div className="aspect-[2/3] min-h-[500px]"></div>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-row gap-6 lg:absolute lg:inset-0">
+            {services.map((s, i) => {
+              const isHovered = hoveredCard === i;
+              const isAnyHovered = hoveredCard !== null;
+              
+              return (
+                <div 
+                  key={i} 
+                  onMouseEnter={() => setHoveredCard(i)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  className="relative rounded-2xl overflow-hidden aspect-[2/3] lg:aspect-auto lg:h-full group transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]"
+                  style={{
+                    flex: isHovered ? '2.5' : isAnyHovered ? '0.7' : '1',
+                  }}
+                >
+                  <img 
+                    src={s.image} 
+                    alt={s.title} 
+                    className="absolute inset-0 w-full h-full object-cover grayscale-[20%] transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] group-hover:scale-105" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-700" />
+                  
+                  <div className="absolute bottom-6 left-6 right-6 flex flex-col justify-end">
+                    <h3 className="text-[#FFFFFF] text-[20px] md:text-[22px] mb-3 transition-transform duration-700" style={{ fontFamily: 'DM Serif Display',  lineHeight: '27.5px' }}>
+                      {s.title}
+                    </h3>
+                    
+                    <div 
+                      className={`overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] hidden lg:block ${isHovered ? 'max-h-[200px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 translate-y-4'}`}
+                    >
+                      <p className="text-white/90 text-[14px] md:text-[16px] leading-relaxed" >
+                        {s.desc}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </SC>
+    </section>
+  );
+}
+
+// ─── WHY SUSRUTA ─────────────────────────────────────────────
+function WhySusrutaSection() {
+  const cards = [
+    {
+      icon: <Award size={20} className="text-[#15392D]" />,
+      title: "Expert Doctor",
+      desc: "Retired Principal with 3+ decades of experience in Ayurveda.",
+    },
+    {
+      icon: <Leaf size={20} className="text-[#15392D]" />,
+      title: "Authentic Ayurveda",
+      desc: "Traditional Panchakarma and genuine herbal treatments.",
+    },
+    {
+      icon: <CalendarCheck size={20} className="text-[#15392D]" />,
+      title: "Easy Booking",
+      desc: "Check availability and book your appointment online.",
+    },
+  ];
+
+  return (
+    <section className="pt-20 pb-1 bg-[#F5F2E9]">
+      <SC>
+        <div className="text-center max-w-3xl mx-auto mb-15">
+          <div
+            className="text-[#AB6342] text-[13px] md:text-[14px] uppercase mb-5"
+            style={{
+              
+              fontWeight: 700,
+              lineHeight: "17.28px",
+              letterSpacing: "2.53px",
+            }}
+          >
+            Why Susruta
+          </div>
+
+          <h2
+            className="text-[#0A2B21] text-[30px] md:text-[44px] font-semibold"
+            style={{
+              fontFamily: "DM Serif Display",
+              lineHeight: "48.89px",
+              letterSpacing: "-0.44px",
+            }}
+          >
+            A hospital built on knowledge
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {cards.map((c, i) => (
+            <div
+              key={i}
+              className="
+                bg-[#FFFFFF]
+                rounded-3xl
+                p-7
+                flex flex-col
+                items-center
+                text-center
+                shadow-sm
+                transition-all
+                duration-300
+                ease-out
+                hover:scale-[1.03]
+                hover:shadow-lg
+                hover:-translate-y-1
+              "
+            >
+              <div className="h-12 w-12 rounded-full border bg-[#2A6F501A] flex items-center justify-center mb-5">
+                {c.icon}
+              </div>
+
+              <h3
+                className="text-[#0A2B21] text-[18px] md:text-[20px] font-semibold mb-2"
+                style={{
+                  fontFamily: "DM Serif Display",
+                  lineHeight: "28px",
+                }}
+              >
+                {c.title}
+              </h3>
+
+              <p
+                className="text-[#4E5C55] text-[15px] md:text-[16px]"
+                style={{
+                  
+                  lineHeight: "20.75px",
+                }}
+              >
+                {c.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </SC>
+    </section>
   );
 }
 
@@ -412,89 +633,114 @@ function AchievementsSection({ lang }: { lang: "en" | "te" }) {
     { year: "2016", en: { title: "Dhanvantari Award", inst: "Outstanding services in Ayurveda, Vijayawada" }, te: { title: "ధన్వంతరి అవార్డు", inst: "విజయవాడలో ఆయుర్వేదంలో అత్యుత్తమ సేవలు" } },
     { year: "2017", en: { title: "International Charaka Award", inst: "AAPNA, USA — excellence in Ayurvedic teaching, Belagavi" }, te: { title: "అంతర్జాతీయ చరక అవార్డు", inst: "ఎఎపిఎన్ఎ, యుఎస్ఎ — ఆయుర్వేద బోధనలో శ్రేష్ఠత" } },
     { year: "2023", en: { title: "Ayurveda Sarvabhouma Award", inst: "National Sanskrit University, Tirupati" }, te: { title: "ఆయుర్వేద సార్వభౌమ అవార్డు", inst: "జాతీయ సంస్కృత విశ్వవిద్యాలయం, తిరుపతి" } },
+    { year: "2026", en: { title: "Best Doctor Award", inst: "" }, te: { title: "", inst: "" } },
+
   ];
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    let animationId: number;
+    let lastTime = performance.now();
+    const loop = (time: number) => {
+      const dt = time - lastTime;
+      lastTime = time;
+      
+      if (scrollRef.current && !paused) {
+        scrollRef.current.scrollLeft += (dt * 0.12); // Increased speed
+        // Seamless loop: reset when we've scrolled past the first half (duplicated set)
+        if (scrollRef.current.scrollLeft >= scrollRef.current.scrollWidth / 2) {
+           scrollRef.current.scrollLeft -= scrollRef.current.scrollWidth / 2;
+        }
+      }
+      animationId = requestAnimationFrame(loop);
+    };
+    animationId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animationId);
+  }, [paused]);
+
+  const duplicatedAwards = [...awards, ...awards];
+
   return (
-    <TexturedSection id="achievements" className="py-24 bg-[#f7f7f7]">
-      <SC narrow>
-        <SectionHeader label={tr("ach.label", lang)} title={tr("ach.title", lang)} subtitle={tr("ach.subtitle", lang)} />
-        <div className="mt-14 relative">
-          <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/60 via-primary/20 to-transparent -translate-x-1/2" />
-          <div className="space-y-10">
-            {awards.map((award, i) => {
-              const isLeft = i % 2 === 0;
+    <section id="achievements" className="pt-24 pb-12 bg-[#F5F2E9] overflow-hidden">
+      <div className="text-center max-w-3xl mx-auto mb-8 px-4">
+        <div className="text-[#AB6342] text-[13px] md:text-[14px] uppercase mb-5" style={{ fontWeight: 700, lineHeight: '17.28px', letterSpacing: '2.53px' }}>
+         Awards & Recognitions
+        </div>
+        <h2 className="text-[#0A2B21] text-[30px] md:text-[44px] font-semibold mb-3" style={{ fontFamily: 'DM Serif Display', lineHeight: '48.89px', letterSpacing: '-0.44px' }}>
+        A Legacy of Excellence
+        </h2>
+        <p className="text-[#4E5C55] text-[16px] md:text-[20px] " style={{ lineHeight: '29.25px' }}>
+         Over four decades of distinguished service to Ayurveda, recognised nationally and internationally
+        </p>
+      </div>
+
+      <div 
+        className="relative w-full overflow-x-auto hide-scrollbar cursor-grab active:cursor-grabbing"
+        ref={scrollRef}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        <div className="flex w-max items-center relative py-10 pl-16 pr-16">
+          {/* Horizontal line — spans exactly the cards area */}
+          <div className="absolute left-16 right-16 top-1/2 -translate-y-1/2 h-[1px] bg-[#D95B2F]" />
+          
+          <div className="flex gap-16 relative">
+            {duplicatedAwards.map((award, i) => {
+              const isTop = i % 2 === 0;
               return (
-                <Reveal key={i} delay={Math.min(i * 0.06, 0.4)} direction={isLeft ? "left" : "right"}>
-                  <div className={`flex flex-col md:flex-row items-center gap-4 ${!isLeft ? "md:flex-row-reverse" : ""}`}>
-                    <div className="w-full md:w-[calc(50%-2rem)] bg-white p-6 rounded-2xl shadow-sm border border-border/60 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <h4 className="font-serif font-bold text-lg text-foreground leading-snug">{award[lang].title}</h4>
-                        <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary text-sm font-bold rounded-full">{award.year}</span>
+                <div key={i} className="relative w-[350px] shrink-0 h-[450px]">
+                  {/* Top content */}
+                  <div className="absolute top-0 bottom-1/2 left-0 right-0 w-full flex items-end pb-8">
+                    {isTop && (
+                      <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40 w-full relative">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <h4 className=" font-semibold text-[#0A2B21] text-xl leading-snug"style={{ fontFamily: 'DM Serif Display' }}>{award[lang].title}</h4>
+                          <span className="shrink-0 px-3 py-1 bg-[#FDF2EC] text-[#D95B2F] text-xs font-bold rounded-full">{award.year}</span>
+                        </div>
+                        <p className="text-[#4E5C55] text-[15px] md:text-[16px] leading-relaxed" >{award[lang].inst}</p>
                       </div>
-                      <p className="text-muted-foreground text-base leading-relaxed">{award[lang].inst}</p>
-                    </div>
-                    <div className="hidden md:flex w-10 h-10 rounded-full bg-primary text-white items-center justify-center shadow-lg shrink-0 z-10">
-                      <Trophy size={16} />
-                    </div>
-                    <div className="hidden md:block w-[calc(50%-2rem)]" />
+                    )}
                   </div>
-                </Reveal>
+
+                  {/* Trophy icon on the line */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 shrink-0 bg-[#D95B2F] rounded-full flex items-center justify-center z-10 text-white shadow-md">
+                    <Trophy size={16} />
+                  </div>
+
+                  {/* Bottom content */}
+                  <div className="absolute top-1/2 bottom-0 left-0 right-0 w-full flex items-start pt-8">
+                    {!isTop && (
+                      <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40 w-full relative">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <h4 className=" font-semibold text-[#0A2B21] text-xl leading-snug"style={{ fontFamily: 'DM Serif Display' }}>{award[lang].title}</h4>
+                          <span className="shrink-0 px-3 py-1 bg-[#FDF2EC] text-[#D95B2F] text-xs font-bold rounded-full">{award.year}</span>
+                        </div>
+                        <p className="text-[#4E5C55] text-[15px] md:text-[16px] leading-relaxed" >{award[lang].inst}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
-        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 items-stretch">
-          {[
-            { num: "5",    en: "CME Programs Organized",      te: "CME కార్యక్రమాలు నిర్వహించారు" },
-            { num: "25+",  en: "Scientific Sessions Chaired", te: "అధ్యక్షత వహించిన సెషన్‌లు" },
-            { num: "6",    en: "Countries Visited",           te: "సందర్శించిన దేశాలు" },
-            { num: "200+", en: "Health Lectures (SVETA)",     te: "ఆరోగ్య ఉపన్యాసాలు (SVETA)" },
-          ].map((s, i) => (
-            <Reveal key={i} delay={i * 0.08} className="h-full">
-              <div className="h-full bg-white border border-primary/20 p-5 rounded-2xl text-center shadow-sm flex flex-col items-center justify-center">
-                <div className="text-3xl font-bold font-serif text-primary mb-1">{s.num}</div>
-                <div className="text-sm font-semibold text-muted-foreground">{s[lang]}</div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </SC>
-    </TexturedSection>
+      </div>
+
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+    </section>
   );
 }
 
-// ─── SERVICES ─────────────────────────────────────────────────
-function ServicesSection({ lang }: { lang: "en" | "te" }) {
-  const services = [
-    { icon: <Activity size={28} />, en: { title: "Ayurvedic Consultations", desc: "Detailed personal consultation using Nadi Pariksha (Pulse diagnosis) and Prakriti analysis to determine the root cause of ailments." }, te: { title: "ఆయుర్వేద సంప్రదింపులు", desc: "వ్యాధి మూల కారణాన్ని నిర్ణయించడానికి నాడీ పరీక్ష మరియు ప్రకృతి విశ్లేషణను ఉపయోగించి వివరణాత్మక సంప్రదింపు." } },
-    { icon: <Droplets size={28} />, en: { title: "Panchakarma Therapy", desc: "Authentic detoxification and rejuvenation therapies including Vamana, Virechana, Basti, Nasya, and Raktamokshana." }, te: { title: "పంచకర్మ చికిత్స", desc: "వమన, విరేచన, బస్తి, నస్య మరియు రక్తమోక్షణతో సహా ప్రామాణికమైన డిటాక్సిఫికేషన్ మరియు పునరుజ్జీవన చికిత్సలు." } },
-    { icon: <Heart size={28} />, en: { title: "Chronic Disease Management", desc: "Specialized Ayurvedic protocols for Arthritis, Diabetes, Skin disorders, Respiratory conditions, and Gastrointestinal problems." }, te: { title: "దీర్ఘకాలిక వ్యాధి నిర్వహణ", desc: "ఆర్థ్రైటిస్, మధుమేహం, చర్మ వ్యాధులు, శ్వాసకోశ మరియు జీర్ణ సమస్యల నిర్వహణ కోసం ప్రత్యేక ఆయుర్వేద ప్రోటోకాల్‌లు." } },
-    { icon: <Leaf size={28} />, en: { title: "Wellness & Rejuvenation", desc: "Rasayana therapies to boost immunity, reduce stress, improve vitality, and promote healthy aging with herbal formulations." }, te: { title: "ఆరోగ్యం & పునరుజ్జీవనం", desc: "రోగనిరోధక శక్తి పెంచడానికి, ఒత్తిడి తగ్గించడానికి, శక్తి మెరుగుపరచడానికి రసాయన చికిత్సలు." } },
-  ];
 
-  return (
-    <TexturedSection id="services" className="py-24 bg-white">
-      <SC>
-        <SectionHeader label={tr("svc.label", lang)} title={tr("svc.title", lang)} subtitle={tr("svc.subtitle", lang)} />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-7">
-          {services.map((s, i) => (
-            <Reveal key={i} delay={i * 0.1} direction={i % 2 === 0 ? "left" : "right"}>
-              <div className="group flex gap-6 p-8 bg-[#f7f7f7] border border-border/60 rounded-3xl hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                <div className="h-14 w-14 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-                  {s.icon}
-                </div>
-                <div>
-                  <h3 className="text-xl font-serif font-bold mb-3 text-foreground">{s[lang].title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{s[lang].desc}</p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </SC>
-    </TexturedSection>
-  );
-}
 
 // ─── APPOINTMENTS ─────────────────────────────────────────────
 function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
@@ -543,7 +789,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
 
   if (settings && !settings.appointmentBookingEnabled) {
     return (
-      <TexturedSection id="appointments" className="py-24 bg-[#f7f7f7]">
+      <TexturedSection id="appointments" className="py-20 bg-[#f7f7f7]">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <Reveal>
             <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
@@ -556,7 +802,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
   }
 
   return (
-    <TexturedSection id="appointments" className="py-24 bg-[#f7f7f7]">
+    <TexturedSection id="appointments" className="py-20 bg-[#f7f7f7]">
       <SC>
         <SectionHeader label={tr("appt.label", lang)} title={tr("appt.title", lang)} subtitle={tr("appt.subtitle", lang)} />
         <div className="mt-14 max-w-4xl mx-auto">
@@ -801,183 +1047,414 @@ function SlotGroup({ label, slots, selected, onSelect }: {
 function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: testimonials = [], isLoading } = useListTestimonials();
-  const [current, setCurrent] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [dir, setDir] = useState<1 | -1>(1);
 
-  const total = testimonials.length;
+  // Static fallback testimonials used when DB has no data yet
+  const fallbackTestimonials = [
+    { id: -1, patientName: "R. K.", patientLocation: "Joint & Arthritis Care", content: "After years of knee discomfort, the treatment plan and therapies at Susruta helped me move with much greater ease. The doctor explained everything patiently.", rating: 5 },
+    { id: -2, patientName: "L. D.", patientLocation: "Digestive Health", content: "I had struggled with acidity and poor digestion for a long time. The personalised diet guidance and medicines made a real difference within a few months.", rating: 5 },
+    { id: -3, patientName: "S. P.", patientLocation: "Skin Health", content: "What I appreciated most was the honesty — no tall claims, just a clear plan and steady improvement with regular follow-ups.", rating: 5 },
+    { id: -4, patientName: "M. R.", patientLocation: "Wellness & Rejuvenation", content: "The Rasayana programme after my illness helped me regain my strength and sleep. The hospital is calm, clean and professionally run.", rating: 5 },
+    { id: -5, patientName: "A. V.", patientLocation: "Chronic Disease Care", content: "Dr. Murali Krishna took the time to understand my condition thoroughly before prescribing. I've seen real improvement in my diabetes management.", rating: 5 },
+    { id: -6, patientName: "P. S.", patientLocation: "Panchakarma Therapy", content: "The Panchakarma treatment was rejuvenating. The staff was attentive and the procedures were done with great care and expertise.", rating: 5 },
+    { id: -7, patientName: "N. K.", patientLocation: "Back Pain Relief", content: "After struggling with chronic back pain for years, two weeks of treatment at Susruta gave me relief I hadn't experienced in a long time.", rating: 5 },
+    { id: -8, patientName: "T. R.", patientLocation: "Respiratory Health", content: "My asthma episodes reduced significantly after following the treatment plan. I feel more confident and energetic now.", rating: 5 },
+  ] as Array<{ id: number; patientName: string; patientLocation: string; content: string; rating: number; contentTe?: string }>;
 
-  const go = useCallback((next: number, direction: 1 | -1 = 1) => {
-    setDir(direction);
-    setCurrent((next + total) % total);
-  }, [total]);
+  const displayTestimonials = testimonials.length > 0 ? testimonials : fallbackTestimonials;
 
-  useEffect(() => {
-    if (paused || total === 0) return;
-    const t = setInterval(() => go(current + 1, 1), 5000);
-    return () => clearInterval(t);
-  }, [current, paused, total, go]);
+  // Split into 4 columns
+  const numColumns = 4;
+  const cols: typeof displayTestimonials[] = Array.from({ length: numColumns }, () => []);
+  
+  if (displayTestimonials.length > 0) {
+    // Distribute testimonials round-robin across all 4 columns.
+    // Ensure we have at least 4 items per column (16 total) for the seamless loop animation.
+    const totalNeeded = Math.max(displayTestimonials.length, 16);
+    for (let i = 0; i < totalNeeded; i++) {
+      cols[i % numColumns].push(displayTestimonials[i % displayTestimonials.length]);
+    }
+  }
 
-  if (settings && !settings.testimonialsEnabled) return null;
+  const getAnimationProps = (colIndex: number) => {
+    const isUp = colIndex % 2 === 0;
+    const durations = [42, 48, 44, 50];
+    const duration = durations[colIndex % durations.length];
+    return {
+      animation: `marquee-${isUp ? 'up' : 'down'} ${duration}s linear infinite`,
+    };
+  };
 
   return (
-    <TexturedSection id="testimonials" className="py-24 bg-white">
-      <SC narrow>
-        <SectionHeader label={tr("test.label", lang)} title={tr("test.title", lang)} subtitle={tr("test.subtitle", lang)} />
+    <section id="testimonials" className="py-20 bg-[#FFFFFF99];">
+      <SC>
+        <div className="mb-18">
+          <div className="text-[#AB6342] text-[13px] md:text-[14px] lg:text-[15px] uppercase mb-5" style={{ fontWeight: 700, lineHeight: '17.28px', letterSpacing: '2.53px' }}>
+            Patient Stories
+          </div>
+          <h2 className="text-[#0A2B21] text-[30px] md:text-[44px] font-semibold mb-3" style={{ fontFamily: 'DM Serif Display',  lineHeight: '48.89px', letterSpacing: '-0.44px' }}>
+            Stories from our patients
+          </h2>
+          <p className="text-[#4E5C55] text-[18px] md:text-[20px]" style={{  lineHeight: '29.25px' }}>
+            Honest experiences from people who have received care at Susruta.
+          </p>
+        </div>
 
         {isLoading ? (
-          <div className="mt-14 h-72 bg-muted animate-pulse rounded-3xl" />
-        ) : total === 0 ? null : (
-          <div
-            className="mt-14 relative"
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
+          <div className="h-[600px] bg-muted/20 animate-pulse rounded-3xl" />
+        ) : (
+          <div 
+            className="relative h-[680px] overflow-hidden rounded-3xl group"
+            style={{ 
+              maskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)'
+            }}
           >
-            {/* Slide viewport */}
-            <div className="overflow-hidden rounded-3xl">
-              <AnimatePresence mode="wait" custom={dir}>
-                <motion.div
-                  key={current}
-                  custom={dir}
-                  variants={{
-                    enter: (d: number) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
-                    center: { x: 0, opacity: 1 },
-                    exit: (d: number) => ({ x: d > 0 ? -80 : 80, opacity: 0 }),
-                  }}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                  className="relative bg-[#f7f7f7] border border-border/60 p-10 md:p-14 rounded-3xl flex flex-col"
-                >
-                  {/* Large decorative quote */}
-                  <Quote size={56} className="absolute top-8 right-10 text-primary/8 pointer-events-none" />
-
-                  {/* Stars */}
-                  <div className="flex gap-1 mb-6 text-yellow-500">
-                    {[...Array(5)].map((_, si) => (
-                      <Star key={si} size={18} fill={si < testimonials[current].rating ? "currentColor" : "none"} strokeWidth={si < testimonials[current].rating ? 0 : 1.5} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-full motion-reduce:hidden">
+              {cols.map((col, colIdx) => (
+                <div key={colIdx} className={`flex flex-col gap-6 relative ${colIdx > 1 ? 'hidden lg:flex' : ''} ${colIdx === 1 ? 'hidden md:flex' : ''}`}>
+                  <div 
+                    className="flex flex-col gap-6 w-full hover:[animation-play-state:paused]"
+                    style={{ ...getAnimationProps(colIdx) }}
+                  >
+                    {/* Double the column content for seamless infinite loop */}
+                    {[...col, ...col].map((t, i) => (
+                      
+ <div
+  key={`${colIdx}-${i}`}
+  className="bg-[#F5F2E9] border border-[#DDD9CF] p-8 rounded-3xl shrink-0 flex flex-col justify-between transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-xl"
+  style={{ minHeight: '300px' }}
+>                       <div>
+                          <Quote size={28} className="text-[#15392D] mb-4 opacity-50" />
+                          <div className="flex gap-1 mb-6 text-[#AB6342]">
+                            {[...Array(5)].map((_, si) => (
+                              <Star key={si} size={16} fill={si < t.rating ? "currentColor" : "none"} strokeWidth={si < t.rating ? 0 : 1.5} />
+                            ))}
+                          </div>
+                          <p className="text-[#4E5C55] text-[14px] md:text-[15px] leading-relaxed" >
+                            "{lang === "te" && t.contentTe ? t.contentTe : t.content}"
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4 pt-6 ">
+                          <div className="h-10 w-10 rounded-full bg-[#E2EAE5] flex items-center justify-center flex-shrink-0 text-[#15392D] font-bold text-sm" style={{ fontFamily: 'DM Serif Display' }}>
+                            {t.patientName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-bold text-[#4E5C55] text-[15px] md:text-[16px] leading-tight" style={{ fontFamily: 'DM Serif Display' }}>{t.patientName}</p>
+                            {t.patientLocation && (
+                              <p className="text-xs text-[#4E5C55] mt-1">{t.patientLocation}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
+                </div>
+              ))}
+            </div>
 
-                  {/* Quote text */}
-                  <p className="text-lg md:text-xl text-foreground/85 leading-relaxed italic mb-8 font-serif">
-                    "{lang === "te" && testimonials[current].contentTe ? testimonials[current].contentTe : testimonials[current].content}"
-                  </p>
-
-                  {/* Author */}
-                  <div className="flex items-center gap-4 mt-auto">
-                    <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-                      <span className="text-primary font-bold text-sm font-serif">
-                        {testimonials[current].patientName.charAt(0).toUpperCase()}
-                      </span>
+            {/* Reduced motion fallback (static grid) */}
+            <div className="hidden motion-reduce:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-full overflow-y-auto pb-10">
+              {testimonials.map((t, i) => (
+               <div
+  key={i}
+  className="bg-[#FFFFFF] p-8 rounded-3xl flex flex-col justify-between transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-xl"
+  style={{ minHeight: '300px' }}
+>
+                  <div>
+                    <Quote size={28} className="text-[#A4B1A8] mb-4 opacity-50" />
+                    <div className="flex gap-1 mb-6 text-[#AB6342]">
+                      {[...Array(5)].map((_, si) => (
+                        <Star key={si} size={16} fill={si < t.rating ? "currentColor" : "none"} strokeWidth={si < t.rating ? 0 : 1.5} />
+                      ))}
+                    </div>
+                    <p className="text-[#4E5C55] leading-relaxed" style={{ fontFamily: 'Manrope', fontSize: '14.5px' }}>
+                      "{lang === "te" && t.contentTe ? t.contentTe : t.content}"
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4  pt-6 ">
+                    <div className="h-10 w-10 rounded-full bg-[#E2EAE5] flex items-center justify-center flex-shrink-0 text-[#15392D] font-bold text-sm" style={{ fontFamily: 'DM Serif Display' }}>
+                      {t.patientName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-bold font-serif text-foreground leading-tight">{testimonials[current].patientName}</p>
-                      {testimonials[current].patientLocation && (
-                        <p className="text-sm text-muted-foreground">{testimonials[current].patientLocation}</p>
+                      <p className="font-bold text-[#1B3227] leading-tight" style={{ fontFamily: 'DM Serif Display', fontSize: '16px' }}>{t.patientName}</p>
+                      {t.patientLocation && (
+                        <p className="text-xs text-[#8D9B95] mt-1" style={{ fontFamily: 'Manrope' }}>{t.patientLocation}</p>
                       )}
                     </div>
                   </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* Prev / Next buttons */}
-            <button
-              onClick={() => go(current - 1, -1)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-5 h-10 w-10 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-primary hover:bg-primary hover:text-white hover:border-primary transition-all z-10"
-              aria-label="Previous"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              onClick={() => go(current + 1, 1)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-5 h-10 w-10 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-primary hover:bg-primary hover:text-white hover:border-primary transition-all z-10"
-              aria-label="Next"
-            >
-              <ChevronRight size={18} />
-            </button>
-
-            {/* Dot indicators */}
-            <div className="flex justify-center gap-2 mt-8">
-              {testimonials.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => go(i, i > current ? 1 : -1)}
-                  className={`transition-all duration-300 rounded-full ${i === current ? "bg-primary w-6 h-2.5" : "bg-border w-2.5 h-2.5 hover:bg-primary/40"}`}
-                  aria-label={`Go to testimonial ${i + 1}`}
-                />
+                </div>
               ))}
             </div>
           </div>
         )}
       </SC>
-    </TexturedSection>
+      <style>{`
+        @keyframes marquee-up {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-50%); }
+        }
+        @keyframes marquee-down {
+          0% { transform: translateY(-50%); }
+          100% { transform: translateY(0); }
+        }
+      `}</style>
+    </section>
   );
 }
 
 // ─── CONTACT ──────────────────────────────────────────────────
 function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
+
+  const handleBookClick = () => {
+    window.dispatchEvent(new CustomEvent("open-booking-modal"));
+  };
+
+  // Current day
+  const today = new Date();
+
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const todayName = dayNames[today.getDay()];
+
+  const todayHours =
+    todayName === "Sunday"
+      ? "10:00 AM - 1:00 PM"
+      : "10:00 AM - 1:00 PM";
+
   return (
-    <TexturedSection id="contact" className="py-24 bg-[#f7f7f7]">
+    <section id="contact" className="py-20 bg-[#F5F2E9]">
       <SC>
-        <SectionHeader label={tr("contact.label", lang)} title={tr("contact.title", lang)} subtitle={tr("contact.subtitle", lang)} />
-        <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {[
-              { icon: <MapPin size={20} />, titleKey: "contact.address", value: settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati – 517 507" },
-              { icon: <Phone size={20} />, titleKey: "contact.phone", value: [settings?.clinicPhone1, settings?.clinicPhone2].filter(Boolean).join(" · ") || "9492068180 · 0877-2220663", note: lang === "en" ? "Please call during office hours only." : "దయచేసి కార్యాలయ వేళల్లో మాత్రమే కాల్ చేయండి." },
-              { icon: <Clock size={20} />, titleKey: "contact.hours", value: null },
-              { icon: <Mail size={20} />, titleKey: "contact.email", value: settings?.clinicEmail || "—" },
-            ].map((item, i) => (
-              <Reveal key={item.titleKey} delay={i * 0.08}>
-                <div className="bg-white p-6 rounded-2xl border border-border/60 shadow-sm flex flex-col gap-3 h-full">
-                  <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center flex-shrink-0">{item.icon}</div>
-                  <div>
-                    <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground mb-1">{tr(item.titleKey as any, lang)}</p>
-                    {item.titleKey === "contact.hours" ? (
-                      <div className="space-y-2 mt-1">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{lang === "en" ? "Mon – Sat" : "సోమ – శని"}</p>
-                          <p className="text-sm text-muted-foreground">{lang === "en" ? "10:00 AM – 1:00 PM" : "10:00 AM – 1:00 PM"}</p>
-                          <p className="text-sm text-muted-foreground">{lang === "en" ? "6:00 PM – 10:00 PM" : "6:00 PM – 10:00 PM"}</p>
-                        </div>
-                        <div className="pt-1 border-t border-border/40">
-                          <p className="text-sm font-semibold text-foreground">{lang === "en" ? "Sunday" : "ఆదివారం"}</p>
-                          <p className="text-sm text-muted-foreground">{lang === "en" ? "10:00 AM – 1:00 PM" : "10:00 AM – 1:00 PM"}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium text-foreground leading-relaxed">{item.value}</p>
-                        {(item as any).note && (
-                          <p className="text-xs text-muted-foreground italic mt-1">{(item as any).note}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              </Reveal>
-            ))}
+        <div className="text-center max-w-3xl mx-auto mb-15">
+          <div
+            className="text-[#AB6342] text-[13px] md:text-[14px] lg:text-[15px] uppercase mb-5"
+            style={{
+              
+              fontWeight: 700,
+              lineHeight: "17.28px",
+              letterSpacing: "2.53px",
+            }}
+          >
+            Contact Us
           </div>
 
-          {/* Map embed */}
-          <Reveal direction="right">
-            <div className="rounded-3xl overflow-hidden border border-border/60 shadow-sm h-full min-h-[340px] bg-[#f3f3f3] flex items-center justify-center">
-              <iframe
-                title="Susruta Hospital Location"
-                src="https://maps.google.com/maps?q=13.6353669,79.4158754&z=17&output=embed"
-                width="100%" height="100%"
-                style={{ border: 0, minHeight: "340px" }}
-                allowFullScreen loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
+          <h2
+            className="text-[#0A2B21] font-semibold text-[30px] mb-3 md:text-[44px]"
+            style={{
+              fontFamily: "DM Serif Display",
+              lineHeight: "48.89px",
+              letterSpacing: "-0.44px",
+            }}
+          >
+            Get in touch
+          </h2>
+          <p className="text-[#4E5C55] text-[16px] md:text-[20px] " style={{  lineHeight: '29.25px' }}>
+                    We are here to help you. Reach us during working hours      </p>
+        </div>
+
+        <div className="max-w-6xl mx-auto">
+          {/* Top 3 Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+
+            {/* Address */}
+            <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40">
+              <div className="h-10 w-10 bg-[#EAF0EC] text-[#1B3227] rounded-[15px] flex items-center justify-center mb-6">
+                <MapPin size={18} />
+              </div>
+
+              <h4
+                className="text-[#4E5C55] font-semibold text-[16px] md:text-[18px] tracking-widest uppercase mb-2"
+                style={{ fontFamily: "DM Serif Display" }}
+              >
+                Address
+              </h4>
+
+              <p
+                className="text-[#1B3227CC] text-[14px] md:text-[16px] leading-relaxed"
+                
+              >
+                {settings?.clinicAddress ||
+                  "119, Ramulavari North Mada Street, Tirupati - 517 507"}
+              </p>
             </div>
-          </Reveal>
+
+            {/* Phone */}
+            <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40">
+              <div className="h-10 w-10 bg-[#EAF0EC] text-[#1B3227] rounded-[15px] flex items-center justify-center mb-6">
+                <Phone size={18} />
+              </div>
+
+              <h4
+                className="text-[#4E5C55] font-semibold text-[16px] md:text-[18px] tracking-widest uppercase mb-2"
+                style={{ fontFamily: "DM Serif Display" }}
+              >
+                Phone
+              </h4>
+
+              <p
+                className="text-[#1B3227CC] text-[14px] md:text-[16px] leading-relaxed"
+               
+              >
+                {[settings?.clinicPhone1, settings?.clinicPhone2]
+                  .filter(Boolean)
+                  .join(" · ") || "9492068180 · 0877-2220663"}
+              </p>
+
+              <p
+                className="text-[#8D9B95] text-[14px] md:text-[16px] mt-1"
+                
+              >
+                Please call during office hours only.
+              </p>
+            </div>
+
+            {/* Email */}
+            <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40">
+              <div className="h-10 w-10 bg-[#EAF0EC] text-[#1B3227] rounded-[15px] flex items-center justify-center mb-6">
+                <Mail size={18} />
+              </div>
+
+              <h4
+                className="text-[#4E5C55] font-semibold text-[16px] md:text-[18px] tracking-widest uppercase mb-2"
+                style={{ fontFamily: "DM Serif Display" }}
+              >
+                Email
+              </h4>
+
+              <p
+                className="text-[#1B3227CC] text-[14px] md:text-[16px] leading-relaxed break-words"
+               
+              >
+                {settings?.clinicEmail || "reachus@susrutahospital.com"}
+              </p>
+            </div>
+          </div>
+
+          {/* Bottom 2 Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+
+            {/* Working Hours */}
+            <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40 flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-10 bg-[#EAF0EC] text-[#1B3227] rounded-[15px] flex items-center justify-center">
+                  <Clock size={18} />
+                </div>
+
+                <h4
+                  className="text-[#4E5C55] font-semibold text-[16px] md:text-[18px] tracking-widest uppercase"
+                  style={{ fontFamily: "DM Serif Display" }}
+                >
+                  Working Hours
+                </h4>
+              </div>
+
+              <div className="flex-1 flex flex-col justify-center">
+
+                {/* Today's Working Hours */}
+                <div className="bg-[#FEF6EE] text-[#D95B2F] rounded-xl px-4 py-3 flex justify-between items-center mb-4">
+  <div
+    className="flex items-center gap-2 font-medium text-[14px] md:text-[16px]"
+    style={{ fontFamily: "Dm sans" }}
+  >
+    <span className="w-2 h-2 rounded-full bg-[#D95B2F]" />
+    Today ({todayName})
+  </div>
+
+  <div
+    className="font-medium text-[13px] md:text-[15px] text-right"
+   
+  >
+    <div>10:00 AM - 1:00 PM</div>
+    <div className="mt-2">6:00 PM - 10:00 PM</div>
+  </div>
+</div>
+
+                {/* Monday - Saturday */}
+                <div className="px-4 py-4 border-b border-[#EAE7E0] flex justify-between items-start">
+                  <div
+                    className="text-[#1B3227] text-[14px] md:text-[16px] font-medium"
+                   
+                  >
+                    Monday - Saturday
+                  </div>
+
+                  <div
+                    className="text-right text-[13px] md:text-[15px] text-[#15392D]"
+                    
+                  >
+                    <div className="mb-2">10:00 AM - 1:00 PM</div>
+                    <div>6:00 PM - 10:00 PM</div>
+                  </div>
+                </div>
+
+                {/* Sunday */}
+                <div className="px-4 py-4 flex justify-between items-center">
+                  <div
+                    className="text-[#1B3227] text-[14px] md:text-[16px] font-medium"
+                    
+                  >
+                    Sunday
+                  </div>
+
+                  <div
+                    className="text-[#15392D] text-[13px] md:text-[15px]"
+                    style={{  fontSize: "14px" }}
+                  >
+                    10:00 AM - 1:00 PM
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Map */}
+            <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40 flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-10 bg-[#EAF0EC] text-[#1B3227] rounded-[15px] flex items-center justify-center">
+                  <MapPin size={18} />
+                </div>
+
+                <h4
+                  className="text-[#4E5C55] font-semibold text-[16px] md:text-[18px] tracking-widest uppercase"
+                  style={{ fontFamily: "DM Serif Display" }}
+                >
+                  Find Us On The Map
+                </h4>
+              </div>
+
+              <div className="flex-1 rounded-2xl overflow-hidden bg-[#F3F3F3]">
+                <iframe
+                  title="Susruta Hospital Location"
+                  src="https://maps.google.com/maps?q=13.6353669,79.4158754&z=17&output=embed"
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0, minHeight: "240px" }}
+                  allowFullScreen
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <button
+              onClick={handleBookClick}
+              className="px-8 py-3.5 text-[14px] md:text-[16px] bg-[#D95B2F] text-[#FFFFFF] rounded-[10px] shadow-lg hover:bg-[#D95B2F]/90 transition-all font-semibold"
+              
+            >
+              Book Appointment
+            </button>
+          </div>
         </div>
       </SC>
-    </TexturedSection>
+    </section>
   );
 }

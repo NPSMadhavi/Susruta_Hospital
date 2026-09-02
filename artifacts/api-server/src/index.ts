@@ -1,9 +1,8 @@
 import dotenv from "dotenv";
 import path from "path";
 
-// Load root workspace .env file, then local .env
-dotenv.config({ path: path.resolve(import.meta.dirname, "../../.env") });
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+// Load root workspace .env file
+dotenv.config({ path: path.resolve(import.meta.dirname, "../../../.env") });
 
 import app from "./app";
 import { startVerificationReminderWorker } from "./lib/verification-reminders";
