@@ -54,7 +54,7 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
-const timeInputCls = "w-[155px] pl-3.5 pr-9 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
+const timeInputCls = "w-full pl-3.5 pr-9 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 
 export default function AdminOnlineSlots() {
@@ -187,10 +187,10 @@ export default function AdminOnlineSlots() {
   return (
     <AdminLayout>
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-foreground flex items-center gap-2">
-            <Video size={22} className="text-[#1a3d2b]" /> Online Consultation Slots
+      <div className="w-full space-y-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-sans font-bold text-foreground flex items-center gap-2">
+            <Video size={28} className="text-[#1a3d2b]" /> Online Consultation Slots
           </h1>
           <p className="text-muted-foreground text-sm mt-1">Create Sunday slot sessions for video consultations. Each session generates individual bookable slots.</p>
         </div>
@@ -208,7 +208,7 @@ export default function AdminOnlineSlots() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className={labelCls}>Session Date *</label>
                 <input type="date" min={today} value={form.date} onChange={set("date")} className={inputCls} required />
@@ -223,7 +223,7 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session Start Time</label>
-                <div className="relative inline-block">
+                <div className="relative w-full">
                   <input ref={startTimeRef} type="time" value={form.startTime} onChange={set("startTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
                     onClick={() => { try { (startTimeRef.current as any)?.showPicker?.(); } catch { startTimeRef.current?.focus(); } }}
@@ -234,7 +234,7 @@ export default function AdminOnlineSlots() {
               </div>
               <div>
                 <label className={labelCls}>Session End Time</label>
-                <div className="relative inline-block">
+                <div className="relative w-full">
                   <input ref={endTimeRef} type="time" value={form.endTime} onChange={set("endTime")} className={timeInputCls} />
                   <button type="button" tabIndex={-1}
                     onClick={() => { try { (endTimeRef.current as any)?.showPicker?.(); } catch { endTimeRef.current?.focus(); } }}
@@ -276,7 +276,7 @@ export default function AdminOnlineSlots() {
             </div>
 
             {showPreview && preview.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
                 {preview.map((s, i) => (
                   <div key={i} className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2 text-center">
                     <p className="text-xs font-bold text-blue-700">{fmtTime(s.startTime)}</p>
@@ -410,7 +410,7 @@ export default function AdminOnlineSlots() {
                         </form>
                       )}
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Individual Slots</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5">
                         {sess.slots.map(sl => {
                           const booked = sl.isBooked || sl.bookingCount > 0;
                           return (

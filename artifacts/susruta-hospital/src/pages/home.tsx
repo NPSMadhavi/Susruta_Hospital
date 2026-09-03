@@ -328,7 +328,7 @@ function AboutSection({ lang }: { lang: "en" | "te" }) {
     <section id="about" className="py-20 bg-[#F5F2E9]">
       <SC>
 
-        <div className="flex flex-col lg:flex-row gap-12 max-w-6xl mx-auto">
+        <div className="flex flex-col lg:flex-row gap-12 max-w-full mx-auto">
 
           {/* Photo */}
           <div className="w-full lg:w-[400px] flex-shrink-0 relative rounded-3xl mt-12 overflow-hidden min-h-[400px]">
@@ -569,7 +569,7 @@ function WhySusrutaSection() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-6xl mx-auto">
           {cards.map((c, i) => (
             <div
               key={i}
@@ -1064,7 +1064,7 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
 
   // Split into 4 columns
   const numColumns = 4;
-  const cols: typeof displayTestimonials[] = Array.from({ length: numColumns }, () => []);
+  const cols: (typeof displayTestimonials[number])[][] = Array.from({ length: numColumns }, () => []);
   
   if (displayTestimonials.length > 0) {
     // Distribute testimonials round-robin across all 4 columns.
@@ -1260,9 +1260,9 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
                     We are here to help you. Reach us during working hours      </p>
         </div>
 
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Top 3 Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-6">
 
             {/* Address */}
             <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40">
@@ -1339,7 +1339,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
           </div>
 
           {/* Bottom 2 Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
 
             {/* Working Hours */}
             <div className="bg-[#FFFFFF] p-8 rounded-3xl shadow-sm border border-[#DDD9CF]/40 flex flex-col">

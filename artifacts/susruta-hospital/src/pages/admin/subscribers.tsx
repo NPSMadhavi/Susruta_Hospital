@@ -524,7 +524,7 @@ export default function AdminSubscribers() {
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Subscribers</h1>
+          <h1 className="text-3xl font-sans font-bold text-foreground">Subscribers</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {subs.length} {subs.length === 1 ? "person" : "people"} subscribed for launch updates
           </p>

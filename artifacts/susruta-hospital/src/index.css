@@ -2,8 +2,8 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: 'DM Sans', 'Tiro Telugu', sans-serif;
-  --font-serif: 'Playfair Display', 'Tiro Telugu', serif;
+  --font-sans: 'DM Sans';
+  --font-serif: 'DM Serif Display';
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -118,4 +118,27 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 .font-dm-serif-display {
   font-family: "DM Serif Display", serif;
+}
+
+/* Admin Panel typography override: Enforce DM Sans for all headings, descriptions, buttons, numbers, and inputs */
+.admin-panel,
+.admin-panel *,
+.admin-panel h1,
+.admin-panel h2,
+.admin-panel h3,
+.admin-panel h4,
+.admin-panel h5,
+.admin-panel h6,
+.admin-panel p,
+.admin-panel span,
+.admin-panel button,
+.admin-panel input,
+.admin-panel select,
+.admin-panel textarea,
+.admin-panel table,
+.admin-panel td,
+.admin-panel th,
+.admin-panel .font-serif,
+.admin-panel .font-dm-serif-display {
+  font-family: 'DM Sans';
 }

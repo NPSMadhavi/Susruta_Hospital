@@ -65,7 +65,7 @@ export default function AdminAvailability() {
   return (
     <AdminLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-serif font-bold text-foreground">Manage Availability</h1>
+        <h1 className="text-3xl font-sans font-bold text-foreground">Manage Availability</h1>
         <p className="text-muted-foreground">Control when patients can book appointments.</p>
       </div>
 

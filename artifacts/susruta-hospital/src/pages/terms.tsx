@@ -5,11 +5,11 @@ import logoImg from "@assets/logo_1773840200056.png";
 
 const Section = ({ num, title, children }: { num: number; title: string; children: React.ReactNode }) => (
   <section>
-    <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-xs font-bold flex items-center justify-center shrink-0">{num}</span>
+   <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
+      <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">{num}</span>
       {title}
     </h2>
-    <div className="text-sm text-gray-700 leading-relaxed space-y-2">{children}</div>
+    <div className="text-[16px] md:text-[18px] text-gray-700 leading-relaxed space-y-2">{children}</div>
   </section>
 );
 
@@ -20,28 +20,37 @@ const Bullet = ({ children }: { children: React.ReactNode }) => (
 export default function TermsAndConditions() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50/40 via-white to-green-50/20">
-      <div className="bg-[#1a3d2b] text-white">
-        <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
-          <img src={logoImg} alt="Susruta Hospital" className="h-8 w-auto object-contain brightness-0 invert" />
-          <a href="/portal" className="flex items-center gap-1.5 text-white/70 hover:text-white text-sm transition-colors">
-            <ArrowLeft size={14} /> Back to Portal
+      <div className="bg-[#FFFFFF] text-[#0A2B21]">
+      <div className="w-full mx-auto px-[5%] py-5 flex flex-col md:flex-row items-center justify-between gap-3">
+          <img
+            src={logoImg}
+            alt="Susruta Hospital"
+            className="h-8 w-auto object-contain"
+          />
+
+        <a
+  href="/portal"
+  className="flex items-center gap-1.5 text-[#D95B2F] hover:underline text-[16px] md:text-[18px] hover:text-[#D95B2F] transition-colors"
+>
+            <ArrowLeft size={18} /> Back to Portal
           </a>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="w-full mx-auto bg-[#F5F2E9] px-[7%] py-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-2xl bg-[#1a3d2b]/10 flex items-center justify-center">
               <FileText size={22} className="text-[#1a3d2b]" />
             </div>
+
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Terms & Conditions</h1>
-              <p className="text-sm text-gray-500 mt-0.5">Susruta Hospital Patient Portal · Last updated: January 2025</p>
+              <h1 className="text-[22px] md:text-[24px] font-bold text-[#0A2B21]">Terms & Conditions</h1>
+              <p className="text-[16px] md:text-[18px] text-gray-500 mt-0.5">Susruta Hospital Patient Portal · Last updated: January 2025</p>
             </div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-8 text-sm text-amber-800">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-8 text-[16px] md:text-[18px] text-amber-800">
             <strong>Please read these Terms and Conditions carefully</strong> before using the Susruta Hospital Patient Portal. By creating an account or using this platform, you agree to be bound by these terms.
           </div>
 
@@ -147,7 +156,7 @@ export default function TermsAndConditions() {
 
             <Section num={13} title="Contact Us">
               <p>If you have questions about these Terms, please contact:</p>
-              <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm">
+              <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-[16px] md:text-[18px]">
                 <p className="font-semibold text-gray-900">Susruta Hospital</p>
                 <p className="text-gray-600">119, Ramulavari North Mada Street, Tirupati - 517 507</p>
                 <p className="text-gray-600">Andhra Pradesh, India</p>
@@ -156,10 +165,11 @@ export default function TermsAndConditions() {
                 </a>
               </div>
             </Section>
+
           </div>
 
           <div className="mt-12 pt-6 border-t border-gray-200 text-center">
-            <p className="text-xs text-gray-400">Susruta Hospital · Tirupati · © 2025 All Rights Reserved</p>
+            <p className="text-[14px] md:text-[16px] text-gray-400">Susruta Hospital · Tirupati · © 2025 All Rights Reserved</p>
           </div>
         </motion.div>
       </div>

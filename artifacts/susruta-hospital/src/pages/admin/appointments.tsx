@@ -167,7 +167,7 @@ function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
-        <h3 className="font-serif font-bold text-lg mb-1">Record Payment</h3>
+        <h3 className="font-sans font-bold text-lg mb-1">Record Payment</h3>
         <p className="text-muted-foreground text-sm mb-6">{appt.patientName} · {fmt(appt.date)} {appt.timeSlot}</p>
         <div className="grid grid-cols-2 gap-3 mb-6">
           {(["cash", "upi"] as const).map((m) => (
@@ -205,7 +205,7 @@ function RescheduleModal({ appt, onClose, onProposed }: { appt: Appt; onClose: (
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
-        <h3 className="font-serif font-bold text-lg mb-1">Propose Reschedule</h3>
+        <h3 className="font-sans font-bold text-lg mb-1">Propose Reschedule</h3>
         <p className="text-muted-foreground text-sm mb-5">Offer up to 3 alternative dates for the patient to choose from.</p>
         <div className="space-y-3 mb-6">
           {dates.map((d, i) => (
@@ -241,7 +241,7 @@ function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => vo
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs p-6">
-        <h3 className="font-serif font-bold text-lg mb-4">Set Follow-up Date</h3>
+        <h3 className="font-sans font-bold text-lg mb-4">Set Follow-up Date</h3>
         <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)}
           className="w-full border border-border rounded-xl px-3 py-2.5 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-primary/20" />
         <div className="flex gap-3">
@@ -745,57 +745,139 @@ export default function AdminAppointments() {
   const [adminCall, setAdminCall] = useState<{ apptId: number; patientName: string } | null>(null);
   const [allPermissions, setAllPermissions] = useState<Record<number, ParticipantPerm[]>>({});
 
+  const apptsRef = useRef(appts);
+  useEffect(() => { apptsRef.current = appts; }, [appts]);
+  const onlineApptsRef = useRef(onlineAppts);
+  useEffect(() => { onlineApptsRef.current = onlineAppts; }, [onlineAppts]);
+
+  const reqIdRef = useRef(0);
+
+  // Helper to insert or update an appointment in onlineAppts array without duplicates
+  const upsertOnlineAppt = useCallback((data: any) => {
+    if (!data || !data.id) return;
+    setOnlineAppts(prev => {
+      const idx = prev.findIndex(a => a.id === data.id);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], ...data };
+        return updated;
+      } else {
+        // Only insert if it looks like a valid appt object (has slot or patient) or loadOnline will populate details
+        return [data, ...prev];
+      }
+    });
+  }, []);
+
   // ── Load online appointments ──
   const loadOnline = useCallback(async (silent = false) => {
-    if (!silent) setOnlineLoading(true);
+    const currentReqId = ++reqIdRef.current;
+    if (!silent && onlineApptsRef.current.length === 0) setOnlineLoading(true);
     setOnlineErr("");
     try {
       const res = await fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" });
       if (!res.ok) {
         if (res.status === 401) {
-          setOnlineErr("Admin session expired. Please log in to view appointments.");
           setOnlineAppts([]);
           return;
         }
-        throw new Error(`Server error (${res.status})`);
+        return;
       }
       const list = await res.json();
-      const appts: OnlineAppt[] = Array.isArray(list) ? list : [];
-      if (prevOnlineCountRef.current !== null && appts.length > prevOnlineCountRef.current) {
+      const apptsList: OnlineAppt[] = Array.isArray(list) ? list : [];
+
+      // Guard against stale/slower API responses overwriting newer state
+      if (currentReqId < reqIdRef.current) return;
+
+      if (prevOnlineCountRef.current !== null && apptsList.length > prevOnlineCountRef.current) {
         playChime();
-        notifyRef.current("New Online Appointment", `${appts.length - prevOnlineCountRef.current} new online booking(s)`);
+        notifyRef.current("New Online Appointment", `${apptsList.length - prevOnlineCountRef.current} new online booking(s)`);
       }
-      prevOnlineCountRef.current = appts.length;
-      setOnlineAppts(appts);
+      prevOnlineCountRef.current = apptsList.length;
+      setOnlineAppts(apptsList);
       setLastRefresh(new Date());
-    } catch (e: any) {
-      if (!silent) setOnlineErr(e.message || "Failed to load online appointments");
+    } catch {
+      // Fail silently on background retry
     } finally {
-      if (!silent) setOnlineLoading(false);
+      if (currentReqId === reqIdRef.current) {
+        setOnlineLoading(false);
+      }
     }
   }, []);
 
+  // ── Load in-person appointments ──
+  const fetchAppts = useCallback(async (silent = false) => {
+    if (!silent && apptsRef.current.length === 0) setLoading(true);
+    try {
+      const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
+      const data = await apiFetch(url);
+      setAppts(Array.isArray(data) ? data : []);
+      setLastRefresh(new Date());
+    } catch (e: any) {
+      console.error("fetchAppts failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
+  // Initial load on mount & 20s auto-refresh for both offline and online appointments
   useEffect(() => {
-    if (mainTab !== "online") return;
-    loadOnline();
-    onlineIntervalRef.current = setInterval(() => loadOnline(true), 5_000);
-    return () => { if (onlineIntervalRef.current) clearInterval(onlineIntervalRef.current); };
+    fetchAppts(false);
+    loadOnline(false);
+
+    const interval = setInterval(() => {
+      fetchAppts(true);
+      loadOnline(true);
+    }, 20_000); // 20 sec auto-refresh
+
+    return () => clearInterval(interval);
+  }, [fetchAppts, loadOnline]);
+
+  // Trigger immediate load when switching to Online tab
+  useEffect(() => {
+    if (mainTab === "online") {
+      loadOnline(true);
+    }
   }, [mainTab, loadOnline]);
 
-  // Real-time SSE for permission updates
+  // Real-time SSE for online appointments, new bookings & permission updates
   useEffect(() => {
-    if (mainTab !== "online") return;
     const es = new EventSource(`${BASE}/api/online-appointments/admin/stream`, { withCredentials: true });
-    es.addEventListener("appointment_updated", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setOnlineAppts(prev => prev.map(a => a.id === data.id ? { ...a, ...data } : a));
-    });
-    es.addEventListener("permission_update", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setAllPermissions(prev => ({ ...prev, [data.apptId]: data.participants }));
-    });
+
+    const handleUpdate = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data && data.id) {
+          upsertOnlineAppt(data);
+        }
+        loadOnline(true);
+      } catch {}
+    };
+
+    const handleNew = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data && data.id) {
+          upsertOnlineAppt(data);
+          playChime();
+          notifyRef.current("New Online Appointment", "A new online appointment has been booked");
+        }
+        loadOnline(true);
+      } catch {}
+    };
+
+    const handlePerm = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        setAllPermissions(prev => ({ ...prev, [data.apptId]: data.participants }));
+      } catch {}
+    };
+
+    es.addEventListener("appointment_updated", handleUpdate);
+    es.addEventListener("new_online_appointment", handleNew);
+    es.addEventListener("permission_update", handlePerm);
+
     return () => es.close();
-  }, [mainTab]);
+  }, [loadOnline, upsertOnlineAppt]);
 
   async function toggleJoin(id: number, enable: boolean) {
     try {
@@ -812,7 +894,6 @@ export default function AdminAppointments() {
 
   async function renotify(id: number) {
     try {
-      // Re-fires the SSE event to the patient — chime + voice will replay on their device
       await fetch(`${BASE}/api/online-appointments/admin/${id}/enable-join`, {
         method: "POST", credentials: "include",
       });
@@ -862,39 +943,6 @@ export default function AdminAppointments() {
       setOnlineAppts(prev => prev.filter(a => a.id !== id));
     } catch { setOnlineErr("Delete failed. Please try again."); }
   }
-
-  // ── Load in-person appointments ──
-  async function fetchAppts() {
-    setLoading(true);
-    try {
-      const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
-      const data = await apiFetch(url);
-      setAppts(Array.isArray(data) ? data : []);
-    } catch (e: any) {
-      console.error("fetchAppts failed:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { fetchAppts(); }, [filter]);
-
-  // SSE for in-person new appointments
-  useEffect(() => {
-    const es = new EventSource(`${API}/appointments/notifications`, { withCredentials: true });
-    es.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "new_appointment") {
-          const a: Appt = msg.appointment;
-          setAppts(prev => [a, ...prev.filter(x => x.id !== a.id)]);
-          notifyRef.current("New Appointment", `${a.patientName} — ${fmt(a.date)} ${a.timeSlot}`);
-        }
-      } catch {}
-    };
-    const poll = setInterval(() => fetchAppts(), 30000);
-    return () => { es.close(); clearInterval(poll); };
-  }, []);
 
   function mutate(updated: Appt) { setAppts(prev => prev.map(a => a.id === updated.id ? updated : a)); }
   async function approve(id: number) { mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) })); }
@@ -977,7 +1025,7 @@ export default function AdminAppointments() {
         <button onClick={() => setMainTab("inperson")}
           className={cn("flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
             mainTab === "inperson" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
-          <MapPin size={14} /> In-Person
+          <MapPin size={14} /> Offline
           {pendingCount > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{pendingCount}</span>
           )}
@@ -1032,11 +1080,7 @@ export default function AdminAppointments() {
             </div>
           )}
 
-          {onlineErr && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-red-700">
-              <AlertCircle size={14} /> {onlineErr}
-            </div>
-          )}
+
 
           {/* ── Sub-tabs: Pending / Completed ── */}
           <div className="flex gap-2 bg-muted/40 rounded-xl p-1 border border-border">
@@ -1074,7 +1118,7 @@ export default function AdminAppointments() {
             </button>
           </div>
 
-          {onlineLoading ? (
+          {onlineLoading && onlineAppts.length === 0 ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 size={24} className="animate-spin text-muted-foreground" />
             </div>
@@ -1165,7 +1209,7 @@ export default function AdminAppointments() {
 
           {/* List */}
           <div className="space-y-3">
-            {loading ? (
+            {loading && appts.length === 0 ? (
               <div className="py-16 text-center text-muted-foreground flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin" /> Loading…
               </div>

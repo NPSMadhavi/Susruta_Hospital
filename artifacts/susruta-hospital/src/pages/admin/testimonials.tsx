@@ -47,7 +47,7 @@ export default function AdminTestimonials() {
     <AdminLayout>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Testimonials</h1>
+          <h1 className="text-3xl font-sans font-bold text-foreground">Testimonials</h1>
           <p className="text-muted-foreground">Manage patient reviews shown on the website.</p>
         </div>
         <Button onClick={() => setIsAdding(!isAdding)}>{isAdding ? 'Cancel' : 'Add New'}</Button>

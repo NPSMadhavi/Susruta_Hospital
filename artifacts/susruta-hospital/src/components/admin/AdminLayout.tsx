@@ -75,7 +75,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       } catch { /* ignore parse errors */ }
     };
     return () => es.close();
-  }, [admin, notify]);
+  }, [admin?.username]);
 
   // Protect route
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
@@ -90,59 +90,76 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const navItems = [
-    { href: "/admin", icon: <LayoutDashboard size={20}/>, label: "Dashboard" },
-    { href: "/admin/appointments", icon: <Calendar size={20}/>, label: "Appointments" },
-    { href: "/admin/availability", icon: <Clock size={20}/>, label: "Offline Slots" },
-    { href: "/admin/online-slots", icon: <Video size={20}/>, label: "Online Slots" },
-    { href: "/admin/patients", icon: <UserCheck size={20}/>, label: "Patients" },
-    { href: "/admin/donations", icon: <Heart size={20}/>, label: "Donations" },
-    { href: "/admin/testimonials", icon: <MessageSquare size={20}/>, label: "Testimonials" },
-    { href: "/admin/subscribers", icon: <Users size={20}/>, label: "Subscribers" },
-    { href: "/admin/settings", icon: <Settings size={20}/>, label: "Settings" },
+  const dashboardGroup = [
+    { href: "/admin", icon: <LayoutDashboard size={18}/>, label: "Dashboard" },
+    { href: "/admin/appointments", icon: <Calendar size={18}/>, label: "Appointments" },
+    { href: "/admin/availability", icon: <Clock size={18}/>, label: "Offline Slots" },
+    { href: "/admin/online-slots", icon: <Video size={18}/>, label: "Online Slots" },
   ];
 
-  const mobileNavItems = navItems.slice(0, 6);
+  const managementGroup = [
+    { href: "/admin/patients", icon: <UserCheck size={18}/>, label: "Patients" },
+    { href: "/admin/donations", icon: <Heart size={18}/>, label: "Donations" },
+    { href: "/admin/testimonials", icon: <MessageSquare size={18}/>, label: "Testimonials" },
+    { href: "/admin/subscribers", icon: <Users size={18}/>, label: "Subscribers" },
+    { href: "/admin/settings", icon: <Settings size={18}/>, label: "Settings" },
+  ];
+
+  const mobileNavItems = [...dashboardGroup, ...managementGroup].slice(0, 6);
+
+  const renderNavItem = (item: { href: string; icon: React.ReactNode; label: string }) => {
+    const isActive = location === item.href;
+    return (
+      <Link 
+        key={item.href} 
+        href={item.href}
+        className={`flex items-center gap-3 px-6 py-2.5 text-sm transition-all duration-150 relative ${
+          isActive 
+            ? 'bg-[#D95B2F]/10 text-[#D95B2F] font-semibold border-r-[5px] border-[#D95B2F] shadow-[0_1px_2px_rgba(0,0,0,0.05)]' 
+            : 'text-[#42493E] font-normal hover:bg-[#D95B2F]/5 hover:text-[#D95B2F]'
+        }`}
+      >
+        <span className={isActive ? 'text-[#D95B2F]' : 'text-[#42493E]'}>
+          {item.icon}
+        </span>
+        {item.label}
+      </Link>
+    );
+  };
 
   return (
-    <div className="min-h-screen flex bg-muted/30">
+    <div className="admin-panel min-h-screen flex bg-[#F8F9FA] font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-foreground text-white flex-col hidden md:flex shrink-0">
-        <div className="px-5 py-4 border-b border-white/10">
-          <img src={logoImg} alt="Susruta Hospital" className="h-8 w-auto max-w-[160px] object-contain brightness-0 invert" />
-          <p className="text-white/45 text-xs font-semibold uppercase tracking-widest mt-1">Admin Panel</p>
+      <aside className="w-64 md:w-[282px] bg-white border-r border-[#EDEFEB] text-[#42493E] flex flex-col hidden md:flex shrink-0 h-screen sticky top-0">
+        <div className="px-6 pt-3 pb-4 border-b border-[#EDEFEB] shrink-0">
+          <img src={logoImg} alt="Susruta Hospital" className="h-9 w-auto max-w-[219px] object-contain" />
+          <p className="text text-xs font-semibold uppercase tracking-widest mt-1">Admin Panel</p>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
-          {navItems.map(item => {
-            const isActive = location === item.href;
-            return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-primary text-white font-medium shadow-lg shadow-primary/20' : 'text-white/60 hover:bg-white/10 hover:text-white'}`}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 py-2 overflow-y-auto space-y-0.5">
+          {dashboardGroup.map(renderNavItem)}
+          {managementGroup.map(renderNavItem)}
         </nav>
 
-        <div className="p-4 border-t border-white/10">
-          {/* Notification permission button */}
+        {/* SYSTEM SECTION PINNED AT BOTTOM */}
+        <div className="p-4 border-t border-[#EDEFEB] shrink-0 space-y-1">
+          {/* <p className="px-2 pb-2 text-[10px] font-bold text-[#8E938B] tracking-wider uppercase">SYSTEM</p> */}
           {permission !== "granted" && (
             <button
               onClick={requestPermission}
-              className="w-full flex items-center gap-2 px-4 py-2 mb-2 rounded-xl text-xs text-amber-300 hover:bg-white/10 border border-amber-400/30 transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-2 text-xs font-medium text-[#D95B2F] hover:bg-[#D95B2F]/10 rounded-lg transition-colors"
             >
-              <Bell size={14} /> Enable notifications
+              <Bell size={16} /> Enable notifications
             </button>
           )}
-          <Button variant="ghost" className="w-full justify-start text-white/60 hover:text-white hover:bg-white/10" onClick={handleLogout}>
-            <LogOut size={20} className="mr-3" /> Logout
-          </Button>
-          <Link href="/" className="flex items-center gap-2 mt-4 text-xs text-white/40 hover:text-white/80 px-4">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-2 py-2.5 text-xs font-bold text-[#D95B2F] hover:bg-[#D95B2F]/10 rounded-lg transition-colors"
+          >
+            <LogOut size={16} className="text-[#D95B2F]" />
+            LOGOUT
+          </button>
+          <Link href="/" className="flex items-center gap-1.5 px-2 py-2 text-xs text-[#8E938B] hover:text-[#42493E]">
             <ChevronLeft size={14} /> Back to Website
           </Link>
         </div>
@@ -151,15 +168,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Mobile Header */}
-        <header className="md:hidden bg-foreground text-white px-4 py-3 flex justify-between items-center shrink-0">
-          <img src={logoImg} alt="Susruta Hospital" className="h-7 w-auto object-contain brightness-0 invert" />
+        <header className="md:hidden bg-white border-b border-[#EDEFEB] text-[#42493E] px-4 py-3 flex justify-between items-center shrink-0">
+          <img src={logoImg} alt="Susruta Hospital" className="h-7 w-auto object-contain" />
           <div className="flex items-center gap-2">
             {permission !== "granted" && (
-              <button onClick={requestPermission} className="p-1.5 text-amber-300 hover:text-amber-200" title="Enable notifications">
+              <button onClick={requestPermission} className="p-1.5 text-amber-600 hover:text-amber-700" title="Enable notifications">
                 <Bell size={18} />
               </button>
             )}
-            <Button variant="ghost" size="sm" className="text-white/70 hover:text-white" onClick={handleLogout}>
+            <Button variant="ghost" size="sm" className="text-[#D95B2F] hover:bg-[#D95B2F]/10 font-bold" onClick={handleLogout}>
               <LogOut size={16} className="mr-1.5" /> Logout
             </Button>
           </div>
@@ -171,14 +188,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1a3d2b] border-t border-white/10 flex z-50 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#EDEFEB] flex z-50 safe-area-bottom shadow-lg">
         {mobileNavItems.map(item => {
           const isActive = location === item.href;
           return (
             <Link key={item.href} href={item.href}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-semibold transition-colors ${isActive ? 'text-white' : 'text-white/40 hover:text-white/70'}`}
+              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-semibold transition-colors ${isActive ? 'text-[#D95B2F] bg-[#D95B2F]/10' : 'text-[#42493E] hover:text-[#D95B2F]'}`}
             >
-              <span className={`${isActive ? 'text-white' : 'text-white/40'}`}>
+              <span className={isActive ? 'text-[#D95B2F]' : 'text-[#42493E]'}>
                 {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18 })}
               </span>
               {item.label}
@@ -191,15 +208,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => (
           <div key={toast.id}
-            className="pointer-events-auto flex items-start gap-3 bg-[#1a3d2b] text-white rounded-2xl shadow-2xl px-4 py-3 min-w-[280px] max-w-[340px] border border-white/10 animate-in slide-in-from-right-4 duration-300"
+            className="pointer-events-auto flex items-start gap-3 bg-[#42493E] text-white rounded-2xl shadow-2xl px-4 py-3 min-w-[280px] max-w-[340px] border border-white/10 animate-in slide-in-from-right-4 duration-300"
           >
-            <div className="w-8 h-8 rounded-full bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center shrink-0 mt-0.5">
-              <Bell size={15} className="text-emerald-300" />
+            <div className="w-8 h-8 rounded-full bg-[#D95B2F]/20 border border-[#D95B2F]/40 flex items-center justify-center shrink-0 mt-0.5">
+              <Bell size={15} className="text-[#D95B2F]" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold leading-tight">{toast.title}</p>
-              <p className="text-xs text-white/60 mt-0.5 leading-snug">{toast.body}</p>
-              <Link href="/admin/online-appointments" className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold mt-1 block">
+              <p className="text-xs text-white/70 mt-0.5 leading-snug">{toast.body}</p>
+              <Link href="/admin/online-appointments" className="text-[11px] text-[#D95B2F] hover:text-[#e76d43] font-semibold mt-1 block">
                 View appointment →
               </Link>
             </div>

@@ -29,10 +29,10 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/50 flex flex-col items-center justify-center p-4">
+    <div className="admin-panel min-h-screen bg-muted/50 flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-border p-8 text-center">
         <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto max-w-[220px] object-contain mx-auto mb-6" />
-        <h1 className="text-2xl font-serif font-bold text-foreground mb-8">Admin Access</h1>
+        <h1 className="text-2xl font-sans font-bold text-foreground mb-8">Admin Access</h1>
         
         <form onSubmit={handleSubmit} className="space-y-6 text-left">
           {error && <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">{error}</div>}
