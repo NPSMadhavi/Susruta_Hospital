@@ -1,23 +1,32 @@
 import { Router } from "express";
-import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable } from "@workspace/db";
-import { eq, desc, asc, and, gte, inArray } from "drizzle-orm";
+import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable, appointmentsTable } from "@workspace/db";
+import { eq, desc, asc, and, gte, inArray, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 import { z } from "zod/v4";
 
 const router = Router();
 
 // ── Helpers ───────────────────────────────────────────────────
-function generateSlots(startTime: string, endTime: string, intervalMinutes: number): Array<{ startTime: string; endTime: string }> {
+function generateSlots(
+  startTime: string,
+  endTime: string,
+  intervalMinutes: number,
+  startSlotIndex: number = 0
+): Array<{ startTime: string; endTime: string }> {
   const slots: Array<{ startTime: string; endTime: string }> = [];
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
-  let current = sh * 60 + sm;
-  const end = eh * 60 + em;
-  while (current + intervalMinutes <= end) {
-    const s = `${String(Math.floor(current / 60)).padStart(2, "0")}:${String(current % 60).padStart(2, "0")}`;
-    current += intervalMinutes;
-    const e = `${String(Math.floor(current / 60)).padStart(2, "0")}:${String(current % 60).padStart(2, "0")}`;
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+  let i = 0;
+  while (startMins + (i + 1) * intervalMinutes <= endMins) {
+    const globalSlotIndex = startSlotIndex + i;
+    const slotStartMins = globalSlotIndex === 0 ? startMins : startMins + i * intervalMinutes + 1;
+    const slotEndMins = startMins + (i + 1) * intervalMinutes;
+    const s = `${String(Math.floor(slotStartMins / 60)).padStart(2, "0")}:${String(slotStartMins % 60).padStart(2, "0")}`;
+    const e = `${String(Math.floor(slotEndMins / 60)).padStart(2, "0")}:${String(slotEndMins % 60).padStart(2, "0")}`;
     slots.push({ startTime: s, endTime: e });
+    i++;
   }
   return slots;
 }
@@ -144,7 +153,12 @@ router.patch("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  const newSlots = generateSlots(session.endTime, endTime, session.intervalMinutes);
+  const existingSlots = await db
+    .select()
+    .from(onlineSlotsTable)
+    .where(eq(onlineSlotsTable.sessionId, session.id));
+
+  const newSlots = generateSlots(session.endTime, endTime, session.intervalMinutes, existingSlots.length);
   if (newSlots.length === 0) {
     res.status(400).json({
       error: "no_slots",
@@ -152,11 +166,6 @@ router.patch("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
     });
     return;
   }
-
-  const existingSlots = await db
-    .select()
-    .from(onlineSlotsTable)
-    .where(eq(onlineSlotsTable.sessionId, session.id));
 
   await db.insert(onlineSlotsTable).values(
     newSlots.map((slot) => ({
@@ -191,7 +200,10 @@ router.get("/sessions", requireAdmin, async (_req, res): Promise<void> => {
     .from(onlineSlotSessionsTable)
     .orderBy(desc(onlineSlotSessionsTable.date), asc(onlineSlotSessionsTable.startTime));
 
-  const allSlots = await db.select().from(onlineSlotsTable);
+  const allSlots = await db
+    .select()
+    .from(onlineSlotsTable)
+    .orderBy(asc(onlineSlotsTable.startTime), asc(onlineSlotsTable.id));
   const allAppts = await db.select().from(onlineAppointmentsTable);
 
   const slotsBySession = allSlots.reduce<Record<number, typeof allSlots>>((acc, s) => {
@@ -247,9 +259,30 @@ router.delete("/sessions/:id", requireAdmin, async (req, res): Promise<void> => 
 });
 
 // ── Public: GET /api/online-slots/available ───────────────────
-// Returns only future slots that are not booked
+// Returns slots for today and future dates (including booked ones so UI can render them disabled)
 router.get("/available", async (_req, res) => {
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0", 10);
+  const currentMinutes = hour * 60 + minute;
+
+  const activeSessions = await db
+    .select()
+    .from(onlineSlotSessionsTable)
+    .where(gte(onlineSlotSessionsTable.date, dateStr))
+    .orderBy(asc(onlineSlotSessionsTable.date), asc(onlineSlotSessionsTable.startTime));
+
+  const byDate: Record<string, any[]> = {};
+  for (const s of activeSessions) {
+    byDate[s.date] ||= [];
+  }
 
   const slots = await db
     .select({
@@ -258,21 +291,49 @@ router.get("/available", async (_req, res) => {
     })
     .from(onlineSlotsTable)
     .innerJoin(onlineSlotSessionsTable, eq(onlineSlotsTable.sessionId, onlineSlotSessionsTable.id))
-    .where(and(
-      eq(onlineSlotsTable.isBooked, false),
-      gte(onlineSlotsTable.date, today)
-    ));
+    .where(gte(onlineSlotsTable.date, dateStr))
+    .orderBy(asc(onlineSlotsTable.startTime), asc(onlineSlotsTable.id));
+
+  const offlineAppts = await db
+    .select()
+    .from(appointmentsTable)
+    .where(and(gte(appointmentsTable.date, dateStr), ne(appointmentsTable.status, "cancelled")));
+
+  function to12Hour(t: string): string {
+    const [h, m] = t.split(":").map(Number);
+    if (isNaN(h) || isNaN(m)) return t;
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+  }
 
   // Group by date
-  const byDate: Record<string, any[]> = {};
   for (const r of slots) {
     const d = r.slot.date as string;
-    (byDate[d] ||= []).push({
+    if (!(d in byDate)) continue;
+
+    const sessionStartMinutes = timeToMinutes(r.session.startTime);
+    const slotStartMinutes = timeToMinutes(r.slot.startTime);
+    const slotNumber = Math.max(1, Math.round((slotStartMinutes - sessionStartMinutes) / r.session.intervalMinutes) + 1);
+
+    const isExceeded = d < dateStr || (d === dateStr && slotStartMinutes <= currentMinutes);
+
+    const time12 = to12Hour(r.slot.startTime);
+    const isOfflineBooked = offlineAppts.some((a) =>
+      a.date === d && (
+        a.timeSlot.includes(r.slot.startTime) ||
+        a.timeSlot.includes(time12)
+      )
+    );
+
+    byDate[d].push({
       id: r.slot.id,
       date: r.slot.date,
       startTime: r.slot.startTime,
       endTime: r.slot.endTime,
       intervalMinutes: r.session.intervalMinutes,
+      slotNumber,
+      isBooked: Boolean(r.slot.isBooked || isOfflineBooked),
+      isExceeded,
     });
   }
 

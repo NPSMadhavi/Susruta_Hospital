@@ -51,7 +51,7 @@ export default function DoctorLogin() {
   const inputCls = "w-full pl-9 pr-10 py-3 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
 
   return (
-    <div className="min-h-screen flex">
+    <div className="doctor-portal min-h-screen flex">
       {/* Left panel — desktop only */}
       <div className="hidden lg:flex lg:w-[45%] bg-[#1a3d2b] relative overflow-hidden flex-col items-center justify-center p-14 text-white">
         <div className="absolute inset-0 opacity-10" style={{

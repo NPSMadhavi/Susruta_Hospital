@@ -13,6 +13,7 @@ import AdminLogin from "./pages/admin/login";
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminAppointments from "./pages/admin/appointments";
 import AdminAvailability from "./pages/admin/availability";
+import AdminOfflineRegister from "./pages/admin/offline-register";
 import AdminTestimonials from "./pages/admin/testimonials";
 import AdminSettings from "./pages/admin/settings";
 import AdminSubscribers from "./pages/admin/subscribers";
@@ -87,6 +88,7 @@ function Router() {
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/appointments" component={AdminAppointments} />
       <Route path="/admin/availability" component={AdminAvailability} />
+      <Route path="/admin/offline-register" component={AdminOfflineRegister} />
       <Route path="/admin/testimonials" component={AdminTestimonials} />
       <Route path="/admin/subscribers" component={AdminSubscribers} />
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />

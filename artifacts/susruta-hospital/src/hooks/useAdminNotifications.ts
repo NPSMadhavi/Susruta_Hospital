@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { playAdminChime } from "@/lib/sound";
 
 export type ToastItem = { id: number; title: string; body: string };
 
@@ -48,45 +49,12 @@ export function useAdminNotifications() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastCounter = useRef(0);
 
-  // Warm up AudioContext on first interaction
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  function getAudioCtx(): AudioContext | null {
-    try {
-      const AC = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AC) return null;
-      if (!audioCtxRef.current) audioCtxRef.current = new AC();
-      return audioCtxRef.current;
-    } catch { return null; }
-  }
-  useEffect(() => {
-    const warmUp = () => { getAudioCtx()?.resume().catch(() => {}); };
-    document.addEventListener("click", warmUp, { once: true });
-    return () => document.removeEventListener("click", warmUp);
-  }, []);
-
   function playSound() {
-    try {
-      const ctx = getAudioCtx();
-      if (!ctx) return;
-      ctx.resume().then(() => {
-        [[660, 0, 0.12], [880, 0.15, 0.12], [1100, 0.30, 0.18]].forEach(([freq, start, dur]) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = "sine"; osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0, ctx.currentTime + start);
-          gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-          osc.start(ctx.currentTime + start);
-          osc.stop(ctx.currentTime + start + dur + 0.05);
-        });
-      });
-    } catch {}
+    playAdminChime();
   }
 
   async function requestPermission() {
     if (typeof Notification === "undefined") return;
-    getAudioCtx()?.resume().catch(() => {});
     // Pre-register SW before the permission dialog
     await getSwReg();
     const perm = await Notification.requestPermission();

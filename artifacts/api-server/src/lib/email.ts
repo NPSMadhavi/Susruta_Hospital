@@ -352,6 +352,180 @@ export async function sendPasswordResetEmail(opts: {
   });
 }
 
+// ── Profile Email Change OTP ──────────────────────────────────
+export async function sendProfileEmailOtp(opts: {
+  to: string;
+  name: string;
+  otp: string;
+  newEmail: string;
+}) {
+  const { to, name, otp, newEmail } = opts;
+  const subject = `${otp} is your Susruta Hospital email verification code`;
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        You recently requested to update your email address on the <strong>Susruta Hospital Patient Portal</strong> to <strong>${newEmail}</strong>. Use the 6-digit verification code below to confirm this change:
+      </p>
+      <div style="text-align:center;margin:0 0 24px;">
+        <div style="display:inline-block;background:#f0fdf4;border:2px dashed #16a34a;color:#15803d;padding:16px 36px;border-radius:12px;font-size:32px;font-weight:900;letter-spacing:8px;font-family:monospace;">
+          ${otp}
+        </div>
+      </div>
+      <p style="color:#666;font-size:13px;line-height:1.6;margin:0 0 16px;font-family:Arial,sans-serif;text-align:center;">
+        This code is valid for <strong>10 minutes</strong>. Do not share this code with anyone.
+      </p>
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:4px;margin-bottom:20px;">
+        <p style="color:#991b1b;font-size:12px;margin:0;font-family:Arial,sans-serif;">
+          <strong>Security Notice:</strong> If you did not initiate this request, someone may be attempting to access your account. Please ignore this email or contact the hospital immediately.
+        </p>
+      </div>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${name}`,
+    "",
+    `Your Susruta Hospital verification code is: ${otp}`,
+    "",
+    `This code was requested to change your email address to: ${newEmail}`,
+    "This code will expire in 10 minutes.",
+    "",
+    "If you did not request this, please ignore this email.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  const cfg = await getSmtpConfig();
+  if (!cfg) {
+    console.warn("[email] Email OTP skipped because SMTP is not configured.");
+    return;
+  }
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+    attachments: logoAttachments(),
+  });
+}
+
+// ── Profile Phone Change OTP ──────────────────────────────────
+export async function sendProfilePhoneOtp(opts: {
+  to: string;
+  name: string;
+  otp: string;
+  newPhone: string;
+}) {
+  const { to, name, otp, newPhone } = opts;
+  const subject = `${otp} is your verification code to update your phone number`;
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        You requested to update your registered contact phone number to <strong>${newPhone}</strong> on your Susruta Hospital profile. Enter the 6-digit code below to complete this update:
+      </p>
+      <div style="text-align:center;margin:0 0 24px;">
+        <div style="display:inline-block;background:#fff7ed;border:2px dashed #ea580c;color:#c2410c;padding:16px 36px;border-radius:12px;font-size:32px;font-weight:900;letter-spacing:8px;font-family:monospace;">
+          ${otp}
+        </div>
+      </div>
+      <p style="color:#666;font-size:13px;line-height:1.6;margin:0 0 16px;font-family:Arial,sans-serif;text-align:center;">
+        This code is valid for <strong>10 minutes</strong>.
+      </p>
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:4px;margin-bottom:20px;">
+        <p style="color:#991b1b;font-size:12px;margin:0;font-family:Arial,sans-serif;">
+          <strong>Security Notice:</strong> If you did not make this request, please contact the hospital immediately.
+        </p>
+      </div>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${name}`,
+    "",
+    `Your Susruta Hospital phone update verification code is: ${otp}`,
+    "",
+    `This code was requested to change your phone number to: ${newPhone}`,
+    "This code will expire in 10 minutes.",
+    "",
+    "If you did not request this, please ignore this email.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  const cfg = await getSmtpConfig();
+  if (!cfg) {
+    console.warn("[email] Phone OTP skipped because SMTP is not configured.");
+    return;
+  }
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+    attachments: logoAttachments(),
+  });
+}
+
+// ── Email Change Security Notification ────────────────────────
+export async function sendEmailChangeNotification(opts: {
+  to: string;
+  name: string;
+  newEmail: string;
+}) {
+  const { to, name, newEmail } = opts;
+  const subject = "Security Alert: Your Susruta Hospital account email was changed";
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 12px;font-family:Arial,sans-serif;">Namaste, <strong>${name}</strong></p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        This is a security alert to confirm that your registered email address for your Susruta Hospital account has been changed to <strong>${newEmail}</strong>.
+      </p>
+      <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 20px;font-family:Arial,sans-serif;">
+        Future notifications, appointments, and medical records will be sent to the new address.
+      </p>
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:4px;margin-bottom:20px;">
+        <p style="color:#991b1b;font-size:12px;margin:0;font-family:Arial,sans-serif;">
+          <strong>Didn't make this change?</strong> Please contact Susruta Hospital support immediately at +91 9492068180 or visit our clinic.
+        </p>
+      </div>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    `Namaste, ${name}`,
+    "",
+    `Security Alert: Your Susruta Hospital account email has been updated to: ${newEmail}`,
+    "",
+    "If you did not authorize this change, please contact Susruta Hospital support immediately at +91 9492068180.",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  const cfg = await getSmtpConfig();
+  if (!cfg) return;
+
+  await buildTransport(cfg).sendMail({
+    from: senderStr(cfg.fromName, cfg.fromEmail),
+    to,
+    subject,
+    html,
+    text,
+    attachments: logoAttachments(),
+  }).catch(err => console.error("[email] Email change notification error:", err));
+}
+
 // ── Subscriber acknowledgement ────────────────────────────────
 export async function sendSubscriptionConfirmation(opts: { to: string; name: string }) {
   const { to, name } = opts;

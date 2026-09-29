@@ -18,3 +18,4 @@ export * from "./pharmacy_sessions";
 export * from "./patient_documents";
 export * from "./donations";
 export * from "./direct_calls";
+export * from "./patient_otps";

@@ -28,8 +28,8 @@ export const siteSettingsTable = pgTable("site_settings", {
   phonepeQrObjectPath: varchar("phonepe_qr_object_path", { length: 500 }),
   // Online consultation meeting link (global, all patients share)
   meetingLink: text("meeting_link"),
-  // Patient ID counter: prefix letter + 3-digit number (e.g. A001)
-  patientIdPrefix: varchar("patient_id_prefix", { length: 1 }).notNull().default("A"),
+  // Patient ID counter: prefix letter(s) + counter number (e.g. A001..A999, AA01..AA99)
+  patientIdPrefix: varchar("patient_id_prefix", { length: 10 }).notNull().default("A"),
   patientIdCurrentNumber: integer("patient_id_current_number").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

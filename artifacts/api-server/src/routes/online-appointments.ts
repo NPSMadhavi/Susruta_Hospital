@@ -15,7 +15,7 @@ import { notifyGuestsJoinEnabled, notifyGuestsSessionEnded } from "../lib/guestS
 import { roomService, makeRoomName, createGuestToken } from "./livekit";
 import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated, broadcastPermissionUpdate, addAppointmentSseClient } from "../lib/appointmentSse";
 import { setPermission, getPermissions } from "../lib/permissionStore";
-import { notifyAdminCallEnded } from "./appointments";
+import { notifyAdminCallEnded, notifyAdminNewOnlineAppointment } from "./appointments";
 
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -41,10 +41,6 @@ const BookBody = z.object({
 router.post("/", requirePatient, async (req: any, res) => {
   const patient = req.patient;
 
-  if (!patient.emailVerified) {
-    res.status(403).json({ error: "email_not_verified", message: "Please verify your email address before booking an appointment." });
-    return;
-  }
 
   const parsed = BookBody.safeParse(req.body);
   if (!parsed.success) {
@@ -58,6 +54,26 @@ router.post("/", requirePatient, async (req: any, res) => {
   if (!slot) { res.status(404).json({ error: "slot_not_found" }); return; }
   if (slot.isBooked) { res.status(409).json({ error: "slot_taken", message: "This slot has already been booked." }); return; }
 
+  const now = new Date();
+  const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0", 10);
+  const currentMinutes = hour * 60 + minute;
+
+  const [slotH, slotM] = slot.startTime.split(":").map(Number);
+  const slotMinutes = (slotH || 0) * 60 + (slotM || 0);
+
+  if (slot.date < todayStr || (slot.date === todayStr && slotMinutes <= currentMinutes)) {
+    res.status(400).json({ error: "slot_expired", message: "This slot has already passed. Please select an upcoming slot." });
+    return;
+  }
+
   const existing = await db.select().from(onlineAppointmentsTable)
     .where(and(eq(onlineAppointmentsTable.slotId, slotId), eq(onlineAppointmentsTable.patientId, patient.id)));
   if (existing.length > 0) { res.status(409).json({ error: "already_booked" }); return; }
@@ -70,15 +86,17 @@ router.post("/", requirePatient, async (req: any, res) => {
     .returning();
 
   // Send acknowledgement email (fire and forget)
-  sendAppointmentAckEmail({
-    to: patient.email,
-    patientName: patient.name,
-    type: "online",
-    date: slot.date,
-    slotStartTime: slot.startTime,
-    slotEndTime: slot.endTime,
-    reason: reason,
-  }).catch((err) => console.error("[email] ack failed:", err));
+  if (patient.email) {
+    sendAppointmentAckEmail({
+      to: patient.email,
+      patientName: patient.name,
+      type: "online",
+      date: slot.date,
+      slotStartTime: slot.startTime,
+      slotEndTime: slot.endTime,
+      reason: reason,
+    }).catch((err) => console.error("[email] ack failed:", err));
+  }
 
   // Notify doctor portal in real-time
   broadcastNewOnlineAppointment({
@@ -100,6 +118,13 @@ router.post("/", requirePatient, async (req: any, res) => {
       phone: patient.phone ?? null,
     },
     prescription: null,
+  });
+
+  notifyAdminNewOnlineAppointment({
+    patient: {
+      name: patient.name,
+      patientCode: patient.patientCode ?? null,
+    },
   });
 
   res.status(201).json(appt);
@@ -157,11 +182,68 @@ router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
     .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
   if (!appt) return res.status(404).json({ error: "Not found" });
 
+  const now = new Date();
   await db.update(onlineAppointmentsTable)
-    .set({ patientJoinedAt: new Date() })
+    .set({ patientJoinedAt: now })
     .where(eq(onlineAppointmentsTable.id, id));
 
+  broadcastAppointmentUpdated({
+    id,
+    joinEnabled: appt.joinEnabled,
+    status: appt.status,
+    patientJoinedAt: now.toISOString(),
+  });
+
   return res.json({ ok: true });
+});
+
+// ── POST /api/online-appointments/:id/patient-joined ───────────
+router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.patientId, patient.id)));
+  if (!appt) return res.status(404).json({ error: "Not found" });
+
+  const now = new Date();
+  await db.update(onlineAppointmentsTable)
+    .set({ patientJoinedAt: now })
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  broadcastAppointmentUpdated({
+    id,
+    joinEnabled: appt.joinEnabled,
+    status: appt.status,
+    patientJoinedAt: now.toISOString(),
+  });
+
+  return res.json({ ok: true, patientJoinedAt: now.toISOString() });
+});
+
+// ── POST /api/online-appointments/doctor/:id/joined ───────────
+router.post("/doctor/:id/joined", requireDoctor, async (req: any, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+
+  const [appt] = await db.select().from(onlineAppointmentsTable)
+    .where(eq(onlineAppointmentsTable.id, id));
+  if (!appt) return res.status(404).json({ error: "Not found" });
+
+  const now = new Date();
+  await db.update(onlineAppointmentsTable)
+    .set({ patientJoinedAt: now })
+    .where(eq(onlineAppointmentsTable.id, id));
+
+  broadcastAppointmentUpdated({
+    id,
+    joinEnabled: appt.joinEnabled,
+    status: appt.status,
+    patientJoinedAt: now.toISOString(),
+  });
+
+  return res.json({ ok: true, patientJoinedAt: now.toISOString() });
 });
 
 // ── GET /api/online-appointments/admin/stream — Admin SSE stream ─
@@ -246,6 +328,7 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
       .where(eq(onlineAppointmentsTable.id, prev.appt.id));
     // Notify that patient their session has ended
     notifyPatientSessionEnded(prev.appt.patientId, prev.appt.id, settings?.phonepeQrObjectPath ?? null);
+    broadcastAppointmentUpdated({ id: prev.appt.id, joinEnabled: false, status: "completed" });
   }
 
   // Create LiveKit room for this appointment
@@ -287,7 +370,14 @@ router.post("/admin/:id/enable-join", requireAdmin, async (req, res) => {
   notifyGuestsJoinEnabled(id);
 
   // Notify doctor portal in real-time
-  broadcastAppointmentUpdated({ id, joinEnabled: true, status: "confirmed" });
+  broadcastAppointmentUpdated({
+    id,
+    joinEnabled: true,
+    status: "confirmed",
+    patientName: patient.name,
+    patientCode: patient.patientCode,
+    roomName,
+  });
 
   res.json({ ok: true, joinEnabled: true, roomName, apptId: id });
 });
@@ -320,7 +410,7 @@ router.post("/admin/:id/disable-join", requireAdmin, async (req, res) => {
 
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
   notifyGuestsSessionEnded(id);
-  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed", patientName: patient.name });
   notifyAdminCallEnded(id, patient.name);
 
   res.json({ ok: true, joinEnabled: false });
@@ -550,8 +640,8 @@ router.post("/:id/add-document", async (req: any, res) => {
   res.json({ ok: true, documents: updated });
 });
 
-// ── PATCH /api/online-appointments/admin/:id/complete — Mark as Done ────
-router.patch("/admin/:id/complete", requireAdmin, async (req, res) => {
+// ── POST & PATCH /api/online-appointments/admin/:id/complete — Mark as Done ────
+async function handleCompleteAppointment(req: any, res: any) {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
   await db
@@ -560,7 +650,9 @@ router.patch("/admin/:id/complete", requireAdmin, async (req, res) => {
     .where(eq(onlineAppointmentsTable.id, id));
   broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
   res.json({ ok: true });
-});
+}
+router.patch("/admin/:id/complete", requireAdmin, handleCompleteAppointment);
+router.post("/admin/:id/complete", requireAdmin, handleCompleteAppointment);
 
 // ── DELETE /api/online-appointments/admin/:id — Admin hard-deletes ──────
 router.delete("/admin/:id", requireAdmin, async (req, res) => {

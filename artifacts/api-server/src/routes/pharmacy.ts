@@ -146,7 +146,7 @@ router.patch("/orders/:id/availability", requirePharmacy, async (req, res) => {
   // If partial, email patient
   if (hasUnavailable) {
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, order.patientId));
-    if (patient) {
+    if (patient && patient.email) {
       sendPartialEmail(patient.email, patient.name, id).catch(() => {});
     }
   }

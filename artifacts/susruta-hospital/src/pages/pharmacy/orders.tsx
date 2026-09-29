@@ -7,6 +7,7 @@ import {
   AlertTriangle, CreditCard, XCircle, Hash
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
+import { playPharmacyChime } from "@/lib/sound";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -41,20 +42,7 @@ const STATUS_META: Record<string, { label: string; color: string; icon: React.Re
 };
 
 function playNotificationSound() {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
-  } catch { /* ignore */ }
+  playPharmacyChime();
 }
 
 export default function PharmacyOrders() {

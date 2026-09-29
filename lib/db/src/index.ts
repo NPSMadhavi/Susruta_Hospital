@@ -15,11 +15,19 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const connectionString =
+const rawConnectionString =
   process.env.DATABASE_URL ||
-  "postgres://postgres:postgres@localhost:5432/susruta_hospital";
+  "postgres://postgres:postgres@127.0.0.1:5432/susruta_hospital";
 
-export const pool = new Pool({ connectionString });
+// Replace @localhost: with @127.0.0.1: to prevent Node.js dual-stack IPv6 lookup delays
+const connectionString = rawConnectionString.replace("@localhost:", "@127.0.0.1:");
+
+export const pool = new Pool({
+  connectionString,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 20,
+});
 pool.on("error", (err) => {
   console.error("⚠️ Database connection error:", err.message);
 });

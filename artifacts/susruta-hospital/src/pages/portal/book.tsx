@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
+import { isOfflineSessionExceeded, isSlotExceeded } from "@/lib/ist";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
 import { MathCaptcha } from "@/components/MathCaptcha";
 
@@ -52,8 +53,10 @@ function CalendarGrid({
         if (!day) return <div key={`e${i}`} />;
         const dateStr = `${month}-${String(day).padStart(2, "0")}`;
         const isPast = dateStr < today;
+        const isSunday = getDay(new Date(dateStr + "T12:00:00")) === 0;
         const isBlocked =
           !isMonthOpen ||
+          isSunday ||
           blockedDates.includes(dateStr) ||
           blockedDays.includes(getDay(new Date(dateStr + "T12:00:00")));
         const isDisabled = isPast || isBlocked;
@@ -101,29 +104,95 @@ export default function PortalBook() {
   const [phone, setPhone] = useState("");
 
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [bypassGate, setBypassGate] = useState(false);
   const [captchaOk, setCaptchaOk] = useState(false);
 
+  const currentMonthStr = React.useMemo(() => format(new Date(), "yyyy-MM"), []);
+
   const { data: openMonthsRaw = [] } = useListOpenMonths();
-  const openMonths = openMonthsRaw.filter((m: any) => m.isOpen).map((m: any) => m.month as string);
-  const currentMonth: string = openMonths[monthIdx] ?? "";
+  // Available months: strictly starting from current month onwards, excluding any closed by admin
+  const openMonths = React.useMemo(() => {
+    const rawMap = new Map<string, boolean>();
+    for (const m of (openMonthsRaw as any[])) {
+      rawMap.set(m.month, m.isOpen);
+    }
+    const months: string[] = [];
+    const [currYear, currMon] = currentMonthStr.split("-").map(Number);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(currYear, currMon - 1 + i, 1);
+      const mStr = format(d, "yyyy-MM");
+      const isOpen = rawMap.has(mStr) ? rawMap.get(mStr)! : true;
+      if (isOpen) {
+        months.push(mStr);
+      }
+    }
+    return months;
+  }, [openMonthsRaw, currentMonthStr]);
+
+  const currentMonth: string = openMonths[monthIdx] ?? currentMonthStr;
   const { data: availability } = useGetAvailability({ month: currentMonth }, { query: { enabled: !!currentMonth } });
-  const { data: slotsData } = useGetSlots({ date: selectedDate ?? "" }, { query: { enabled: !!selectedDate } });
-  const slots: string[] = (slotsData as any[] ?? []).filter((s: any) => s.available).map((s: any) => s.time as string);
+
+  const [offlineSlotStatus, setOfflineSlotStatus] = useState<{
+    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+  } | null>(null);
+  const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setOfflineSlotStatus(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingOfflineSlots(true);
+    fetch(`${BASE_URL}/api/appointments/offline/slots-status?date=${selectedDate}`, {
+      credentials: "include",
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) {
+          setOfflineSlotStatus({
+            morning: data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
+            evening: data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOfflineSlotStatus({
+            morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
+            evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingOfflineSlots(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedDate]);
 
   useEffect(() => {
     patientApi.me()
       .then(async (p) => {
+        if (!p || !p.id) {
+          navigate("/portal?next=/portal/book", { replace: true });
+          return;
+        }
         setPatient(p);
         setEmailVerified(p.emailVerified);
         // Check if there are available online slots
         try {
           const r = await fetch(`${BASE_URL}/api/online-slots/available`, { credentials: "include" });
-          const slots = await r.json();
-          setHasOnlineSlots(Array.isArray(slots) && slots.length > 0);
+          const dateGroups = await r.json();
+          const hasAny = Array.isArray(dateGroups) && dateGroups.some((g: any) =>
+            Array.isArray(g.slots) && g.slots.some((s: any) => !s.isBooked && !s.isExceeded && !isSlotExceeded(g.date, s.startTime))
+          );
+          setHasOnlineSlots(hasAny);
         } catch { setHasOnlineSlots(false); }
         setLoading(false);
       })
-      .catch(() => navigate("/portal?next=/portal/book"));
+      .catch(() => navigate("/portal?next=/portal/book", { replace: true }));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -161,8 +230,8 @@ export default function PortalBook() {
     );
   }
 
-  if (emailVerified === false) {
-    return <EmailVerificationGate email={patient?.email ?? ""} onBack={() => navigate("/portal/dashboard")} />;
+  if (emailVerified === false && !bypassGate) {
+    return <EmailVerificationGate email={patient?.email ?? ""} onBack={() => navigate("/portal/dashboard")} onProceed={() => setBypassGate(true)} />;
   }
 
   if (success) {
@@ -299,9 +368,10 @@ export default function PortalBook() {
             <div className="bg-white rounded-2xl border border-border p-4 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <button
-                  disabled={monthIdx === 0}
+                  disabled={monthIdx <= 0}
                   onClick={() => { setMonthIdx(m => m - 1); setSelectedDate(null); setSelectedSlot(null); }}
-                  className="p-2 rounded-xl hover:bg-muted disabled:opacity-30 transition-colors"
+                  className="p-2 rounded-xl hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Previous month"
                 >
                   ‹
                 </button>
@@ -311,7 +381,8 @@ export default function PortalBook() {
                 <button
                   disabled={monthIdx >= openMonths.length - 1}
                   onClick={() => { setMonthIdx(m => m + 1); setSelectedDate(null); setSelectedSlot(null); }}
-                  className="p-2 rounded-xl hover:bg-muted disabled:opacity-30 transition-colors"
+                  className="p-2 rounded-xl hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Next month"
                 >
                   ›
                 </button>
@@ -339,26 +410,105 @@ export default function PortalBook() {
                 >
                   <p className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                     <Clock size={14} className="text-primary" />
-                    Available slots — {format(parseISO(selectedDate), "EEE, d MMM")}
+                    Available Consultation Timings — {format(parseISO(selectedDate), "EEE, d MMM")}
                   </p>
-                  {slots.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No slots available for this date.</p>
+                  {loadingOfflineSlots ? (
+                    <div className="flex items-center justify-center py-6 text-muted-foreground text-sm gap-2">
+                      <Clock size={15} className="animate-spin text-primary" /> Loading slots…
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2">
-                      {slots.map((slot) => (
-                        <button
-                          key={slot}
-                          onClick={() => setSelectedSlot(slot)}
-                          className={[
-                            "py-2.5 rounded-xl text-xs font-semibold border transition-all",
-                            selectedSlot === slot
-                              ? "bg-[#1a3d2b] text-white border-[#1a3d2b] shadow-md"
-                              : "border-border text-foreground hover:border-primary/50 hover:bg-primary/5",
-                          ].join(" ")}
-                        >
-                          {slot}
-                        </button>
-                      ))}
+                    <div className="space-y-3">
+                      {selectedDate && (
+                        isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0 || offlineSlotStatus?.morning?.isAvailable === false
+                      ) && (
+                        isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0 || offlineSlotStatus?.evening?.isAvailable === false
+                      ) && (
+                        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                          <AlertCircle size={15} className="shrink-0 text-red-500" />
+                          <span>No consultation slots are available for this date. All sessions have either been booked or session timings have passed. Please select another date.</span>
+                        </div>
+                      )}
+                      {[
+                        {
+                          id: "morning",
+                          label: "10 AM - 1 PM",
+                          title: "Morning Consultation",
+                          status: offlineSlotStatus?.morning,
+                        },
+                        {
+                          id: "evening",
+                          label: "6 PM - 10 PM",
+                          title: "Evening Consultation",
+                          status: offlineSlotStatus?.evening,
+                        },
+                      ].map((session) => {
+                        const isSelected = selectedSlot === session.label;
+                        const isExceeded = isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening");
+                        const remaining = isExceeded ? 0 : (session.status?.remaining ?? 0);
+                        const isAvailable = !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
+
+                        return (
+                          <button
+                            key={session.id}
+                            type="button"
+                            disabled={!isAvailable}
+                            onClick={() => {
+                              if (isAvailable) setSelectedSlot(session.label);
+                            }}
+                            className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
+                              !isAvailable
+                                ? "bg-muted/40 border-border text-muted-foreground/50 cursor-not-allowed opacity-60"
+                                : isSelected
+                                ? "bg-[#1a3d2b] border-[#1a3d2b] text-white shadow-md ring-2 ring-[#1a3d2b]/20 cursor-pointer"
+                                : "bg-card border-border hover:border-primary/50 hover:bg-primary/5 text-foreground cursor-pointer"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : !isAvailable
+                                    ? "bg-muted text-muted-foreground"
+                                    : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                                }`}
+                              >
+                                <Clock size={18} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-sm">{session.label}</span>
+                                  <span className={`text-xs ${isSelected ? "text-white/80" : "text-muted-foreground"}`}>
+                                    ({session.title})
+                                  </span>
+                                </div>
+                                <span className={`text-[11px] ${isSelected ? "text-white/70" : "text-muted-foreground"}`}>
+                                  15 mins duration per consultation
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                                  !isAvailable
+                                    ? "bg-red-100 text-red-600 border border-red-200"
+                                    : isSelected
+                                    ? "bg-white text-[#1a3d2b]"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {isAvailable
+                                  ? `${remaining} Slots Available`
+                                  : selectedDate && new Date(selectedDate + "T12:00:00+05:30").getDay() === 0 && session.id === "evening"
+                                  ? "Closed on Sunday"
+                                  : "No slots available"}
+                              </span>
+                              {isSelected && <CheckCircle2 size={16} className="text-white shrink-0" />}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </motion.div>

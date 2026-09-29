@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Globe, KeyRound, CheckCircle2 } from "lucide-react";
+import { X, Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Globe, KeyRound, CheckCircle2, ChevronDown, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
 import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 
@@ -25,7 +25,7 @@ interface Props {
 
 type Mode = "login" | "register" | "forgot";
 
-const defaultForm = { name: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
+const defaultForm = { name: "", age: "", gender: "", address: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
 
 async function detectCountryCode(): Promise<string> {
   try {
@@ -86,6 +86,17 @@ export function BookingLoginModal({ open, onClose }: Props) {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCode = e.target.value;
+    const country = COUNTRIES.find(c => c.code === nextCode);
+    const maxLen = country?.maxLength ?? 15;
+    setForm(f => ({
+      ...f,
+      countryCode: nextCode,
+      phone: f.phone.slice(0, maxLen),
+    }));
+  };
+
   async function submitForgot(e: React.FormEvent) {
     e.preventDefault();
     if (!forgotEmail.trim()) { setError("Please enter your email address."); return; }
@@ -104,6 +115,18 @@ export function BookingLoginModal({ open, onClose }: Props) {
     e.preventDefault();
     setError("");
     if (mode === "register") {
+      if (!form.age || isNaN(Number(form.age)) || Number(form.age) < 1 || Number(form.age) > 120) {
+        setError("Please enter a valid age between 1 and 120.");
+        return;
+      }
+      if (!form.gender) {
+        setError("Please select your gender.");
+        return;
+      }
+      if (!form.address || !form.address.trim()) {
+        setError("Please enter your address.");
+        return;
+      }
       if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
       if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer."); return; }
@@ -118,6 +141,9 @@ export function BookingLoginModal({ open, onClose }: Props) {
       try {
         await apiPost("/auth/register", {
           name: form.name.trim(),
+          age: Number(form.age),
+          gender: form.gender,
+          address: form.address.trim(),
           email: normalizedEmail,
           phone: phoneValidation.e164,
           countryCode: selectedCountry.code,
@@ -281,20 +307,68 @@ export function BookingLoginModal({ open, onClose }: Props) {
                             {/* Full Name */}
                             <div className="relative">
                               <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                              <input type="text" required value={form.name} onChange={set("name")}
+                              <input type="text" required value={form.name ?? ""} onChange={set("name")}
                                 placeholder="Full Name *" autoComplete="name" className={inputCls} />
+                            </div>
+
+                            {/* Age & Gender */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  required
+                                  maxLength={3}
+                                  value={form.age ?? ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, "").slice(0, 3);
+                                    setForm(f => ({ ...f, age: val }));
+                                  }}
+                                  placeholder="Age *"
+                                  className={inputCls}
+                                />
+                              </div>
+                              <div className="relative">
+                                <select
+                                  value={form.gender ?? ""}
+                                  onChange={set("gender")}
+                                  required
+                                  className="w-full pl-3.5 pr-9 py-3 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none cursor-pointer"
+                                >
+                                  <option value="" disabled>Select the Gender</option>
+                                  <option value="Male">Male</option>
+                                  <option value="Female">Female</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+                              </div>
+                            </div>
+
+                            {/* Address */}
+                            <div className="relative">
+                              <MapPin size={14} className="absolute left-3.5 top-3 text-muted-foreground pointer-events-none z-10" />
+                              <textarea
+                                rows={2}
+                                required
+                                value={form.address ?? ""}
+                                onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
+                                placeholder="Address *"
+                                className="w-full pl-9 pr-4 py-2.5 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
+                              />
                             </div>
 
                             {/* Country */}
                             <div className="relative">
                               <Globe size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
-                              <select value={form.countryCode} onChange={set("countryCode")} className={selectCls} required>
+                              <select value={form.countryCode ?? "IN"} onChange={handleCountryChange} className={selectCls} required>
                                 {COUNTRIES.map(c => (
                                   <option key={c.code} value={c.code}>
                                     {c.flag} {c.name} ({c.dial})
                                   </option>
                                 ))}
                               </select>
+                              <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
                             </div>
 
                             {/* Phone with dial code */}
@@ -304,14 +378,22 @@ export function BookingLoginModal({ open, onClose }: Props) {
                                 <span>{selectedCountry.dial}</span>
                               </div>
                               <input
-                                type="tel" required value={form.phone} onChange={set("phone")}
-                                placeholder={`${selectedCountry.localFormat} *`}
-                                autoComplete="tel" inputMode="tel"
-                                className="flex-1 px-3 py-3 bg-white text-sm focus:outline-none"
+                                type="tel"
+                                required
+                                value={form.phone}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, "").slice(0, selectedCountry.maxLength);
+                                  setForm(f => ({ ...f, phone: val }));
+                                }}
+                                maxLength={selectedCountry.maxLength}
+                                placeholder={selectedCountry.placeholder}
+                                autoComplete="tel"
+                                inputMode="numeric"
+                                className="flex-1 px-3 py-3 bg-white text-sm focus:outline-none tracking-wider"
                               />
                             </div>
                             <p className="mt-1.5 text-xs text-muted-foreground">
-                              Enter {selectedCountry.localFormat} after {selectedCountry.dial}.
+                              Enter {selectedCountry.localFormat} after {selectedCountry.dial} ({form.phone.length}/{selectedCountry.maxLength} numbers).
                             </p>
                           </motion.div>
                         )}

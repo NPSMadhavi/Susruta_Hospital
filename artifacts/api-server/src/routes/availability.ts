@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
     .from(openMonthsTable)
     .where(eq(openMonthsTable.month, month));
 
-  const isOpen = openMonthRecord.length > 0 && openMonthRecord[0].isOpen;
+  const isOpen = openMonthRecord.length > 0 ? openMonthRecord[0].isOpen : true;
 
   const blocked = await db.select().from(blockedDatesTable);
   const blockedSet = new Set(blocked.map((b) => b.date));
@@ -127,11 +127,12 @@ router.post("/months", requireAdmin, async (req, res) => {
     return;
   }
 
+  const targetIsOpen = typeof isOpen === "boolean" ? isOpen : true;
   const [existing] = await db.select().from(openMonthsTable).where(eq(openMonthsTable.month, month));
   if (existing) {
     const [updated] = await db
       .update(openMonthsTable)
-      .set({ isOpen: isOpen ?? true })
+      .set({ isOpen: targetIsOpen })
       .where(eq(openMonthsTable.month, month))
       .returning();
     res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
@@ -140,7 +141,7 @@ router.post("/months", requireAdmin, async (req, res) => {
 
   const [record] = await db
     .insert(openMonthsTable)
-    .values({ month, isOpen: isOpen ?? true })
+    .values({ month, isOpen: targetIsOpen })
     .returning();
   res.status(201).json({ ...record, createdAt: record.createdAt.toISOString() });
 });

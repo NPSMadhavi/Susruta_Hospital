@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound } from "lucide-react";
+import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound, ChevronDown, MapPin } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { patientApi } from "@/lib/patient-api";
 import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 
-const defaultForm = { name: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
+const defaultForm = { name: "", age: "", gender: "", address: "", email: "", phone: "", countryCode: "IN", confirmPassword: "", password: "" };
 
 async function detectCountryCode(): Promise<string> {
   try {
@@ -46,12 +46,22 @@ export default function PortalLogin() {
 
   useEffect(() => {
     if (!resetToken) {
-      patientApi.me().then(() => navigate(nextUrl)).catch(() => {});
+      patientApi.me().then(p => {
+        if (p && p.id) navigate(nextUrl, { replace: true });
+      }).catch(() => {});
     }
     detectCountryCode().then(code => {
       const match = COUNTRIES.find(c => c.code === code);
       if (match) setForm(f => ({ ...f, countryCode: match.code }));
     });
+
+    const handlePopState = () => {
+      if (window.location.pathname.startsWith("/portal/dashboard")) {
+        window.location.replace("/");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
@@ -79,7 +89,7 @@ export default function PortalLogin() {
     setLoading(true); setError("");
     try {
       await patientApi.resetPassword(resetToken!, newPassword);
-      navigate(nextUrl);
+      navigate(nextUrl, { replace: true });
     } catch (err: any) {
       setError(err?.message || "This reset link is invalid or has expired. Please request a new one.");
     } finally { setLoading(false); }
@@ -88,10 +98,33 @@ export default function PortalLogin() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCode = e.target.value;
+    const country = COUNTRIES.find(c => c.code === nextCode);
+    const maxLen = country?.maxLength ?? 15;
+    setForm(f => ({
+      ...f,
+      countryCode: nextCode,
+      phone: f.phone.slice(0, maxLen),
+    }));
+  };
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (mode === "register") {
+      if (!form.age || isNaN(Number(form.age)) || Number(form.age) < 1 || Number(form.age) > 120) {
+        setError("Please enter a valid age between 1 and 120.");
+        return;
+      }
+      if (!form.gender) {
+        setError("Please select your gender.");
+        return;
+      }
+      if (!form.address || !form.address.trim()) {
+        setError("Please enter your address.");
+        return;
+      }
       if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
       if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer to continue."); return; }
@@ -106,12 +139,15 @@ export default function PortalLogin() {
       try {
         await patientApi.register({
           name: form.name.trim(),
+          age: Number(form.age),
+          gender: form.gender,
+          address: form.address.trim(),
           email: normalizedEmail,
           phone: phoneValidation.e164,
           countryCode: selectedCountry.code,
           password: form.password,
         });
-        navigate(nextUrl);
+        navigate(nextUrl, { replace: true });
       } catch (err: any) {
         setError(err?.message || "Something went wrong. Please try again.");
       } finally {
@@ -124,7 +160,7 @@ export default function PortalLogin() {
       if (mode === "login") {
         await patientApi.login({ email: form.email, password: form.password });
       }
-      navigate(nextUrl);
+      navigate(nextUrl, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Something went wrong. Please try again.");
     } finally {
@@ -132,55 +168,96 @@ export default function PortalLogin() {
     }
   }
 
-  const inputCls = "w-full pl-9 pr-4 py-3 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
-  const selectCls = "w-full pl-9 pr-4 py-3 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none";
+  const inputCls = "w-full pl-9 pr-4 py-3 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" ;
+  const inputStyle = { background: "#F0F4F299" } as React.CSSProperties;
+  const selectCls = "w-full pl-9 pr-4 py-3 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none";
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex font-sans font-['DM_Sans',sans-serif]">
       {/* Left panel — desktop only */}
-      <div className="hidden lg:flex lg:w-[45%] bg-[#1a3d2b] relative overflow-hidden flex-col items-center justify-center p-14 text-white">
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")"
-        }} />
-        <div className="relative z-10 max-w-md text-center">
+      <div className="hidden lg:flex lg:w-[48%] relative overflow-hidden flex-col items-center justify-center p-14 text-white"
+        style={{
+          backgroundImage: "url('/portal_login.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        {/* Dark overlay */}
+        <div className="absolute inset-0" style={{ background: "#0A2B21CC" }} />
+        <div className="relative z-10 max-w-lg text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-8 border border-white/20">
               <Leaf size={36} className="text-green-300" />
             </div>
-            <h2 className="text-3xl font-serif font-bold mb-4">Your Health, Your Journey</h2>
-            <p className="text-white/65 text-base leading-relaxed mb-10">
+            <h2 className="text-[20px] md:text-[32px] font-serif font-bold mb-4">Your Health, Your Journey</h2>
+            <p className="text-white/75 text-base leading-6 mb-10">
               Access your Ayurvedic care records, track appointments, and stay connected with Dr. P. Murali Krishna's expert guidance.
             </p>
-            <div className="grid grid-cols-2 gap-4 text-left">
-              {[
-                { icon: "📅", title: "Book Appointments", desc: "Choose your preferred date & time" },
-                { icon: "📋", title: "Track Visits", desc: "View upcoming & past appointments" },
-                { icon: "🔔", title: "Follow-up Alerts", desc: "Never miss a follow-up visit" },
-                { icon: "🌿", title: "Holistic Care", desc: "30+ years of Ayurvedic expertise" },
-              ].map((f) => (
-                <div key={f.title} className="bg-white/10 rounded-2xl p-4 border border-white/10">
-                  <div className="text-2xl mb-2">{f.icon}</div>
-                  <div className="font-semibold text-sm">{f.title}</div>
-                  <div className="text-white/55 text-xs mt-0.5">{f.desc}</div>
-                </div>
-              ))}
-            </div>
+           <div className="grid grid-cols-2 gap-4 text-left">
+  {[
+    {
+      icon: "/calender.png",
+      title: "Book Appointments",
+      desc: "Choose your preferred date & time",
+    },
+    {
+      icon: "/clipboard.png",
+      title: "Track Visits",
+      desc: "View upcoming & past appointments",
+    },
+    {
+      icon: "/bell.png",
+      title: "Follow-up Alerts",
+      desc: "Never miss a follow-up visit",
+    },
+    {
+      icon: "/sprout.png",
+      title: "Holistic Care",
+      desc: "30+ years of Ayurvedic expertise",
+    },
+  ].map((f) => (
+    <div
+      key={f.title}
+      className="rounded-2xl p-4"
+      style={{
+        background: "#FFFFFF33",
+        border: "0.83px solid #FFFFFF33",
+      }}
+    >
+      <div className="mb-3">
+        <img
+          src={f.icon}
+          alt=""
+          className="w-6 h-6 object-contain"
+        />
+      </div>
+
+      <div className="font-semibold text-sm text-white">
+        {f.title}
+      </div>
+
+      <div className="text-white/60 text-xs mt-0.5">
+        {f.desc}
+      </div>
+    </div>
+  ))}
+</div>
           </motion.div>
         </div>
       </div>
 
       {/* Right panel */}
       <div className="flex-1 flex flex-col min-h-screen bg-gradient-to-br from-white via-green-50/20 to-white">
-        <div className="lg:hidden bg-[#1a3d2b] py-4 px-5 flex items-center gap-2.5">
-          <Leaf size={18} className="text-green-300" />
+        <div className="lg:hidden bg-[#D95B2F] py-4 px-5 flex items-center gap-2.5">
+          <Leaf size={18} className="text-white" />
           <span className="text-white font-semibold text-sm">Patient Portal</span>
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-[420px]">
+          <div className="w-full max-w-[440px]">
             <div className="text-center mb-7">
-              <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto object-contain mx-auto mb-2" />
-              <p className="text-muted-foreground text-sm">Patient Portal</p>
+              <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto object-contain mx-auto mb-4" />
+              <p className="text-muted-foreground text-sm mb-10">Patient Portal</p>
             </div>
 
             <AnimatePresence mode="wait">
@@ -190,7 +267,8 @@ export default function PortalLogin() {
                   <div className="bg-muted/60 rounded-2xl p-1 flex mb-6">
                     {(["login", "register"] as Mode[]).map((m) => (
                       <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); setShowPw(false); setShowConfirmPw(false); }}
-                        className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${mode === m ? "bg-white text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                        className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${mode === m ? "bg-white shadow-sm" : "hover:opacity-80"}`}
+                        style={{ color: "#628474" }}
                       >
                         {m === "login" ? "Sign In" : "Create Account"}
                       </button>
@@ -238,11 +316,11 @@ export default function PortalLogin() {
                       <div className="relative">
                         <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                         <input type="email" required value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
-                          placeholder="you@example.com" autoComplete="email" className={inputCls} />
+                          placeholder="you@example.com" autoComplete="email" className={inputCls} style={inputStyle} />
                       </div>
                     </div>
                     <button type="submit" disabled={loading}
-                      className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-60 transition-all shadow-sm shadow-primary/20">
+                      className="w-full py-3 rounded-xl bg-[#D95B2F] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-[#D95B2F]/90 disabled:opacity-60 transition-all shadow-sm shadow-[#D95B2F]/20">
                       {loading ? "Sending..." : "Send Reset Link"}
                       {!loading && <ArrowRight size={15} />}
                     </button>
@@ -270,7 +348,7 @@ export default function PortalLogin() {
                         <input type={showPw ? "text" : "password"} required value={newPassword}
                           onChange={e => setNewPassword(e.target.value)}
                           placeholder="At least 6 characters" autoComplete="new-password"
-                          className={`${inputCls} pr-10`} />
+                          className={`${inputCls} pr-10`} style={inputStyle} />
                         <button type="button" onClick={() => setShowPw(v => !v)}
                           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                           {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -284,7 +362,7 @@ export default function PortalLogin() {
                         <input type={showConfirmPw ? "text" : "password"} required value={confirmNewPassword}
                           onChange={e => setConfirmNewPassword(e.target.value)}
                           placeholder="Re-enter your new password" autoComplete="new-password"
-                          className={`${inputCls} pr-10`} />
+                          className={`${inputCls} pr-10`} style={inputStyle} />
                         <button type="button" onClick={() => setShowConfirmPw(v => !v)}
                           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                           {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -305,16 +383,75 @@ export default function PortalLogin() {
                   <AnimatePresence initial={false}>
                     {mode === "register" && (
                       <motion.div key="reg"
-                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                        className="space-y-4 overflow-hidden"
+                        initial={{ opacity: 0, height: 0, overflow: "hidden" }}
+                        animate={{ opacity: 1, height: "auto", transitionEnd: { overflow: "visible" } }}
+                        exit={{ opacity: 0, height: 0, overflow: "hidden" }}
+                        className="space-y-4"
                       >
                         {/* Full Name */}
                         <div>
                           <label className="block text-sm font-medium text-foreground/80 mb-1.5">Full Name *</label>
                           <div className="relative">
                             <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                            <input type="text" required value={form.name} onChange={set("name")}
-                              placeholder="Your full name" autoComplete="name" className={inputCls} />
+                            <input type="text" required value={form.name ?? ""} onChange={set("name")}
+                              placeholder="Your full name" autoComplete="name" className={inputCls} style={inputStyle} />
+                          </div>
+                        </div>
+
+                        {/* Age & Gender */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-foreground/80 mb-1.5">Age *</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              required
+                              maxLength={3}
+                              value={form.age ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, "").slice(0, 3);
+                                setForm(f => ({ ...f, age: val }));
+                              }}
+                              placeholder="Age (e.g. 35)"
+                              className="w-full px-3.5 py-3 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-foreground/80 mb-1.5">Gender *</label>
+                            <div className="relative">
+                              <select
+                                value={form.gender ?? ""}
+                                onChange={set("gender")}
+                                required
+                                className="w-full pl-3.5 pr-10 py-3 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none cursor-pointer"
+                                style={inputStyle}
+                              >
+                                <option value="" disabled>Select the Gender</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                              </select>
+                              <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Address */}
+                        <div>
+                          <label className="block text-sm font-medium text-foreground/80 mb-1.5">Address *</label>
+                          <div className="relative">
+                            <MapPin size={15} className="absolute left-3.5 top-3.5 text-muted-foreground pointer-events-none z-10" />
+                            <textarea
+                              rows={2}
+                              required
+                              value={form.address ?? ""}
+                              onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
+                              placeholder="Enter your full address"
+                              className="w-full pl-9 pr-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
+                              style={inputStyle}
+                            />
                           </div>
                         </div>
 
@@ -323,34 +460,43 @@ export default function PortalLogin() {
                           <label className="block text-sm font-medium text-foreground/80 mb-1.5">Country *</label>
                           <div className="relative">
                             <Globe size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
-                            <select value={form.countryCode} onChange={set("countryCode")} className={selectCls} required>
+                            <select value={form.countryCode ?? "IN"} onChange={handleCountryChange} className={selectCls} required style={inputStyle}>
                               {COUNTRIES.map(c => (
                                 <option key={c.code} value={c.code}>
                                   {c.flag} {c.name} ({c.dial})
                                 </option>
                               ))}
                             </select>
+                            <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
                           </div>
                         </div>
 
                         {/* Phone with dial code */}
                         <div>
                           <label className="block text-sm font-medium text-foreground/80 mb-1.5">Phone Number *</label>
-                          <div className="flex border border-border rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary transition-all bg-white">
+                          <div className="flex border border-border rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary transition-all" style={inputStyle}>
                             <div className="flex items-center gap-1.5 px-3 bg-muted/40 border-r border-border shrink-0 text-sm font-medium text-foreground/70 select-none">
                               <span>{selectedCountry.flag}</span>
                               <span>{selectedCountry.dial}</span>
                             </div>
                             <input
-                              type="tel" required value={form.phone} onChange={set("phone")}
-                               placeholder={`e.g. ${selectedCountry.localFormat}`}
-                               autoComplete="tel" inputMode="tel"
-                              className="flex-1 px-3 py-3 bg-white text-sm focus:outline-none"
+                              type="tel"
+                              required
+                              value={form.phone ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, "").slice(0, selectedCountry.maxLength);
+                                setForm(f => ({ ...f, phone: val }));
+                              }}
+                              maxLength={selectedCountry.maxLength}
+                              placeholder={selectedCountry.placeholder}
+                              autoComplete="tel"
+                              inputMode="numeric"
+                              className="flex-1 px-3 py-3 bg-transparent text-sm focus:outline-none tracking-wider"
                             />
                           </div>
-                           <p className="mt-1.5 text-xs text-muted-foreground">
-                             Enter {selectedCountry.localFormat} after {selectedCountry.dial}.
-                           </p>
+                          <p className="mt-1.5 text-xs text-muted-foreground">
+                            Enter {selectedCountry.localFormat} after {selectedCountry.dial} ({(form.phone ?? "").length}/{selectedCountry.maxLength} numbers).
+                          </p>
                         </div>
                       </motion.div>
                     )}
@@ -361,8 +507,8 @@ export default function PortalLogin() {
                     <label className="block text-sm font-medium text-foreground/80 mb-1.5">Email Address *</label>
                     <div className="relative">
                       <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input type="email" required value={form.email} onChange={set("email")}
-                        placeholder="you@example.com" autoComplete="email" className={inputCls} />
+                      <input type="email" required value={form.email ?? ""} onChange={set("email")}
+                        placeholder="you@example.com" autoComplete="email" className={inputCls} style={inputStyle} />
                     </div>
                   </div>
 
@@ -372,10 +518,11 @@ export default function PortalLogin() {
                     <div className="relative">
                       <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
-                        type={showPw ? "text" : "password"} required value={form.password} onChange={set("password")}
+                        type={showPw ? "text" : "password"} required value={form.password ?? ""} onChange={set("password")}
                         placeholder={mode === "register" ? "Create a password (min 6 chars)" : "Your password"}
                         autoComplete={mode === "login" ? "current-password" : "new-password"}
                         className={`${inputCls} pr-10`}
+                        style={inputStyle}
                       />
                       <button type="button" onClick={() => setShowPw(v => !v)}
                         className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -389,18 +536,20 @@ export default function PortalLogin() {
                   <AnimatePresence initial={false}>
                     {mode === "register" && (
                       <motion.div key="confirm-pw"
-                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        initial={{ opacity: 0, height: 0, overflow: "hidden" }}
+                        animate={{ opacity: 1, height: "auto", transitionEnd: { overflow: "visible" } }}
+                        exit={{ opacity: 0, height: 0, overflow: "hidden" }}
                       >
                         <div>
                           <label className="block text-sm font-medium text-foreground/80 mb-1.5">Confirm Password *</label>
                           <div className="relative">
                             <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                             <input
-                              type={showConfirmPw ? "text" : "password"} required value={form.confirmPassword} onChange={set("confirmPassword")}
+                              type={showConfirmPw ? "text" : "password"} required value={form.confirmPassword ?? ""} onChange={set("confirmPassword")}
                               placeholder="Re-enter your password"
                               autoComplete="new-password"
                               className={`${inputCls} pr-10`}
+                              style={inputStyle}
                             />
                             <button type="button" onClick={() => setShowConfirmPw(v => !v)}
                               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -481,7 +630,8 @@ export default function PortalLogin() {
                   )}
 
                   <button type="submit" disabled={loading}
-                    className="w-full bg-primary text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 transition-all disabled:opacity-60 shadow-lg shadow-primary/20"
+                    className="w-full text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 shadow-lg"
+                    style={{ background: "#D95B2F" }}
                   >
                     {loading
                       ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -493,7 +643,7 @@ export default function PortalLogin() {
               </motion.div>
             </AnimatePresence>
 
-            <div className="mt-6 text-center">
+            <div className="mt-10 text-center">
               <a href="/" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
                 <Sparkles size={13} /> Back to Susruta Hospital Website
               </a>

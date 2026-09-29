@@ -4,7 +4,7 @@ import {
   Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff,
   Shield, Globe, Phone, Loader2, Stethoscope, Lock, Pill,
   Upload, QrCode, Video, Hash, Link as LinkIcon, FlaskConical,
-  Settings2, ToggleLeft,
+  ToggleLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,10 +39,48 @@ type Settings = {
   patientIdPrefix: string;
   patientIdCurrentNumber: number;
   currentPatientId: string | null;
+  nextPatientId?: string;
 };
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
 const labelCls = "block text-sm font-medium text-foreground mb-1.5";
+
+function getNextPrefix(prefix: string): string | null {
+  const chars = (prefix || "A").toUpperCase().trim().split("");
+  for (let i = chars.length - 1; i >= 0; i--) {
+    if (chars[i] < "Z") {
+      chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+      for (let j = i + 1; j < chars.length; j++) {
+        chars[j] = "A";
+      }
+      return chars.join("");
+    }
+  }
+  if (chars.length < 3) {
+    return "A".repeat(chars.length + 1);
+  }
+  return null;
+}
+
+function computeNextPatientId(prefix: string, currentNum: number | string): string {
+  const p = (prefix || "A").toUpperCase().trim() || "A";
+  const maxNum = p.length === 1 ? 999 : p.length === 2 ? 99 : 9;
+  const num = typeof currentNum === "number" ? currentNum : parseInt(String(currentNum || 0), 10) || 0;
+  let nextNum = num + 1;
+  let nextPrefix: string | null = p;
+
+  if (nextNum > maxNum) {
+    nextPrefix = getNextPrefix(p);
+    nextNum = 1;
+  }
+
+  if (!nextPrefix) {
+    return "No next Patient ID";
+  }
+
+  const padLength = nextPrefix.length === 1 ? 3 : nextPrefix.length === 2 ? 2 : 1;
+  return `${nextPrefix}${nextNum.toString().padStart(padLength, "0")}`;
+}
 
 function Toggle({ checked, onChange, label, description }: {
   checked: boolean; onChange: (v: boolean) => void; label: string; description: string;
@@ -58,7 +96,7 @@ function Toggle({ checked, onChange, label, description }: {
         onClick={() => onChange(!checked)}
         className={cn(
           "relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none",
-          checked ? "bg-[#1a3d2b]" : "bg-gray-200"
+          checked ? "bg-emerald-600" : "bg-gray-200"
         )}
       >
         <span className={cn(
@@ -153,6 +191,9 @@ export default function AdminSettings() {
       if (!passChanged) delete payload.smtpPass;
       if (doctorPassword.trim()) payload.doctorPassword = doctorPassword;
       if (pharmacyPassword.trim()) payload.pharmacyPassword = pharmacyPassword;
+      if (payload.patientIdCurrentNumber !== undefined) {
+        payload.patientIdCurrentNumber = parseInt(String(payload.patientIdCurrentNumber || 0), 10) || 0;
+      }
       const res = await apiFetch("/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -212,12 +253,12 @@ export default function AdminSettings() {
     <AdminLayout>
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Manage clinic preferences and portal configuration.</p>
       </div>
 
-      {/* Tab bar — full width, centered */}
-      <div className="flex items-center justify-center gap-1 border-b border-border mb-8 overflow-x-auto">
+      {/* Tab bar — full width */}
+      <div className="flex flex-wrap items-center justify-start gap-1 border-b border-border mb-8">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -229,7 +270,7 @@ export default function AdminSettings() {
               className={cn(
                 "flex items-center gap-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px",
                 active
-                  ? "border-foreground text-foreground"
+                  ? "border-[#D95B2F] text-[#D95B2F]"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
               )}
             >
@@ -240,7 +281,7 @@ export default function AdminSettings() {
         })}
       </div>
 
-      <form onSubmit={save} className="max-w-2xl mx-auto">
+      <form onSubmit={save} className="w-full space-y-6">
 
         {/* ── General Tab ── */}
         {activeTab === "general" && (
@@ -316,43 +357,138 @@ export default function AdminSettings() {
               <p className="text-xs text-muted-foreground">To receive an admin chime when a call ends, configure the LiveKit webhook in your LiveKit Cloud dashboard pointing to <span className="font-mono bg-muted/40 px-1 rounded">/api/livekit/webhook</span>.</p>
             </Card>
 
-            <Card title="Patient ID Counter" subtitle="Auto-assigned on registration (A001, A002…). Rolls from A→B→C when 999 is reached." icon={Hash}>
+            <Card title="Patient ID Counter" subtitle="Sequential Patient ID generator: A001–Z999 → AA01–ZZ99 → AAA1–ZZZ9" icon={Hash}>
               {(form as any).currentPatientId && (
                 <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/15 rounded-xl px-5 py-4">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Last Assigned Patient ID</p>
                   <p className="text-4xl font-extrabold text-[#1a3d2b] tracking-widest font-mono">{(form as any).currentPatientId}</p>
-                  <p className="text-xs text-muted-foreground mt-1">The next registered patient will receive the following ID</p>
+                  <p className="text-xs text-muted-foreground mt-1">Current Number represents the last sequence number assigned to a newly registered patient.</p>
                 </div>
               )}
-              <div className="flex gap-3">
-                <div className="w-28">
-                  <label className={labelCls}>Prefix (A–Z)</label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <label className={labelCls}>Prefix (A–Z, AA–ZZ, AAA–ZZZ)</label>
                   <input
-                    type="text" maxLength={1} placeholder="A"
+                    type="text"
+                    maxLength={3}
+                    placeholder="A"
                     value={(form as any).patientIdPrefix ?? "A"}
                     onChange={e => {
-                      const v = e.target.value.toUpperCase().replace(/[^A-Z]/, "");
-                      setForm(f => ({ ...f, patientIdPrefix: v }));
+                      const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+                      const maxNumForNewPrefix = v.length === 1 ? 999 : v.length === 2 ? 99 : 9;
+                      setForm(f => ({
+                        ...f,
+                        patientIdPrefix: v,
+                        patientIdCurrentNumber: Math.min(
+                          typeof (f as any).patientIdCurrentNumber === "number"
+                            ? (f as any).patientIdCurrentNumber
+                            : parseInt((f as any).patientIdCurrentNumber || "0", 10) || 0,
+                          maxNumForNewPrefix
+                        ),
+                      }));
                     }}
-                    className={cn(inputCls, "text-center font-extrabold text-xl uppercase font-mono")}
+                    className={cn(inputCls, "h-12 w-full text-center font-extrabold text-xl uppercase font-mono shadow-sm")}
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1.5">1 to 3 uppercase letters</p>
                 </div>
-                <div className="flex-1">
-                  <label className={labelCls}>Current Number (0–999)</label>
+
+                <div>
+                  <label className={labelCls}>
+                    Current Number (0–{((form as any).patientIdPrefix?.length ?? 1) === 1 ? 999 : ((form as any).patientIdPrefix?.length ?? 1) === 2 ? 99 : 9})
+                  </label>
                   <input
-                    type="number" min={0} max={999} placeholder="0"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
                     value={(form as any).patientIdCurrentNumber ?? 0}
-                    onChange={e => setForm(f => ({ ...f, patientIdCurrentNumber: parseInt(e.target.value) || 0 }))}
-                    className={cn(inputCls, "font-bold")}
+                    onChange={e => {
+                      const clean = e.target.value.replace(/\D/g, "");
+                      if (clean === "") {
+                        setForm(f => ({ ...f, patientIdCurrentNumber: "" as any }));
+                        return;
+                      }
+                      const val = parseInt(clean, 10);
+                      const maxNum = ((form as any).patientIdPrefix?.length ?? 1) === 1 ? 999 : ((form as any).patientIdPrefix?.length ?? 1) === 2 ? 99 : 9;
+                      const sanitized = isNaN(val) ? 0 : Math.min(Math.max(0, val), maxNum);
+                      setForm(f => ({ ...f, patientIdCurrentNumber: sanitized }));
+                    }}
+                    onBlur={() => {
+                      const current = (form as any).patientIdCurrentNumber;
+                      if (current === "" || current === undefined || current === null || isNaN(Number(current))) {
+                        setForm(f => ({ ...f, patientIdCurrentNumber: 0 }));
+                      }
+                    }}
+                    onWheel={e => {
+                      e.currentTarget.blur();
+                    }}
+                    className={cn(inputCls, "h-12 w-full text-center font-extrabold text-xl font-mono shadow-sm")}
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    Current Number represents the last sequence number assigned to a newly registered patient.
+                  </p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Next patient ID will be:{" "}
-                <strong className="text-foreground font-extrabold font-mono">
-                  {(form as any).patientIdPrefix ?? "A"}{(((form as any).patientIdCurrentNumber ?? 0) + 1).toString().padStart(3, "0")}
-                </strong>
-              </p>
+
+              {(() => {
+                const nextId = computeNextPatientId(
+                  (form as any).patientIdPrefix ?? "A",
+                  (form as any).patientIdCurrentNumber ?? 0
+                );
+                const isLimit = nextId === "No next Patient ID";
+
+                return (
+                  <div className={cn(
+                    "rounded-xl p-4 space-y-1 transition-colors border",
+                    isLimit ? "bg-rose-50/90 border-rose-200" : "bg-emerald-50/80 border-emerald-200"
+                  )}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <span className={cn(
+                          "text-xs font-bold uppercase tracking-wider block",
+                          isLimit ? "text-rose-900" : "text-emerald-900"
+                        )}>
+                          Next Registered Patient ID
+                        </span>
+                        <span className={cn(
+                          "text-xs",
+                          isLimit ? "text-rose-700 font-medium" : "text-emerald-700"
+                        )}>
+                          {isLimit
+                            ? "Sequence limit reached (ZZZ9). No more IDs can be generated."
+                            : "Calculated automatically based on Prefix and Current Number"}
+                        </span>
+                      </div>
+                      <span className={cn(
+                        "font-mono px-4 py-1.5 rounded-lg border shadow-sm tracking-wide",
+                        isLimit
+                          ? "text-base sm:text-lg font-bold text-rose-700 bg-white border-rose-300"
+                          : "text-2xl font-black text-emerald-700 bg-white border-emerald-300"
+                      )}>
+                        {nextId}
+                      </span>
+                    </div>
+                    <p className={cn(
+                      "text-xs font-medium pt-2 border-t mt-2",
+                      isLimit ? "text-rose-800 border-rose-200/60" : "text-emerald-800 border-emerald-200/60"
+                    )}>
+                      {isLimit
+                        ? "⚠️ The patient ID counter has reached its absolute maximum limit (ZZZ9). Existing patients remain unaffected."
+                        : "ℹ️ Changing this value only affects the next NEW patient registration. Existing patients keep their assigned permanent Patient ID."}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="text-[11px] text-muted-foreground space-y-1 bg-muted/20 p-3.5 rounded-xl border border-border/50">
+                <p className="font-semibold text-foreground">Counter Roll Rules:</p>
+                <p>• <strong>Phase 1 (A–Z):</strong> Counter goes from <strong>001 to 999</strong> (e.g. A001–A999 → B001–B999 … → Z001–Z999).</p>
+                <p>• <strong>Phase 2 (AA–ZZ):</strong> When Z999 completes, rolls to <strong>AA01–AA99</strong> → AB01–AB99 … → AZ01–AZ99 → BA01–BA99 … → ZZ01–ZZ99.</p>
+                <p>• <strong>Phase 3 (AAA–ZZZ):</strong> When ZZ99 completes, rolls to <strong>AAA1–AAA9</strong> … → AAZ1–AAZ9 … → ZZA1–ZZZ9.</p>
+                <p>• <strong>Sequence Limit (ZZZ9):</strong> After <strong>ZZZ9</strong>, the sequence reaches its limit and no further Patient IDs can be generated.</p>
+                <p className="text-[10px] text-muted-foreground/80 pt-0.5">All patient IDs maintain a consistent 4-character format (1 letter + 3 digits, 2 letters + 2 digits, or 3 letters + 1 digit).</p>
+              </div>
             </Card>
           </div>
         )}
@@ -513,7 +649,7 @@ export default function AdminSettings() {
 
         {/* ── Security Tab ── */}
         {activeTab === "security" && (
-          <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card title="Doctor Portal Access" subtitle="Set the password for Dr. P. Murali Krishna to log into the doctor portal at /doctor." icon={Stethoscope}>
               <div className={cn(
                 "flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium",
@@ -667,15 +803,7 @@ export default function AdminSettings() {
 
         {/* ── Sticky Save Bar ── */}
         {activeTab !== "payments" && (
-          <div className="mt-6 flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-foreground text-white text-sm font-semibold rounded-xl hover:bg-foreground/90 transition-colors disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
+          <div className="mt-6 flex items-center justify-end gap-4">
             {saveResult && (
               <div className={cn(
                 "flex items-center gap-2 text-sm rounded-xl px-3 py-2",
@@ -685,6 +813,14 @@ export default function AdminSettings() {
                 {saveResult.msg}
               </div>
             )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white text-sm font-semibold rounded-xl hover:bg-[#c44e25] transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         )}
       </form>

@@ -81,3 +81,52 @@ export function fmtDateFromTs(
 ): string {
   return new Date(ts).toLocaleDateString("en-IN", { timeZone: TZ, ...opts });
 }
+
+/** Current time in IST in minutes from midnight (0 - 1439) */
+export function nowISTMinutes(): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0", 10);
+  return hour * 60 + minute;
+}
+
+/**
+ * Check whether an online slot has exceeded (passed) in IST.
+ * @param date - YYYY-MM-DD
+ * @param startTime - "HH:MM" (e.g. "10:00")
+ */
+export function isSlotExceeded(date: string, startTime: string): boolean {
+  const today = todayIST();
+  if (date < today) return true;
+  if (date > today) return false;
+  const [h, m] = startTime.split(":").map(Number);
+  const slotMinutes = (h || 0) * 60 + (m || 0);
+  return slotMinutes <= nowISTMinutes();
+}
+
+/**
+ * Check whether an offline session has exceeded (passed) in IST.
+ * Morning session: 10 AM - 1 PM (ends at 13:00 / 780 mins).
+ * Evening session: 6 PM - 10 PM (ends at 22:00 / 1320 mins).
+ */
+export function isOfflineSessionExceeded(date: string, session: "morning" | "evening"): boolean {
+  const today = todayIST();
+  if (date < today) return true;
+  const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
+  if (isSunday) return true;
+  if (date > today) return false;
+  const currentMins = nowISTMinutes();
+  if (session === "morning") {
+    // 13:00 (1:00 PM) cutoff
+    return currentMins >= 13 * 60;
+  } else {
+    // 22:00 (10:00 PM) cutoff
+    return currentMins >= 22 * 60;
+  }
+}
+

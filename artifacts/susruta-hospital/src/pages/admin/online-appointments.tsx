@@ -10,6 +10,7 @@ import { LiveKitRoom, VideoConference, RoomAudioRenderer } from "@livekit/compon
 import "@livekit/components-styles";
 import { cn } from "@/lib/utils";
 import { fmtTimeIST } from "@/lib/ist";
+import { playAppointmentChime } from "@/lib/sound";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -25,21 +26,7 @@ async function adminFetch(path: string, opts: RequestInit = {}) {
 }
 
 function playChime() {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sine"; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.22);
-      gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + i * 0.22 + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 1.2);
-      osc.start(ctx.currentTime + i * 0.22);
-      osc.stop(ctx.currentTime + i * 0.22 + 1.2);
-    });
-  } catch {}
+  playAppointmentChime();
 }
 
 type DocFile = { name: string; objectPath: string; contentType: string; size: number };
@@ -340,16 +327,16 @@ function ApptCard({ appt, onJoinToggle, onResetPending, onPrescriptionUploaded, 
                 Reset to Pending
               </button>
             )}
-            {/* Mark Complete — shown when call ended but status wasn't auto-updated */}
-            {!appt.joinEnabled && appt.status === "confirmed" && (
+            {/* Mark as Done — shown when pending or call ended */}
+            {(appt.status === "pending" || (!appt.joinEnabled && appt.status === "confirmed")) && (
               <button
                 onClick={e => { e.stopPropagation(); markComplete(); }}
                 disabled={toggling}
-                title="Mark this session as completed"
+                title="Mark this session as done"
                 className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all"
               >
                 {toggling ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                Mark Complete
+                Mark as Done
               </button>
             )}
             {/* Enable/Disable Join — hidden when stuck in confirmed-but-not-live (use Mark Complete instead) */}
@@ -504,7 +491,6 @@ export default function AdminOnlineAppointments() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [adminCall, setAdminCall] = useState<{ apptId: number; patientName: string } | null>(null);
 
   const load = useCallback(async (silent = false) => {
@@ -517,15 +503,24 @@ export default function AdminOnlineAppointments() {
     } catch {
       if (!silent) setErr("Failed to load appointments");
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load();
-    // Auto-refresh every 20 seconds
-    intervalRef.current = setInterval(() => load(true), 20_000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [load]);
+
+  // Real-time SSE listener for immediate appointment booking updates
+  useEffect(() => {
+    const es = new EventSource(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/online-appointments/admin/stream`, { withCredentials: true });
+    es.addEventListener("new_online_appointment", () => {
+      load(true);
+    });
+    es.addEventListener("appointment_updated", () => {
+      load(true);
+    });
+    return () => es.close();
   }, [load]);
 
   async function toggleJoin(id: number, enable: boolean) {

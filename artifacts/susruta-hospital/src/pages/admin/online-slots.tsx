@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { AdminToastContainer } from "@/components/admin/AdminToast";
 import {
@@ -42,15 +43,45 @@ function generatePreview(startTime: string, endTime: string, interval: number): 
   const [eh, em] = endTime.split(":").map(Number);
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return [];
   const slots: SlotPreview[] = [];
-  let current = sh * 60 + sm;
-  const end = eh * 60 + em;
-  while (current + interval <= end) {
-    const s = `${String(Math.floor(current / 60)).padStart(2, "0")}:${String(current % 60).padStart(2, "0")}`;
-    current += interval;
-    const e = `${String(Math.floor(current / 60)).padStart(2, "0")}:${String(current % 60).padStart(2, "0")}`;
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+  let i = 0;
+  while (startMins + (i + 1) * interval <= endMins) {
+    const slotStartMins = i === 0 ? startMins : startMins + i * interval + 1;
+    const slotEndMins = startMins + (i + 1) * interval;
+    const s = `${String(Math.floor(slotStartMins / 60)).padStart(2, "0")}:${String(slotStartMins % 60).padStart(2, "0")}`;
+    const e = `${String(Math.floor(slotEndMins / 60)).padStart(2, "0")}:${String(slotEndMins % 60).padStart(2, "0")}`;
     slots.push({ startTime: s, endTime: e });
+    i++;
   }
   return slots;
+}
+
+function timeToMinutes(t: string): number {
+  if (!t || !t.includes(":")) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function getNowIST() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const timeParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(timeParts.find((p) => p.type === "hour")?.value || 0);
+  const minute = Number(timeParts.find((p) => p.type === "minute")?.value || 0);
+  return { dateStr, currentMinutes: hour * 60 + minute };
+}
+
+function isSlotPresentOrFuture(slotDate: string, slotEndTime: string, now: { dateStr: string; currentMinutes: number }): boolean {
+  if (slotDate > now.dateStr) return true;
+  if (slotDate < now.dateStr) return false;
+  const endMinutes = timeToMinutes(slotEndTime);
+  return endMinutes > now.currentMinutes;
 }
 
 const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 focus:border-[#1a3d2b] transition-all bg-white";
@@ -60,10 +91,18 @@ const labelCls = "block text-sm font-medium text-foreground mb-1.5";
 export default function AdminOnlineSlots() {
   const { notify, toasts, dismissToast } = useAdminNotifications();
 
+  const [now, setNow] = useState(() => getNowIST());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(getNowIST()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [extending, setExtending] = useState<number | null>(null);
   const [extensionSessionId, setExtensionSessionId] = useState<number | null>(null);
   const [extensionEndTime, setExtensionEndTime] = useState("");
@@ -72,15 +111,20 @@ export default function AdminOnlineSlots() {
   const [showPreview, setShowPreview] = useState(false);
   const [err, setErr] = useState("");
 
+  const activeSessions = sessions.filter(sess => {
+    const isPast = sess.date < now.dateStr || (sess.date === now.dateStr && timeToMinutes(sess.endTime) <= now.currentMinutes);
+    return !isPast;
+  });
+
   const startTimeRef = useRef<HTMLInputElement>(null);
   const endTimeRef = useRef<HTMLInputElement>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = now.dateStr;
   const [form, setForm] = useState({
     date: "",
-    startTime: "09:00",
+    startTime: "10:00",
     endTime: "13:00",
-    intervalMinutes: 30 as 15 | 30,
+    intervalMinutes: 15 as 15 | 30,
   });
 
   async function load() {
@@ -139,12 +183,12 @@ export default function AdminOnlineSlots() {
   }
 
   async function deleteSession(id: number) {
-    if (!confirm("Delete this session and all its slots? This cannot be undone.")) return;
     setDeleting(id);
     try {
       await apiFetch(`/sessions/${id}`, { method: "DELETE" });
       setSessions(s => s.filter(x => x.id !== id));
       notify("Deleted", "Session and all its slots have been removed.");
+      setSessionToDelete(null);
     } catch {
       notify("Error", "Failed to delete session. Please try again.");
     } finally {
@@ -190,7 +234,7 @@ export default function AdminOnlineSlots() {
       <div className="w-full space-y-8">
         <div className="mb-6">
           <h1 className="text-3xl font-sans font-bold text-foreground flex items-center gap-2">
-            <Video size={28} className="text-[#1a3d2b]" /> Online Consultation Slots
+           Online Consultation Slots
           </h1>
           <p className="text-muted-foreground text-sm mt-1">Create Sunday slot sessions for video consultations. Each session generates individual bookable slots.</p>
         </div>
@@ -279,18 +323,20 @@ export default function AdminOnlineSlots() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
                 {preview.map((s, i) => (
                   <div key={i} className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2 text-center">
-                    <p className="text-xs font-bold text-blue-700">{fmtTime(s.startTime)}</p>
-                    <p className="text-[10px] text-blue-500">to {fmtTime(s.endTime)}</p>
+                    <p className="text-xs font-bold text-blue-700">Slot {i + 1}</p>
+                    <p className="text-[10px] text-blue-500">{fmtTime(s.startTime)} to {fmtTime(s.endTime)}</p>
                   </div>
                 ))}
               </div>
             )}
 
-            <button type="submit" disabled={creating || preview.length === 0}
-              className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3d2b] text-white rounded-xl font-bold text-sm hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60">
-              {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              {creating ? "Creating…" : `Create Session (${preview.length} slots)`}
-            </button>
+            <div className="flex justify-end pt-2">
+              <button type="submit" disabled={creating || preview.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold text-sm hover:bg-[#c44e25] transition-colors disabled:opacity-60 shadow-sm">
+                {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                {creating ? "Creating…" : `Create Session (${preview.length} slots)`}
+              </button>
+            </div>
           </form>
         </div>
 
@@ -302,18 +348,19 @@ export default function AdminOnlineSlots() {
             <div className="flex items-center gap-2 text-muted-foreground text-sm py-8 justify-center">
               <Loader2 size={16} className="animate-spin" /> Loading sessions…
             </div>
-          ) : sessions.length === 0 ? (
+          ) : activeSessions.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-border">
               <Video size={40} className="mx-auto mb-3 text-muted-foreground/30" />
-              <p className="text-muted-foreground text-sm">No slot sessions created yet.</p>
-              <p className="text-muted-foreground text-xs mt-1">Create your first session above to get started.</p>
+              <p className="text-muted-foreground text-sm">No active or upcoming slot sessions.</p>
+              <p className="text-muted-foreground text-xs mt-1">Create a session above to get started.</p>
             </div>
           ) : (
-            sessions.map(sess => {
+            activeSessions.map(sess => {
               const bookedCount = sess.slots.filter(s => s.isBooked || s.bookingCount > 0).length;
               const totalCount = sess.slots.length;
               const isExpanded = expanded === sess.id;
-              const isPast = sess.date < today;
+              const sortedAllSlots = [...sess.slots].sort((a, b) => a.startTime.localeCompare(b.startTime));
+              const visibleSlots = sortedAllSlots;
 
               return (
                 <div key={sess.id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -321,9 +368,6 @@ export default function AdminOnlineSlots() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-foreground">{fmtDate(sess.date)}</p>
-                        {isPast && (
-                          <span className="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Past</span>
-                        )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         {fmtTime(sess.startTime)} – {fmtTime(sess.endTime)} · {sess.intervalMinutes} min intervals
@@ -337,7 +381,7 @@ export default function AdminOnlineSlots() {
                         <p className="text-[10px] text-muted-foreground">booked</p>
                       </div>
                       <div className="w-16 bg-muted rounded-full h-2">
-                        <div className="bg-[#1a3d2b] h-2 rounded-full transition-all"
+                        <div className="bg-[#D95B2F] h-2 rounded-full transition-all"
                           style={{ width: `${totalCount ? (bookedCount / totalCount) * 100 : 0}%` }} />
                       </div>
 
@@ -360,8 +404,10 @@ export default function AdminOnlineSlots() {
                       >
                         <Plus size={18} />
                       </button>
-                      <button type="button" onClick={() => deleteSession(sess.id)} disabled={deleting === sess.id}
-                        className="p-2 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40">
+                      <button type="button" onClick={() => setSessionToDelete(sess)} disabled={deleting === sess.id}
+                        className="p-2 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40 cursor-pointer"
+                        title="Delete this session"
+                      >
                         {deleting === sess.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                       </button>
                     </div>
@@ -401,7 +447,7 @@ export default function AdminOnlineSlots() {
                             <button
                               type="submit"
                               disabled={extending === sess.id}
-                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3d2b] text-white rounded-xl font-bold text-sm hover:bg-[#1a3d2b]/90 disabled:opacity-60"
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold text-sm hover:bg-[#c44e25] transition-colors disabled:opacity-60 shadow-sm"
                             >
                               {extending === sess.id ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                               {extending === sess.id ? "Adding slots…" : "Add slots"}
@@ -410,29 +456,40 @@ export default function AdminOnlineSlots() {
                         </form>
                       )}
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Individual Slots</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5">
-                        {sess.slots.map(sl => {
-                          const booked = sl.isBooked || sl.bookingCount > 0;
-                          return (
-                            <div key={sl.id} className={cn(
-                              "rounded-xl border px-3 py-2.5",
-                              booked
-                                ? "bg-green-50 border-green-200"
-                                : "bg-muted/40 border-border"
-                            )}>
-                              <p className={cn("text-xs font-bold", booked ? "text-green-700" : "text-foreground")}>
-                                {fmtTime(sl.startTime)}
-                              </p>
-                              <p className={cn("text-[10px]", booked ? "text-green-500" : "text-muted-foreground")}>
-                                to {fmtTime(sl.endTime)}
-                              </p>
-                              <p className={cn("text-[10px] font-semibold mt-1", booked ? "text-green-600" : "text-muted-foreground/50")}>
-                                {booked ? "● Booked" : "○ Available"}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {visibleSlots.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic py-2">
+                          No present or future slots available.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5">
+                          {visibleSlots.map(sl => {
+                            const booked = sl.isBooked || sl.bookingCount > 0;
+                            const slotNumber = sortedAllSlots.findIndex(s => s.id === sl.id) + 1;
+                            return (
+                              <div
+                                key={sl.id}
+                                title={`${fmtTime(sl.startTime)} – ${fmtTime(sl.endTime)}`}
+                                className={cn(
+                                  "rounded-xl border px-3 py-2.5",
+                                  booked
+                                    ? "bg-green-50 border-green-200"
+                                    : "bg-muted/40 border-border"
+                                )}
+                              >
+                                <p className={cn("text-xs font-bold", booked ? "text-green-700" : "text-foreground")}>
+                                  Slot {slotNumber}
+                                </p>
+                                <p className={cn("text-[10px] font-semibold mt-0.5", booked ? "text-green-700/80" : "text-muted-foreground")}>
+                                  {fmtTime(sl.startTime)} to {fmtTime(sl.endTime)}
+                                </p>
+                                <p className={cn("text-[10px] font-semibold mt-1", booked ? "text-green-600" : "text-muted-foreground/50")}>
+                                  {booked ? "● Booked" : "○ Available"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -441,6 +498,28 @@ export default function AdminOnlineSlots() {
           )}
         </div>
       </div>
+
+      <ConfirmDeleteDialog
+        isOpen={!!sessionToDelete}
+        title="Delete Slot Session?"
+        description={
+          sessionToDelete ? (
+            <p>
+              Are you sure you want to delete the consultation session on{" "}
+              <strong className="text-gray-900">{fmtDate(sessionToDelete.date)}</strong> ({fmtTime(sessionToDelete.startTime)} – {fmtTime(sessionToDelete.endTime)}) and all its{" "}
+              <strong className="text-gray-900">{sessionToDelete.slots?.length ?? 0} consultation slots</strong>?
+            </p>
+          ) : null
+        }
+        warningText="This will permanently delete this session and all its slots. This action cannot be undone."
+        isLoading={deleting !== null}
+        onConfirm={() => {
+          if (sessionToDelete) deleteSession(sessionToDelete.id);
+        }}
+        onClose={() => {
+          if (!deleting) setSessionToDelete(null);
+        }}
+      />
     </AdminLayout>
   );
 }

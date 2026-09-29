@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, MapPin, Video, Calendar, Clock, ArrowRight, ArrowLeft,
@@ -6,7 +6,7 @@ import {
   Loader2, Leaf,
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
-import { dualSlotTime } from "@/lib/ist";
+import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded } from "@/lib/ist";
 import {
   useListOpenMonths,
   useGetAvailability,
@@ -17,10 +17,9 @@ import { getDaysInMonth, startOfMonth, getDay, format, parseISO } from "date-fns
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Types ────────────────────────────────────────────────────────
-type OnlineSlot = { id: number; date: string; startTime: string; endTime: string; intervalMinutes: number };
+type OnlineSlot = { id: number; date: string; startTime: string; endTime: string; intervalMinutes: number; slotNumber?: number; isBooked?: boolean; isExceeded?: boolean };
 type DateGroup = { date: string; slots: OnlineSlot[] };
 type UploadedDoc = { name: string; objectPath: string; contentType: string; size: number };
-type SavedDoc = { id: number; name: string; objectPath: string; contentType: string; size: number; createdAt: string };
 
 // ── Helpers ──────────────────────────────────────────────────────
 function fmtTime(t: string) {
@@ -91,7 +90,8 @@ function CalendarGrid({ month, openMonths, availability, selectedDate, onSelect 
         if (!day) return <div key={`e${i}`} />;
         const dateStr = `${month}-${String(day).padStart(2, "0")}`;
         const isPast = dateStr < today;
-        const isBlocked = !isMonthOpen || blockedDates.includes(dateStr) ||
+        const isSunday = getDay(new Date(dateStr + "T12:00:00")) === 0;
+        const isBlocked = !isMonthOpen || isSunday || blockedDates.includes(dateStr) ||
           blockedDays.includes(getDay(new Date(dateStr + "T12:00:00")));
         const isDisabled = isPast || isBlocked;
         const isSelected = dateStr === selectedDate;
@@ -123,8 +123,8 @@ function StepBar({ steps, current }: { steps: string[]; current: number }) {
         const active = i === current;
         return (
           <React.Fragment key={label}>
-            <div className={`flex items-center gap-1.5 text-xs font-bold shrink-0 ${active ? "text-[#1a3d2b]" : done ? "text-emerald-600" : "text-gray-300"}`}>
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${active ? "bg-[#1a3d2b] text-white" : done ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+            <div className={`flex items-center gap-1.5 text-xs font-bold shrink-0 ${active ? "text-[#D95B2F]" : done ? "text-emerald-600" : "text-gray-300"}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${active ? "bg-[#D95B2F] text-white" : done ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-400"}`}>
                 {done ? <CheckCircle2 size={12} /> : i + 1}
               </div>
               <span className="hidden sm:block">{label}</span>
@@ -156,13 +156,35 @@ type OfflineStep = "date" | "slots" | "confirm" | "done";
 type OnlineStep = "slots" | "docs" | "confirm" | "done";
 
 interface Props {
-  patient: { id: number; name: string; phone?: string } | null;
+  patient: { id: number; name: string; phone?: string; email?: string; emailVerified?: boolean } | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [wizType, setWizType] = useState<WizardType | null>(null);
+  const [wizardResending, setWizardResending] = useState(false);
+  const [wizardResent, setWizardResent] = useState(false);
+
+  async function handleResendVerificationInWizard() {
+    setWizardResending(true);
+    try {
+      const res = await fetch(`${BASE}/api/patient/auth/resend-verification`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        setWizardResent(true);
+      } else {
+        const d = await res.json();
+        alert(d.message || "Failed to send verification email.");
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setWizardResending(false);
+    }
+  }
 
   // ── Offline state ────────────────────────────────────────────
   const [offlineStep, setOfflineStep] = useState<OfflineStep>("date");
@@ -174,12 +196,71 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [offlineError, setOfflineError] = useState("");
 
+  const currentMonthStr = useMemo(() => format(new Date(), "yyyy-MM"), []);
+
   const { data: openMonthsRaw = [] } = useListOpenMonths();
-  const openMonths = (openMonthsRaw as any[]).filter(m => m.isOpen).map(m => m.month as string);
-  const currentMonth = openMonths[monthIdx] ?? "";
+  // Available months: strictly starting from current month onwards, excluding any closed by admin
+  const openMonths = useMemo(() => {
+    const rawMap = new Map<string, boolean>();
+    for (const m of (openMonthsRaw as any[])) {
+      rawMap.set(m.month, m.isOpen);
+    }
+    const months: string[] = [];
+    const [currYear, currMon] = currentMonthStr.split("-").map(Number);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(currYear, currMon - 1 + i, 1);
+      const mStr = format(d, "yyyy-MM");
+      const isOpen = rawMap.has(mStr) ? rawMap.get(mStr)! : true;
+      if (isOpen) {
+        months.push(mStr);
+      }
+    }
+    return months;
+  }, [openMonthsRaw, currentMonthStr]);
+
+  const currentMonth = openMonths[monthIdx] ?? currentMonthStr;
   const { data: availability } = useGetAvailability({ month: currentMonth }, { query: { enabled: !!currentMonth } });
-  const { data: slotsData } = useGetSlots({ date: selectedDate ?? "" }, { query: { enabled: !!selectedDate } });
-  const offlineSlots: string[] = ((slotsData as any[] ?? []).filter((s: any) => s.available).map((s: any) => s.time as string));
+
+  // 2 slots based on admin offline slots (Morning 9 AM - 1 PM, Evening 4 PM - 7 PM)
+  const [offlineSlotStatus, setOfflineSlotStatus] = useState<{
+    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+  } | null>(null);
+  const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setOfflineSlotStatus(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingOfflineSlots(true);
+    fetch(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/appointments/offline/slots-status?date=${selectedDate}`, {
+      credentials: "include",
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) {
+          setOfflineSlotStatus({
+            morning: data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
+            evening: data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOfflineSlotStatus({
+            morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
+            evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingOfflineSlots(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedDate]);
 
   async function submitOffline() {
     if (!selectedDate || !selectedSlot || !patient) return;
@@ -207,6 +288,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [onlineStep, setOnlineStep] = useState<OnlineStep>("slots");
   const [dateGroups, setDateGroups] = useState<DateGroup[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
+  const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
   const [onlineSlot, setOnlineSlot] = useState<OnlineSlot | null>(null);
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -214,28 +296,67 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [booking, setBooking] = useState(false);
   const [onlineError, setOnlineError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const [savedDocs, setSavedDocs] = useState<SavedDoc[]>([]);
-  const [savedDocsLoading, setSavedDocsLoading] = useState(false);
+
+  function removeDoc(idx: number) {
+    setDocs(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  function resetWizard() {
+    setWizType(null);
+    setOfflineStep("date");
+    setMonthIdx(0);
+    setSelectedDate(null);
+    setSelectedSlot(null);
+    setReason("");
+    setPhone("");
+    setSubmitting(false);
+    setOfflineError("");
+    setOfflineSlotStatus(null);
+    setLoadingOfflineSlots(false);
+    setOnlineStep("slots");
+    setDateGroups([]);
+    setOnlineLoading(false);
+    setSelectedSessionDate(null);
+    setOnlineSlot(null);
+    setDocs([]);
+    setUploading(false);
+    setOnlineReason("");
+    setBooking(false);
+    setOnlineError("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function handleClose() {
+    resetWizard();
+    onClose();
+  }
 
   useEffect(() => {
-    if (wizType === "online" && onlineStep === "docs") {
-      setSavedDocsLoading(true);
-      fetch(`${BASE}/api/patient/documents`, { credentials: "include" })
-        .then(r => r.json())
-        .then(data => { setSavedDocs(Array.isArray(data) ? data : []); })
-        .catch(() => {})
-        .finally(() => setSavedDocsLoading(false));
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
     }
-  }, [wizType, onlineStep]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function fetchOnlineSlots() {
+    setOnlineLoading(true);
+    setOnlineError("");
+    fetch(`${BASE}/api/online-slots/available`, { credentials: "include" })
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setDateGroups(data);
+        }
+      })
+      .catch(() => setOnlineError("Failed to load slots."))
+      .finally(() => setOnlineLoading(false));
+  }
 
   function handleTypeSelect(type: WizardType) {
     setWizType(type);
-    if (type === "online" && dateGroups.length === 0) {
-      setOnlineLoading(true);
-      fetch(`${BASE}/api/online-slots/available`, { credentials: "include" })
-        .then(r => r.json()).then(setDateGroups)
-        .catch(() => setOnlineError("Failed to load slots."))
-        .finally(() => setOnlineLoading(false));
+    if (type === "online") {
+      fetchOnlineSlots();
     }
   }
 
@@ -253,23 +374,20 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         const { uploadURL, objectPath } = await r.json();
         const up = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
         if (!up.ok) throw new Error("Upload failed");
-        // Save to patient's document library so doctor can see it anytime
-        const saveRes = await fetch(`${BASE}/api/patient/documents`, {
+        // Add to this consultation's attached docs
+        setDocs(prev => [...prev, {
+          name: file.name,
+          objectPath,
+          contentType: file.type,
+          size: file.size,
+        }]);
+
+        // Save to patient's document library in the background
+        fetch(`${BASE}/api/patient/documents`, {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
-        });
-        const saved = await saveRes.json().catch(() => null);
-        if (saved?.id) {
-          setSavedDocs(prev => [...prev, {
-            id: saved.id,
-            name: file.name,
-            objectPath,
-            contentType: file.type,
-            size: file.size,
-            createdAt: saved.createdAt ?? new Date().toISOString(),
-          }]);
-        }
+        }).catch(() => {});
       } catch {
         setOnlineError(`Failed to upload "${file.name}". Please try again.`);
       }
@@ -285,14 +403,35 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
       const r = await fetch(`${BASE}/api/online-appointments`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: onlineSlot.id, reason: onlineReason.trim() || undefined, documents: [] }),
+        body: JSON.stringify({
+          slotId: onlineSlot.id,
+          reason: onlineReason.trim() || undefined,
+          documents: docs.map(d => ({
+            name: d.name,
+            objectPath: d.objectPath,
+            contentType: d.contentType,
+            size: d.size,
+          })),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw data;
+
+      // Optimistically decrease slots available count by removing booked slot
+      setDateGroups(prev => prev.map(g =>
+        g.date === onlineSlot.date
+          ? { ...g, slots: g.slots.filter(s => s.id !== onlineSlot.id) }
+          : g
+      ));
+
       setOnlineStep("done");
     } catch (err: any) {
-      if (err?.error === "slot_taken") setOnlineError("This slot was just booked. Please pick another.");
-      else setOnlineError(err?.message || "Booking failed. Please try again.");
+      if (err?.error === "slot_taken") {
+        setOnlineError("This slot was just booked. Please pick another.");
+        fetchOnlineSlots();
+      } else {
+        setOnlineError(err?.message || "Booking failed. Please try again.");
+      }
     } finally {
       setBooking(false);
     }
@@ -302,8 +441,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const isDone = (wizType === "offline" && offlineStep === "done") || (wizType === "online" && onlineStep === "done");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+    <div onClick={handleClose} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm font-sans font-['DM_Sans',sans-serif]">
       <motion.div
+        onClick={e => e.stopPropagation()}
         initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 80, opacity: 0 }}
@@ -312,16 +452,16 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         style={{ height: "90vh", maxHeight: "90vh" }}
       >
         {/* Modal header */}
-        <div className="bg-[#1a3d2b] px-6 py-5 flex items-center gap-3 shrink-0">
+        <div className="bg-[#D95B2F] px-6 py-5 flex items-center gap-3 shrink-0">
           <div className="flex-1">
-            <p className="text-white/60 text-xs font-medium uppercase tracking-wider">
-              {wizType === null ? "Appointment" : wizType === "offline" ? "In-Person Visit" : "Online Consultation"}
+            <p className="text-white/60 text-xs font-medium tracking-wider">
+              {wizType === null ? "Appointment" : wizType === "offline" ? "Offline Consultation" : "Online Consultation"}
             </p>
             <p className="text-white font-bold text-base leading-tight">
-              {isDone ? "Booking Confirmed!" : "Book an Appointment"}
+              {isDone ? "Booking Confirmed!" : "Book Appointment"}
             </p>
           </div>
-          <button onClick={onClose}
+          <button onClick={handleClose}
             className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
             <X size={18} />
           </button>
@@ -346,7 +486,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         <MapPin size={30} className="text-green-700" />
                       </div>
                       <div>
-                        <p className="font-bold text-gray-900 text-xl">In-Person Visit</p>
+                        <p className="font-bold text-gray-900 text-xl">Offline Consultation</p>
                         <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
                           Visit the clinic in Tirupati. Book a time slot and get hands-on Ayurvedic treatment.
                         </p>
@@ -357,17 +497,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
                   {/* Online */}
                   <button onClick={() => handleTypeSelect("online")}
-                    className="w-full bg-white border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-2xl p-6 text-left transition-all group">
+                    className="w-full bg-white border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 rounded-2xl p-6 text-left transition-all group">
                     <div className="flex items-start gap-5">
-                      <div className="bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors" style={{ width: 64, height: 64 }}>
-                        <Video size={30} className="text-blue-700" />
+                      <div className="bg-red-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors" style={{ width: 64, height: 64 }}>
+                        <Video size={30} className="text-[#D95B2F]" />
                       </div>
                       <div>
                         <p className="font-bold text-gray-900 text-xl">Online Consultation</p>
                         <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
                           Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.
                         </p>
-                        <p className="text-sm text-blue-700 font-semibold mt-2.5">🎥 Requires uploading medical reports</p>
+                        <p className="text-sm text-gray-500 font-semibold mt-2.5">🎥 Requires uploading medical reports</p>
                       </div>
                     </div>
                   </button>
@@ -384,7 +524,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="offline-date" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={0} />
                 <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Calendar size={20} className="text-[#1a3d2b]" /> Pick a Date
+                  <Calendar size={20} className="text-[#D95B2F]" /> Pick a Date
                 </p>
 
                 {openMonths.length === 0 ? (
@@ -398,9 +538,11 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {/* Month nav */}
                     <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 mb-4">
                       <div className="flex items-center justify-between mb-4">
-                        <button disabled={monthIdx === 0}
+                        <button disabled={monthIdx <= 0}
                           onClick={() => { setMonthIdx(m => m - 1); setSelectedDate(null); }}
-                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 transition-colors font-bold text-lg">
+                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-lg"
+                          title="Previous month"
+                        >
                           ‹
                         </button>
                         <p className="font-bold text-gray-900 text-base">
@@ -408,7 +550,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         </p>
                         <button disabled={monthIdx >= openMonths.length - 1}
                           onClick={() => { setMonthIdx(m => m + 1); setSelectedDate(null); }}
-                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 transition-colors font-bold text-lg">
+                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-lg"
+                          title="Next month"
+                        >
                           ›
                         </button>
                       </div>
@@ -416,18 +560,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         <CalendarGrid month={currentMonth} openMonths={openMonths} availability={availability}
                           selectedDate={selectedDate} onSelect={d => setSelectedDate(d)} />
                       )}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <button onClick={() => setWizType(null)}
-                        className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                        <ArrowLeft size={15} /> Back
-                      </button>
-                      <button disabled={!selectedDate}
-                        onClick={() => { setSelectedSlot(null); setOfflineStep("slots"); }}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-[#1a3d2b] text-white rounded-xl font-bold hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-40 text-sm">
-                        Next — Choose Time <ArrowRight size={15} />
-                      </button>
                     </div>
                   </>
                 )}
@@ -439,43 +571,109 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="offline-slots" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={1} />
                 <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <Clock size={20} className="text-[#1a3d2b]" /> Choose a Time
+                  <Clock size={20} className="text-[#D95B2F]" /> Choose a Time
                 </p>
                 <p className="text-sm text-gray-500 mb-4">{selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM yyyy")}</p>
 
-                {offlineSlots.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-2xl border border-gray-200">
-                    <Clock size={28} className="mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm text-gray-500 font-medium">No time slots available for this date.</p>
-                    <p className="text-xs text-gray-400 mt-1">Please pick a different date.</p>
+                {loadingOfflineSlots ? (
+                  <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+                    <Loader2 size={16} className="animate-spin text-[#1a3d2b]" /> Loading available slots…
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {offlineSlots.map(slot => (
-                      <button key={slot} onClick={() => setSelectedSlot(slot)}
-                        className={[
-                          "py-3 rounded-xl text-sm font-bold border transition-all",
-                          selectedSlot === slot
-                            ? "bg-[#1a3d2b] text-white border-[#1a3d2b] shadow-md"
-                            : "border-gray-200 text-gray-800 hover:border-[#1a3d2b]/50 hover:bg-[#1a3d2b]/5",
-                        ].join(" ")}>
-                        {slot}
-                      </button>
-                    ))}
+                  <div className="space-y-3 mb-4">
+                    {selectedDate && (
+                      isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0 || !offlineSlotStatus?.morning?.isAvailable
+                    ) && (
+                      isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0 || !offlineSlotStatus?.evening?.isAvailable
+                    ) && (
+                      <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                        <AlertCircle size={15} className="shrink-0 text-red-500" />
+                        <span>No consultation slots are available for this date. All sessions have either been booked or session timings have passed. Please select another date.</span>
+                      </div>
+                    )}
+                    {[
+                      {
+                        id: "morning",
+                        label: "10 AM - 1 PM",
+                        title: "Morning Consultation",
+                        status: offlineSlotStatus?.morning,
+                      },
+                      {
+                        id: "evening",
+                        label: "6 PM - 10 PM",
+                        title: "Evening Consultation",
+                        status: offlineSlotStatus?.evening,
+                      },
+                    ].map((session) => {
+                      const isSelected = selectedSlot === session.label;
+                      const isExceeded = selectedDate ? isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening") : false;
+                      const remaining = isExceeded ? 0 : (session.status?.remaining ?? 0);
+                      const isAvailable = !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
+
+                      return (
+                        <button
+                          key={session.id}
+                          type="button"
+                          disabled={!isAvailable}
+                          onClick={() => {
+                            if (isAvailable) setSelectedSlot(session.label);
+                          }}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
+                            !isAvailable
+                              ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                              : isSelected
+                              ? "bg-[#1a3d2b] border-[#1a3d2b] text-white shadow-md ring-2 ring-[#1a3d2b]/20 cursor-pointer"
+                              : "bg-white border-gray-200 hover:border-[#1a3d2b]/50 hover:bg-[#1a3d2b]/5 text-gray-800 cursor-pointer"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isSelected
+                                  ? "bg-white/20 text-white"
+                                  : !isAvailable
+                                  ? "bg-gray-100 text-gray-400"
+                                  : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
+                              }`}
+                            >
+                              <Clock size={20} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-base">{session.label}</span>
+                                <span className={`text-xs font-medium ${isSelected ? "text-white/80" : "text-gray-500"}`}>
+                                  ({session.title})
+                                </span>
+                              </div>
+                              <span className={`text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}>
+                                15 mins duration per consultation
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`text-xs px-3 py-1 rounded-full font-bold ${
+                                !isAvailable
+                                  ? "bg-red-100 text-red-600 border border-red-200"
+                                  : isSelected
+                                  ? "bg-white text-[#1a3d2b]"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              }`}
+                            >
+                              {isAvailable
+                                ? `${remaining} Slots Available`
+                                : selectedDate && new Date(selectedDate + "T12:00:00+05:30").getDay() === 0 && session.id === "evening"
+                                ? "Closed on Sunday"
+                                : "No slots available"}
+                            </span>
+                            {isSelected && <CheckCircle2 size={18} className="text-white shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-
-                <div className="flex items-center justify-between gap-3">
-                  <button onClick={() => setOfflineStep("date")}
-                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                    <ArrowLeft size={15} /> Back
-                  </button>
-                  <button disabled={!selectedSlot}
-                    onClick={() => setOfflineStep("confirm")}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-[#1a3d2b] text-white rounded-xl font-bold hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-40 text-sm">
-                    Review Booking <ArrowRight size={15} />
-                  </button>
-                </div>
               </motion.div>
             )}
 
@@ -484,14 +682,14 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="offline-confirm" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={2} />
                 <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 size={20} className="text-[#1a3d2b]" /> Confirm Booking
+                  <CheckCircle2 size={20} className="text-[#D95B2F]" /> Confirm Booking
                 </p>
 
                 {/* Summary card */}
                 <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/10 rounded-2xl p-4 mb-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <MapPin size={15} className="text-[#1a3d2b] shrink-0" />
-                    <p className="text-sm font-semibold text-gray-800">In-Person Visit · Tirupati Clinic</p>
+                    <p className="text-sm font-semibold text-gray-800">Offline Visit · Tirupati Clinic</p>
                   </div>
                   <p className="text-base font-bold text-[#1a3d2b] ml-6">
                     {selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM yyyy")}
@@ -501,7 +699,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
                 {/* Patient info */}
                 <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 mb-4">
-                  <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">Booking as</p>
+                  <p className="text-xs text-gray-400 font-bold tracking-wider mb-2">Booking as</p>
                   <p className="text-base font-bold text-gray-900">{patient?.name}</p>
                   {patient?.phone && <p className="text-sm text-gray-500">{patient.phone}</p>}
                 </div>
@@ -511,9 +709,15 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <label className="text-sm font-semibold text-gray-700 block mb-1.5">
                       Phone Number <span className="text-red-500">*</span>
                     </label>
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all" />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      maxLength={10}
+                      placeholder="10-digit mobile number"
+                      inputMode="numeric"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all tracking-wider"
+                    />
                   </div>
                 )}
 
@@ -527,17 +731,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 </div>
 
                 {offlineError && <ErrorBanner msg={offlineError} />}
-
-                <div className="flex items-center justify-between gap-3">
-                  <button onClick={() => setOfflineStep("slots")}
-                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                    <ArrowLeft size={15} /> Back
-                  </button>
-                  <button onClick={submitOffline} disabled={submitting}
-                    className="flex items-center gap-2 px-6 py-3 bg-[#1a3d2b] text-white rounded-xl font-bold hover:bg-[#1a3d2b]/90 transition-colors disabled:opacity-60 text-sm shadow-lg">
-                    {submitting ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm Appointment →"}
-                  </button>
-                </div>
               </motion.div>
             )}
 
@@ -556,8 +749,8 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 <p className="text-xs text-gray-400 mb-8 max-w-xs mx-auto leading-relaxed">
                   The clinic will confirm your booking shortly. You can track the status in your dashboard.
                 </p>
-                <button onClick={() => { onSuccess(); onClose(); }}
-                  className="w-full bg-[#1a3d2b] text-white font-bold py-4 rounded-2xl hover:bg-[#1a3d2b]/90 transition-colors text-base">
+                <button onClick={() => { handleClose(); onSuccess(); }}
+                  className="w-[200px] bg-[#D95B2F] text-white font-bold py-4 rounded-2xl hover:bg-[#D95B2F]/90 transition-colors text-base">
                   Back to Dashboard
                 </button>
               </motion.div>
@@ -572,7 +765,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="online-slots" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                 <StepBar steps={["Choose Slot", "Upload Docs", "Confirm"]} current={0} />
                 <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <Video size={20} className="text-blue-600" /> Choose a Slot
+                  <Video size={20} className="text-[#D95B2F]" /> Choose a Slot
                 </p>
                 <p className="text-sm text-gray-500 mb-4">Video consultation · Sunday slots only</p>
 
@@ -582,52 +775,105 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
                     <Loader2 size={16} className="animate-spin" /> Loading available slots…
                   </div>
-                ) : dateGroups.length === 0 ? (
+                ) : (dateGroups.length === 0 || dateGroups.every(g => g.slots.filter(s => !s.isBooked && !isSlotExceeded(g.date, s.startTime) && !s.isExceeded).length === 0)) ? (
                   <div className="text-center py-10 bg-gray-50 rounded-2xl border border-gray-200">
-                    <Video size={32} className="mx-auto mb-3 text-gray-300" />
-                    <p className="text-sm font-semibold text-gray-500">No online slots available right now.</p>
-                    <p className="text-xs text-gray-400 mt-1">New Sunday slots are added weekly. Check back soon.</p>
+                    <Video size={32} className="mx-auto mb-3 text-red-400" />
+                    <p className="text-base font-bold text-red-600">Slots are not available</p>
+                    <p className="text-xs text-gray-400 mt-1">All online consultation slots are currently booked or have ended. Please check back later.</p>
                   </div>
                 ) : (
                   <div className="space-y-3 mb-4">
-                    {dateGroups.map(group => (
-                      <div key={group.date} className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-200">
-                          <p className="font-bold text-gray-900 text-sm">{fmtDate(group.date)}</p>
-                          <p className="text-xs text-gray-500">{group.slots.length} slots available</p>
+                    {dateGroups.map(group => {
+                      const availableSlots = group.slots.filter(s => !s.isBooked && !isSlotExceeded(group.date, s.startTime) && !s.isExceeded);
+                      const allUnavailable = availableSlots.length === 0;
+                      return (
+                        <div key={group.date} className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
+                          <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white">
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{fmtDate(group.date)}</p>
+                              <p className={`text-xs mt-0.5 font-medium ${allUnavailable ? "text-[#D95B2F] font-semibold" : "text-gray-500"}`}>
+                                10 AM – 1 PM <span className="ml-1">
+                                              {allUnavailable ? "0 available slots" : `${availableSlots.length} available slots`}
+                                            </span>
+                              </p>
+                            </div>
+                            {allUnavailable && (
+                              <span className="text-[11px] font-bold text-[#D95B2F] bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
+                                Slots are not available
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="p-4">
+                            {allUnavailable ? (
+                              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                <span>Slots are not available for this date. All consultation slots have been booked or time slots have passed.</span>
+                              </div>
+                            ) : null}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                                  <Clock size={14} className="text-[#D95B2F]" />
+                                  Select Consultation Timing (15 mins duration):
+                                </p>
+                                {onlineSlot && onlineSlot.date === group.date && (
+                                  <span className="text-[11px] font-semibold text-[#D95B2F] bg-red-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                                    Selected: {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                {group.slots.map((slot) => {
+                                  const isExceeded = isSlotExceeded(group.date, slot.startTime) || slot.isExceeded;
+                                  const isSlotAvailable = !slot.isBooked && !isExceeded;
+                                  const isSlotSelected = onlineSlot?.id === slot.id;
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      type="button"
+                                      disabled={!isSlotAvailable}
+                                      onClick={() => {
+                                        if (isSlotAvailable) setOnlineSlot(slot);
+                                      }}
+                                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                                        !isSlotAvailable
+                                          ? "bg-gray-100/70 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                                          : isSlotSelected
+                                          ? "bg-[#D95B2F]/10 border-[#D95B2F] text-[#D95B2F] shadow-sm ring-2 ring-[#D95B2F]/30 cursor-pointer"
+                                          : "bg-white border-gray-200 hover:border-red-400 hover:bg-blue-50/40 text-gray-800 cursor-pointer"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between w-full">
+                                        <span className="text-xs font-bold leading-tight">
+                                          {fmtTime(slot.startTime)} – {fmtTime(slot.endTime)}
+                                        </span>
+                                        {isSlotSelected && (
+                                          <CheckCircle2 size={13} className="text-[#D95B2F] shrink-0 ml-1" />
+                                        )}
+                                      </div>
+                                      <span className={`text-[10px] mt-1.5 font-medium ${
+                                        !isSlotAvailable
+                                          ? "text-red-500 font-semibold"
+                                          : isSlotSelected
+                                          ? "text-[#D95B2F]"
+                                          : "text-gray-400"
+                                      }`}>
+                                        {!isSlotAvailable
+                                          ? (slot.isBooked ? "Booked" : "Time passed")
+                                          : "15 mins duration"}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="p-3 grid grid-cols-2 gap-2">
-                          {group.slots.map(slot => {
-                            const sel = onlineSlot?.id === slot.id;
-                            return (
-                              <button key={slot.id} onClick={() => setOnlineSlot(slot)}
-                                className={[
-                                  "rounded-xl border px-3 py-3 text-left transition-all",
-                                  sel ? "bg-blue-600 border-blue-600 text-white shadow-md"
-                                    : "bg-white border-gray-200 hover:border-blue-400 hover:bg-blue-50",
-                                ].join(" ")}>
-                                <SlotTimeRange date={group.date} start={slot.startTime} end={slot.endTime} selected={sel} />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
-
-                <div className="flex items-center justify-between gap-3">
-                  <button onClick={() => setWizType(null)}
-                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                    <ArrowLeft size={15} /> Back
-                  </button>
-                  {onlineSlot && (
-                    <button onClick={() => setOnlineStep("docs")}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors text-sm">
-                      Next — Upload Docs <ArrowRight size={15} />
-                    </button>
-                  )}
-                </div>
               </motion.div>
             )}
 
@@ -636,137 +882,65 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="online-docs" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col h-full">
                 <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={1} />
                 <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <FileText size={20} className="text-blue-600" /> Medical Documents
+                  <FileText size={20} className="text-[#D95B2F]" /> Medical Documents
                 </p>
 
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
-                {savedDocsLoading ? (
-                  <div className="flex items-center gap-2 text-gray-400 text-sm py-6">
-                    <Loader2 size={14} className="animate-spin" /> Loading your documents…
-                  </div>
-                ) : savedDocs.length > 0 ? (
-                  /* ── Has existing docs ── */
-                  <div className="flex-1 flex flex-col min-h-0">
-                    {/* Info banner */}
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 mb-4 flex items-start gap-3">
-                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-semibold text-emerald-800">Dr. Murali Krishna can already see these</p>
-                        <p className="text-xs text-emerald-600 mt-0.5">All your uploaded documents are always visible to the doctor — no need to do anything.</p>
-                      </div>
-                    </div>
+                <div className="flex-1 flex flex-col min-h-0">
+                  <p className="text-sm text-gray-500 mb-4">
+                    Attach any medical reports, test results, or prescriptions for this consultation. You can also skip this step.
+                  </p>
 
-                    {/* Doc list */}
-                    <div className="flex-1 overflow-y-auto space-y-2 mb-4">
-                      {savedDocs.map(doc => (
-                        <div key={doc.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-3 py-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                            <FileText size={14} className="text-blue-500" />
+                  {/* Upload zone */}
+                  <div onClick={() => fileRef.current?.click()}
+                    className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center bg-gray-50 hover:border-red-400 hover:bg-red-50 transition-colors cursor-pointer mb-3 flex flex-col items-center justify-center">
+                    {uploading
+                      ? <div className="flex items-center gap-2 text-blue-600 text-sm"><Loader2 size={16} className="animate-spin" /> Uploading…</div>
+                      : <>
+                          <Upload size={28} className="mx-auto mb-2 text-gray-400" />
+                          <p className="font-semibold text-gray-700 text-sm mb-0.5">Tap to upload documents</p>
+                          <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
+                        </>}
+                    <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
+                      className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
+                  </div>
+
+                  {/* Attached docs for this consultation */}
+                  {docs.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {docs.map((doc, idx) => (
+                        <div key={idx} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 py-2">
+                          <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                            <FileText size={14} className="text-[#D95B2F]" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-gray-800 truncate">{doc.name}</p>
                             <p className="text-[10px] text-gray-400">{fmtBytes(doc.size)}</p>
                           </div>
-                          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                          <button
+                            type="button"
+                            onClick={() => removeDoc(idx)}
+                            className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                            title="Remove document"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
                     </div>
+                  )}
 
-                    {/* Add more */}
-                    <div className="mb-4">
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Add More (optional)</p>
-                      <div onClick={() => fileRef.current?.click()}
-                        className="border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center bg-gray-50 hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-pointer">
-                        {uploading
-                          ? <div className="flex items-center justify-center gap-2 text-blue-600 text-sm"><Loader2 size={14} className="animate-spin" /> Uploading…</div>
-                          : <><Upload size={18} className="mx-auto mb-1 text-gray-300" /><p className="text-xs text-gray-400">Tap to upload more documents</p></>}
-                        <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                          className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                      </div>
-                    </div>
-
-                    {/* Reason */}
-                    <div className="mb-4">
-                      <label className="text-sm font-semibold text-gray-700 block mb-1.5">Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span></label>
-                      <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
-                        placeholder="Brief summary of your health concerns…"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 mt-auto">
-                      <button onClick={() => setOnlineStep("slots")} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                        <ArrowLeft size={15} /> Back
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                          className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
-                          Skip
-                        </button>
-                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
-                          Continue <ArrowRight size={15} />
-                        </button>
-                      </div>
-                    </div>
+                  {/* Reason */}
+                  <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+                      Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
+                      placeholder="Brief summary of your health concerns…"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
                   </div>
-                ) : (
-                  /* ── No docs yet ── */
-                  <div className="flex-1 flex flex-col min-h-0">
-                    <p className="text-sm text-gray-500 mb-4">You haven't uploaded any documents yet. Adding your reports or test results helps the doctor prepare for your consultation — you can also skip this now.</p>
-
-                    {/* Upload zone */}
-                    <div onClick={() => fileRef.current?.click()}
-                      className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer mb-3 flex-1 flex flex-col items-center justify-center">
-                      {uploading
-                        ? <div className="flex items-center gap-2 text-blue-600 text-sm"><Loader2 size={16} className="animate-spin" /> Uploading…</div>
-                        : <>
-                            <Upload size={32} className="mx-auto mb-2.5 text-gray-300" />
-                            <p className="font-semibold text-gray-600 text-sm mb-0.5">Tap to upload documents</p>
-                            <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
-                          </>}
-                      <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                        className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                    </div>
-
-                    {/* Newly added this session */}
-                    {savedDocs.length > 0 && (
-                      <div className="space-y-1.5 mb-3">
-                        {savedDocs.map(doc => (
-                          <div key={doc.id} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                            <FileText size={13} className="text-emerald-600 shrink-0" />
-                            <p className="flex-1 text-xs font-medium text-gray-800 truncate">{doc.name}</p>
-                            <p className="text-[10px] text-gray-400 shrink-0">{fmtBytes(doc.size)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Reason */}
-                    <div className="mb-4">
-                      <label className="text-sm font-semibold text-gray-700 block mb-1.5">Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span></label>
-                      <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
-                        placeholder="Brief summary of your health concerns…"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 mt-auto">
-                      <button onClick={() => setOnlineStep("slots")} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                        <ArrowLeft size={15} /> Back
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                          className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors">
-                          Skip
-                        </button>
-                        <button disabled={uploading} onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm">
-                          Continue <ArrowRight size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                </div>
               </motion.div>
             )}
 
@@ -775,28 +949,22 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
               <motion.div key="online-confirm" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                 <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={2} />
                 <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 size={20} className="text-blue-600" /> Confirm Booking
+                  <CheckCircle2 size={20} className="text-[#D95B2F]" /> Confirm Booking
                 </p>
 
                 <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-4 space-y-2">
                   <div className="flex items-center gap-2">
-                    <Video size={15} className="text-blue-600 shrink-0" />
+                    <Video size={15} className="text-gray-700 shrink-0" />
                     <p className="text-sm font-semibold text-gray-800">Online Video Consultation</p>
                   </div>
-                  <p className="text-base font-bold text-blue-700 ml-6">{fmtDate(onlineSlot.date)}</p>
-                  {(() => {
-                    const r = slotRangeText(onlineSlot.date, onlineSlot.startTime, onlineSlot.endTime);
-                    return (
-                      <>
-                        <p className="text-sm font-semibold text-gray-700 ml-6">{r.ist}</p>
-                        {r.local && <p className="text-xs text-gray-500 ml-6">{r.local}</p>}
-                      </>
-                    );
-                  })()}
+                  <p className="text-base font-bold text-gray-700 ml-6">{fmtDate(onlineSlot.date)}</p>
+                  <p className="text-sm font-semibold text-gray-700 ml-6">
+                    {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)} (15 mins duration)
+                  </p>
                   <p className="text-xs text-gray-500 ml-6">
-                    {savedDocs.length > 0
-                      ? `${savedDocs.length} document(s) on file — visible to doctor`
-                      : "No documents — you can upload them from your dashboard"}
+                    {docs.length > 0
+                      ? `${docs.length} document(s) attached`
+                      : "No documents attached"}
                   </p>
                 </div>
 
@@ -805,18 +973,39 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   <p>After the consultation, Dr. Murali Krishna will issue your Ayurvedic prescription. You can view it in your dashboard.</p>
                 </div>
 
-                {onlineError && <ErrorBanner msg={onlineError} />}
+                {patient?.email && !patient?.emailVerified && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-800 flex items-start gap-2 mb-4">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                    <div>
+                      <p className="font-semibold text-amber-900">Email unverified</p>
+                      <p className="mt-0.5">Booking will proceed, but remember to verify your email (<span className="font-medium">{patient.email}</span>) from your dashboard to receive video call updates.</p>
+                    </div>
+                  </div>
+                )}
 
-                <div className="flex items-center justify-between gap-3">
-                  <button onClick={() => setOnlineStep("docs")}
-                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                    <ArrowLeft size={15} /> Back
-                  </button>
-                  <button onClick={submitOnline} disabled={booking}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-60 text-sm shadow-lg">
-                    {booking ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm Booking →"}
-                  </button>
-                </div>
+                {onlineError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-800">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-semibold">{onlineError}</p>
+                        {onlineError.toLowerCase().includes("verify") && (
+                          <div className="mt-2.5 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleResendVerificationInWizard}
+                              disabled={wizardResending}
+                              className="text-xs font-bold text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-xl border border-red-300 transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                            >
+                              {wizardResending ? <Loader2 size={12} className="animate-spin" /> : null}
+                              {wizardResent ? "Verification email sent! Check inbox" : "Resend verification email"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -824,29 +1013,21 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
             {wizType === "online" && onlineStep === "done" && onlineSlot && (
               <motion.div key="online-done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-6">
-                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-5">
-                  <CheckCircle2 size={40} className="text-blue-600" />
+                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                  <CheckCircle2 size={40} className="text-[#D95B2F]" />
                 </div>
                 <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Booking Confirmed!</h2>
                 <p className="text-gray-500 text-sm mb-1">
                   Your online consultation on <strong className="text-gray-800">{fmtDate(onlineSlot.date)}</strong>
                 </p>
-                {(() => {
-                  const r = slotRangeText(onlineSlot.date, onlineSlot.startTime, onlineSlot.endTime);
-                  return (
-                    <>
-                      <p className="text-gray-500 text-sm mb-1">
-                        from <strong className="text-gray-800">{r.ist}</strong> is booked.
-                      </p>
-                      {r.local && <p className="text-gray-400 text-xs mb-5">{r.local}</p>}
-                    </>
-                  );
-                })()}
+                <p className="text-gray-500 text-sm mb-1">
+                  at <strong className="text-gray-800">{fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)} (15 mins duration)</strong> is booked.
+                </p>
                 <p className="text-xs text-gray-400 mb-8 max-w-xs mx-auto leading-relaxed">
                   Dr. Murali Krishna will review your documents before the session. Keep your dashboard open on the day — you'll hear a chime when he's ready.
                 </p>
-                <button onClick={() => { onSuccess(); onClose(); }}
-                  className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-colors text-base">
+                <button onClick={() => { handleClose(); onSuccess(); }}
+                  className="w-[200px] bg-[#D95B2F] text-white font-bold py-4 rounded-2xl hover:bg-[#D95B2F]/90 transition-colors text-base">
                   Back to Dashboard
                 </button>
               </motion.div>
@@ -854,6 +1035,152 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
           </AnimatePresence>
         </div>
+
+        {/* Fixed Bottom Action Bar */}
+        {wizType !== null && !isDone && (
+          <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-20">
+            {/* OFFLINE FOOTER */}
+            {wizType === "offline" && (
+              <>
+                {offlineStep === "date" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setWizType(null)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedDate}
+                      onClick={() => { setSelectedSlot(null); setOfflineStep("slots"); }}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 text-sm shadow-sm"
+                    >
+                      Next <ArrowRight size={15} />
+                    </button>
+                  </>
+                )}
+                {offlineStep === "slots" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOfflineStep("date")}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        !selectedSlot ||
+                        !selectedDate ||
+                        (selectedSlot === "9 AM - 1 PM" && (isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0)) ||
+                        (selectedSlot === "4 PM - 7 PM" && (isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0))
+                      }
+                      onClick={() => setOfflineStep("confirm")}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-sm"
+                    >
+                      Next <ArrowRight size={15} />
+                    </button>
+                  </>
+                )}
+                {offlineStep === "confirm" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOfflineStep("slots")}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitOffline}
+                      disabled={submitting}
+                      className="flex items-center gap-2 px-6 py-3 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-lg"
+                    >
+                      {submitting ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm"}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ONLINE FOOTER */}
+            {wizType === "online" && (
+              <>
+                {onlineStep === "slots" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setWizType(null)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!onlineSlot || onlineSlot.isBooked || isSlotExceeded(onlineSlot.date, onlineSlot.startTime) || !!onlineSlot.isExceeded}
+                      onClick={() => setOnlineStep("docs")}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                    >
+                      Next <ArrowRight size={15} />
+                    </button>
+                  </>
+                )}
+                {onlineStep === "docs" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOnlineStep("slots")}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={uploading}
+                        onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                        className="px-4 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        Skip
+                      </button>
+                      <button
+                        type="button"
+                        disabled={uploading}
+                        onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-md"
+                      >
+                        Next <ArrowRight size={15} />
+                      </button>
+                    </div>
+                  </>
+                )}
+                {onlineStep === "confirm" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOnlineStep("docs")}
+                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <ArrowLeft size={15} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitOnline}
+                      disabled={booking}
+                      className="flex items-center gap-2 px-6 py-3 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-lg"
+                    >
+                      {booking ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm"}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </motion.div>
     </div>
   );

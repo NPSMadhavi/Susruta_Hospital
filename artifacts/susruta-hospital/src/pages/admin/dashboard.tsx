@@ -3,6 +3,7 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { useListAppointments } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Users, Calendar as CalendarIcon, Clock, Video, ArrowRight } from "lucide-react";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -10,12 +11,28 @@ export default function AdminDashboard() {
   const { data: appointments = [], isLoading } = useListAppointments();
   const [onlineAppts, setOnlineAppts] = useState<any[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(true);
+  const [recentPage, setRecentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  const [onlineError, setOnlineError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setOnlineAppts(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .then(async r => {
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.message || `HTTP ${r.status}`);
+        }
+        return r.json();
+      })
+      .then(data => {
+        setOnlineAppts(Array.isArray(data) ? data : []);
+        setOnlineError(null);
+      })
+      .catch(err => {
+        console.error("[AdminDashboard] Error fetching online appointments:", err.message);
+        setOnlineError(err.message || "Failed to load online appointments.");
+      })
       .finally(() => setOnlineLoading(false));
   }, []);
 
@@ -60,6 +77,8 @@ export default function AdminDashboard() {
   const allRequests = [...normalizedOffline, ...normalizedOnline].sort((a, b) => 
     b.sortKey.localeCompare(a.sortKey)
   );
+
+  const paginatedRequests = allRequests.slice((recentPage - 1) * PAGE_SIZE, recentPage * PAGE_SIZE);
 
   return (
     <AdminLayout>
@@ -133,16 +152,16 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {allRequests.slice(0, 10).map(apt => (
+                {paginatedRequests.map(apt => (
                   <tr key={apt.id} className="hover:bg-muted/30">
                     <td className="p-4 font-medium text-foreground">{apt.patientName}</td>
                     <td className="p-4">{apt.dateTime}</td>
                     <td className="p-4">{apt.phone}</td>
                     <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold ${
                         apt.type === 'Online'
-                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          ?'text-[#1B3227]'
+                          :'text-[#1B3227]'
                       }`}>
                         {apt.type}
                       </span>
@@ -167,6 +186,15 @@ export default function AdminDashboard() {
                 )}
               </tbody>
             </table>
+          )}
+          {!isLoading && (
+            <AdminPagination
+              currentPage={recentPage}
+              totalItems={allRequests.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setRecentPage}
+              itemLabel="requests"
+            />
           )}
         </div>
       </div>

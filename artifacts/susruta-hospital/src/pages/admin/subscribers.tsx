@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminToastContainer } from "@/components/admin/AdminToast";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import {
   Users, Upload, Download, Trash2, RefreshCw, AlertCircle,
@@ -443,6 +444,8 @@ export default function AdminSubscribers() {
   const [importError, setImportError] = useState("");
   const [showCompose, setShowCompose] = useState(false);
   const [newSubFlash, setNewSubFlash] = useState<number | null>(null);
+  const [confirmDeleteSub, setConfirmDeleteSub] = useState<Sub | null>(null);
+  const [deletingSubId, setDeletingSubId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
 
@@ -484,10 +487,18 @@ export default function AdminSubscribers() {
     return () => { es?.close(); clearTimeout(pollTimer); };
   }, []); // eslint-disable-line
 
-  async function deleteSub(id: number, name: string) {
-    if (!confirm(`Remove ${name} from subscribers?`)) return;
-    await apiFetch(`/subscribers/${id}`, { method: "DELETE" });
-    setSubs((prev) => prev.filter((s) => s.id !== id));
+  async function deleteSub(id: number) {
+    setDeletingSubId(id);
+    try {
+      await apiFetch(`/subscribers/${id}`, { method: "DELETE" });
+      setSubs((prev) => prev.filter((s) => s.id !== id));
+      notify("Removed", "Subscriber has been removed.");
+      setConfirmDeleteSub(null);
+    } catch {
+      notify("Error", "Failed to remove subscriber.");
+    } finally {
+      setDeletingSubId(null);
+    }
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -556,7 +567,7 @@ export default function AdminSubscribers() {
             </>
           )}
           <button onClick={() => fileRef.current?.click()} disabled={importing}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1a3d2b] text-white text-sm font-bold hover:bg-[#1a3d2b]/90 disabled:opacity-60">
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#D95B2F] text-white text-sm font-bold disabled:opacity-60">
             {importing ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing…</> : <><Upload size={14} /> Import Excel</>}
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
@@ -643,7 +654,12 @@ export default function AdminSubscribers() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      <button onClick={() => deleteSub(s.id, s.name)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteSub(s)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Remove subscriber"
+                      >
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -654,6 +670,28 @@ export default function AdminSubscribers() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        isOpen={!!confirmDeleteSub}
+        title="Remove Subscriber?"
+        description={
+          confirmDeleteSub ? (
+            <p>
+              Are you sure you want to remove <strong className="text-gray-900">{confirmDeleteSub.name}</strong> ({confirmDeleteSub.email}) from the subscribers list?
+            </p>
+          ) : null
+        }
+        warningText="They will no longer receive hospital newsletter broadcasts."
+        confirmLabel="Remove"
+        isLoading={deletingSubId !== null}
+        onConfirm={() => {
+          if (confirmDeleteSub) deleteSub(confirmDeleteSub.id);
+        }}
+        onClose={() => {
+          if (!deletingSubId) setConfirmDeleteSub(null);
+        }}
+      />
+
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
     </AdminLayout>
   );

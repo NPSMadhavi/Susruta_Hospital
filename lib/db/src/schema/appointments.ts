@@ -18,6 +18,7 @@ export const appointmentsTable = pgTable("appointments", {
   arrivedAt: timestamp("arrived_at"),
   paymentStatus: varchar("payment_status", { length: 20 }).notNull().default("unpaid"),
   paymentMode: varchar("payment_mode", { length: 10 }),
+  paymentThrough: varchar("payment_through", { length: 20 }),
   // Reschedule flow
   rescheduleDates: text("reschedule_dates"),
   rescheduleChosen: varchar("reschedule_chosen", { length: 10 }),

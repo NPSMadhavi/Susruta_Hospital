@@ -13,6 +13,7 @@ import {
   notifyPatientDirectCallStarted,
 } from "../lib/directCallSse";
 import { broadcastDirectCallUpdated } from "../lib/appointmentSse";
+import { notifyAdminDirectCallUpdated } from "./appointments";
 
 const router = Router();
 
@@ -60,6 +61,7 @@ export async function endDirectCall(id: number) {
   });
   notifyPatientDirectCallEnded(row.patient.id, id);
   broadcastDirectCallUpdated({ id, status: "ended" });
+  notifyAdminDirectCallUpdated({ id, status: "ended" });
   return true;
 }
 
@@ -117,6 +119,7 @@ router.post("/admin", requireAdmin, async (req, res) => {
     roomName,
     patient: serialized.patient,
   });
+  notifyAdminDirectCallUpdated({ id: call.id, status: "active" });
   res.status(201).json(serialized);
 });
 
@@ -165,7 +168,18 @@ router.post("/:id/patient-joined", requirePatient, async (req: any, res) => {
   if (!call || call.status !== "active") { res.status(404).json({ error: "not_found" }); return; }
   await db.update(directCallsTable).set({ patientJoinedAt: new Date() })
     .where(eq(directCallsTable.id, id));
+  notifyAdminDirectCallUpdated({ id, status: "active", patientJoined: true });
   res.json({ ok: true });
+});
+
+router.post("/:id/patient-leave", requirePatient, async (req: any, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const [call] = await db.select().from(directCallsTable)
+    .where(and(eq(directCallsTable.id, id), eq(directCallsTable.patientId, req.patient.id)));
+  if (!call) { res.status(404).json({ error: "not_found" }); return; }
+  const ended = await endDirectCall(id);
+  res.json({ ok: true, alreadyEnded: ended === false });
 });
 
 // The patient SSE connection is authenticated by the existing patient

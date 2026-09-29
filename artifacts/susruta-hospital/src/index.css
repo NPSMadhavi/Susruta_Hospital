@@ -139,6 +139,25 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .admin-panel td,
 .admin-panel th,
 .admin-panel .font-serif,
-.admin-panel .font-dm-serif-display {
-  font-family: 'DM Sans';
+.admin-panel .font-dm-serif-display,
+.doctor-portal,
+.doctor-portal *,
+.doctor-portal h1,
+.doctor-portal h2,
+.doctor-portal h3,
+.doctor-portal h4,
+.doctor-portal h5,
+.doctor-portal h6,
+.doctor-portal p,
+.doctor-portal span,
+.doctor-portal button,
+.doctor-portal input,
+.doctor-portal select,
+.doctor-portal textarea,
+.doctor-portal table,
+.doctor-portal td,
+.doctor-portal th,
+.doctor-portal .font-serif,
+.doctor-portal .font-dm-serif-display {
+  font-family: 'DM Sans', sans-serif !important;
 }

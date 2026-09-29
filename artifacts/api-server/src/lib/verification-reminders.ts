@@ -1,5 +1,5 @@
 import { db, loginTokensTable, patientsTable } from "@workspace/db";
-import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, lte, or, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendMagicLink } from "./email";
 import { normalizeVerificationEmail } from "./verification";
@@ -40,6 +40,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
       })
       .from(patientsTable)
       .where(and(
+        isNotNull(patientsTable.email),
         eq(patientsTable.emailVerified, false),
         lte(patientsTable.createdAt, initialCutoff),
         or(
@@ -59,6 +60,8 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
       .limit(BATCH_SIZE);
 
     for (const candidate of candidates) {
+      if (!candidate.email) continue;
+      const candidateEmail = candidate.email;
       const claimId = randomBytes(16).toString("hex");
       const [claimed] = await db
         .update(patientsTable)
@@ -70,7 +73,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
         .where(and(
           eq(patientsTable.id, candidate.id),
           eq(patientsTable.emailVerified, false),
-          sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
+          sql`lower(${patientsTable.email}) = ${candidateEmail.toLowerCase()}`,
           lte(patientsTable.createdAt, initialCutoff),
           or(
             isNull(patientsTable.verificationReminderSentAt),
@@ -100,7 +103,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
-            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
+            sql`lower(${patientsTable.email}) = ${candidateEmail.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
           ));
 
@@ -115,7 +118,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           token,
           patientId: candidate.id,
           nextUrl: "/portal/dashboard",
-          verificationEmail: normalizeVerificationEmail(candidate.email),
+          verificationEmail: normalizeVerificationEmail(candidateEmail),
           expiresAt,
           used: false,
         }).returning({ id: loginTokensTable.id });
@@ -130,7 +133,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
-            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
+            sql`lower(${patientsTable.email}) = ${candidateEmail.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
           ))
           .returning({ id: patientsTable.id });
@@ -148,7 +151,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
-            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
+            sql`lower(${patientsTable.email}) = ${candidateEmail.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
             eq(patientsTable.verificationReminderPendingAt, now),
           ));
@@ -165,7 +168,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
           .where(and(
             eq(patientsTable.id, candidate.id),
             eq(patientsTable.emailVerified, false),
-            sql`lower(${patientsTable.email}) = ${candidate.email.toLowerCase()}`,
+            sql`lower(${patientsTable.email}) = ${candidateEmail.toLowerCase()}`,
             eq(patientsTable.verificationReminderClaimId, claimId),
             eq(patientsTable.verificationReminderPendingAt, now),
             eq(patientsTable.verificationReminderPendingTokenId, verificationTokenId),
@@ -181,7 +184,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
         const verifyUrl = `${getVerificationFrontendUrl()}/api/patient/auth/verify?token=${token}`;
         smtpStarted = true;
         const sent = await sendMagicLink({
-          to: candidate.email,
+          to: candidateEmail,
           name: candidate.name,
           verifyUrl,
           isNewAccount: false,

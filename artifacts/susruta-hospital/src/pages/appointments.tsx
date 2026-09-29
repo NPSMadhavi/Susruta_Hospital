@@ -147,6 +147,7 @@ export default function Appointments() {
   // Pre-fill details for logged-in patient
   useEffect(() => {
     patientApi.me().then((p: any) => {
+      if (!p || !p.id) return;
       setPatient(p);
       setFormData(f => ({
         ...f,

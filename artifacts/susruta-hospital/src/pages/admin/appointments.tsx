@@ -7,12 +7,16 @@ import {
   CheckCircle2, XCircle, Clock, Banknote, Smartphone,
   Calendar, RefreshCw, Bell, BellOff, UserCheck, ChevronDown, ChevronUp, X,
   Video, Loader2, Camera, Upload, ImageIcon, Play, Square,
-  AlertCircle, FileText, MapPin, User, Mic, Eye, RotateCcw, Trash2, Users
+  AlertCircle, FileText, MapPin, User, Mic, Eye, RotateCcw, Trash2, Users, Printer
 } from "lucide-react";
+import QRCode from "qrcode";
+import logoImg from "@assets/logo_1773840200056.png";
 
 import { AdminVideoRoom } from "@/components/VideoCall";
 import { cn } from "@/lib/utils";
 import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { playAppointmentChime } from "@/lib/sound";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -48,7 +52,7 @@ function GuestCountBadge({ apptId }: { apptId: number }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let alive = true;
-    async function poll() {
+    async function fetchQueue() {
       try {
         const r = await fetch(`${BASE}/api/guest/status/${apptId}`);
         if (!r.ok || !alive) return;
@@ -56,9 +60,8 @@ function GuestCountBadge({ apptId }: { apptId: number }) {
         if (alive) setCount(waitingCount ?? 0);
       } catch {}
     }
-    poll();
-    const iv = setInterval(poll, 15000);
-    return () => { alive = false; clearInterval(iv); };
+    fetchQueue();
+    return () => { alive = false; };
   }, [apptId]);
   if (count === 0) return null;
   return (
@@ -84,19 +87,7 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
 
 // ── Audio chime ─────────────────────────────────────────────────
 function playChime() {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-      const osc = ctx.createOscillator(); const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sine"; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.22);
-      gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + i * 0.22 + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 1.2);
-      osc.start(ctx.currentTime + i * 0.22);
-      osc.stop(ctx.currentTime + i * 0.22 + 1.2);
-    });
-  } catch {}
+  playAppointmentChime();
 }
 
 // ── Types ────────────────────────────────────────────────────────
@@ -156,6 +147,238 @@ const ONLINE_STATUS_COLORS: Record<string, string> = {
 };
 
 // ── Modals (In-Person) ───────────────────────────────────────────
+function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => void }) {
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+  const token = (appt as any).token || `T${String(appt.id).padStart(3, "0")}`;
+  const patientId = (appt as any).patientCode || "—";
+  const amount = (appt as any).amount || 200;
+
+  useEffect(() => {
+    const qrData = JSON.stringify({
+      hospital: "Susruta Hospital",
+      address: "119, Ramulavari North Mada Street, Tirupati - 517 507",
+      patientId,
+      token,
+      patient: appt.patientName,
+      phone: appt.patientPhone,
+      date: appt.date,
+      slot: appt.timeSlot,
+      amount: `₹${amount}`,
+      paymentMode: appt.paymentMode?.toUpperCase() || "CASH",
+      status: "PAID",
+    });
+
+    QRCode.toDataURL(qrData, {
+      width: 140,
+      margin: 1,
+      color: {
+        dark: "#1E293B",
+        light: "#FFFFFF",
+      },
+    })
+      .then((url) => setQrCodeUrl(url))
+      .catch((err) => console.error("QR Code error:", err));
+  }, [appt, token, amount]);
+
+  function maskPhone(p?: string) {
+    if (!p) return "N/A";
+    const clean = p.replace(/\D/g, "");
+    if (clean.length === 10) {
+      return `${clean.slice(0, 2)}******${clean.slice(8)}`;
+    }
+    return p;
+  }
+
+  function formatShortDate(d?: string) {
+    if (!d) return "";
+    try {
+      return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return d;
+    }
+  }
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4">
+      <div className="bg-white rounded-2xl border border-[#EDEFEB] shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#EDEFEB] shrink-0 bg-white">
+          <h3 className="font-bold text-sm text-[#1E293B] tracking-wide uppercase">
+            PRINT RECEIPT
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#94A3B8] hover:text-[#334155] p-1 rounded-lg transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Receipt Body with Scrolling */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          <div id="printable-receipt" className="border border-[#EDEFEB] rounded-2xl p-5 sm:p-6 bg-white shadow-xs text-center">
+            {/* Hospital Logo */}
+            <div className="flex justify-center mb-2.5">
+              <img
+                src={logoImg}
+                alt="Susruta Hospital"
+                className="h-10 w-auto max-w-[210px] object-contain mx-auto"
+              />
+            </div>
+            <p className="text-xs text-[#64748B] mt-1 leading-relaxed text-center">
+              119, Ramulavari North Mada Street, Tirupati – 517 507
+            </p>
+
+            {/* Dashed divider */}
+            <div className="border-t border-dashed border-[#CBD5E1] my-4" />
+
+            <p className="text-[11px] font-bold text-[#475569] tracking-wider text-center">
+              Offline Appointment Receipt
+            </p>
+            <p className="text-[10px] font-bold text-[#94A3B8] tracking-widest mt-1 text-center">
+              Token Number
+            </p>
+            <h1 className="text-4xl font-extrabold text-[#D95B2F] tracking-tight mt-1 mb-1 text-center">
+              {token}
+            </h1>
+
+            {/* Dashed divider */}
+            <div className="border-t border-dashed border-[#CBD5E1] my-4" />
+
+            {/* Key-Value Details */}
+            <div className="receipt-info-table space-y-2.5 my-4 text-xs">
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Patient ID
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] font-mono text-right text-xs break-all pl-2">
+                  {patientId}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Patient Name
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2">
+                  {appt.patientName}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Phone Number
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2 font-mono">
+                  {maskPhone(appt.patientPhone)}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Date
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
+                  {formatShortDate(appt.date)}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Slot
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
+                  {appt.timeSlot}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Amount
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
+                  ₹{amount}
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
+                  Payment
+                </span>
+                <span className="receipt-value font-bold text-emerald-700 text-right text-xs pl-2">
+                  Paid ({appt.paymentMode ? appt.paymentMode.toUpperCase() : "CASH"})
+                </span>
+              </div>
+            </div>
+
+            {/* Dashed divider */}
+            <div className="border-t border-dashed border-[#CBD5E1] my-4" />
+
+            {/* QR Code */}
+            <div className="py-1 text-center">
+              {qrCodeUrl ? (
+                <img
+                  src={qrCodeUrl}
+                  alt={`Token ${token} QR Code`}
+                  className="w-32 h-32 mx-auto rounded-lg"
+                />
+              ) : (
+                <div className="w-32 h-32 mx-auto bg-slate-100 rounded-lg flex items-center justify-center text-xs text-slate-400">
+                  Generating QR...
+                </div>
+              )}
+
+              <p className="font-bold text-xs text-[#1E293B] tracking-wider mt-2 text-center">
+                TOKEN: {token}
+              </p>
+              <p className="text-[11px] text-[#64748B] mt-1 max-w-[240px] mx-auto leading-tight text-center">
+                Please keep this receipt and wait for your token to be called.
+              </p>
+            </div>
+
+            {/* Dashed divider */}
+            <div className="border-t border-dashed border-[#CBD5E1] my-4" />
+
+            <p className="text-xs text-[#94A3B8] text-center">
+              Thank you for choosing Susruta Hospital.
+            </p>
+          </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="flex items-center justify-end gap-3 px-6 py-3.5 border-t border-[#EDEFEB] bg-slate-50/70 shrink-0">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-sm transition-all cursor-pointer"
+          >
+            <Printer size={15} />
+            Print Receipt
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl border border-[#CBD5E1] hover:bg-slate-100 text-[#475569] text-xs font-bold tracking-wide transition-all cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PayModal({ appt, onClose, onPaid }: { appt: Appt; onClose: () => void; onPaid: (a: Appt) => void }) {
   const [mode, setMode] = useState<"cash" | "upi">("cash");
   const [loading, setLoading] = useState(false);
@@ -249,6 +472,115 @@ function FollowUpModal({ appt, onClose, onSet }: { appt: Appt; onClose: () => vo
           <button onClick={save} disabled={!date || loading}
             className="flex-1 py-3 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-60">
             {loading ? "..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OfflineDeleteConfirmModal({
+  appt,
+  onClose,
+  onConfirm,
+}: {
+  appt: Appt;
+  onClose: () => void;
+  onConfirm: (id: number) => void;
+}) {
+  const patientId = (appt as any).patientCode || "—";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl border border-border shadow-2xl w-full max-w-sm overflow-hidden p-6">
+        <div className="flex items-center gap-3 text-red-600 mb-3">
+          <div className="p-3 bg-red-100 rounded-2xl">
+            <Trash2 size={22} />
+          </div>
+          <div>
+            <h3 className="font-bold text-base text-foreground">Delete Appointment</h3>
+            <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed my-4">
+          Are you sure you want to permanently delete the offline appointment for{" "}
+          <span className="font-bold text-foreground">{appt.patientName}</span> ({patientId})?
+        </p>
+
+        <div className="flex gap-2 justify-end mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onConfirm(appt.id);
+              onClose();
+            }}
+            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OfflineCancelConfirmModal({
+  appt,
+  onClose,
+  onConfirm,
+}: {
+  appt: Appt;
+  onClose: () => void;
+  onConfirm: (id: number) => void;
+}) {
+  const isPending = appt.status === "pending";
+  const actionName = isPending ? "Decline" : "Cancel";
+  const patientId = (appt as any).patientCode || "—";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl border border-border shadow-2xl w-full max-w-sm overflow-hidden p-6">
+        <div className="flex items-center gap-3 text-red-600 mb-3">
+          <div className="p-3 bg-red-100 rounded-2xl">
+            <XCircle size={22} />
+          </div>
+          <div>
+            <h3 className="font-bold text-base text-foreground">{actionName} Appointment</h3>
+            <p className="text-xs text-muted-foreground">
+              {isPending ? "The appointment request will be declined." : "The appointment will be marked as cancelled."}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed my-4">
+          Are you sure you want to {actionName.toLowerCase()} the appointment for{" "}
+          <span className="font-bold text-foreground">{appt.patientName}</span> ({patientId})?
+        </p>
+
+        <div className="flex gap-2 justify-end mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+          >
+            Keep Appointment
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onConfirm(appt.id);
+              onClose();
+            }}
+            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
+          >
+            {actionName} Appointment
           </button>
         </div>
       </div>
@@ -417,303 +749,561 @@ function AdminCallOverlay({ apptId, patientName, onLeave }: { apptId: number; pa
   );
 }
 
-function OnlineApptCard({ appt, permissions, onJoinToggle, onRenotify, onPrescriptionUploaded, onJoinCall, onRequestPermissions, onReset, onMarkDone, onCancel, onDelete }: {
+function PrescriptionModal({
+  appt,
+  onClose,
+  onUploaded,
+}: {
   appt: OnlineAppt;
-  permissions: ParticipantPerm[];
-  onJoinToggle: (id: number, enable: boolean) => Promise<void>;
-  onRenotify: (id: number) => Promise<void>;
-  onPrescriptionUploaded: (id: number, rx: Prescription) => void;
-  onJoinCall: (id: number, patientName: string) => void;
-  onRequestPermissions: (id: number) => Promise<void>;
-  onReset: (id: number) => Promise<void>;
-  onMarkDone: (id: number) => Promise<void>;
-  onCancel: (id: number) => Promise<void>;
-  onDelete: (id: number) => Promise<void>;
+  onClose: () => void;
+  onUploaded: (id: number, rx: Prescription) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [toggling, setToggling] = useState(false);
-  const [renotifying, setRenotifying] = useState(false);
-  const [requestingPerm, setRequestingPerm] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [markingDone, setMarkingDone] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [permSent, setPermSent] = useState(false);
-  const sc = ONLINE_STATUS_COLORS[appt.status] ?? ONLINE_STATUS_COLORS.confirmed;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl border border-border shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+          <div>
+            <h3 className="font-bold text-base text-foreground">Upload / View Prescription</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Patient: <span className="font-semibold text-foreground">{appt.patient.name}</span> ({appt.patient.patientCode || `ID #${appt.patient.id}`})
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl border border-border hover:bg-muted text-muted-foreground transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-5 max-h-[80vh] overflow-y-auto">
+          <PrescriptionUpload
+            apptId={appt.id}
+            prescription={appt.prescription}
+            onUploaded={(rx) => {
+              onUploaded(appt.id, rx);
+              onClose();
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  async function toggleJoin() {
-    setToggling(true);
-    await onJoinToggle(appt.id, !appt.joinEnabled);
-    setToggling(false);
-  }
+function DeleteConfirmModal({
+  appt,
+  onClose,
+  onConfirm,
+}: {
+  appt: OnlineAppt;
+  onClose: () => void;
+  onConfirm: (id: number) => void;
+}) {
+  const code = appt.patient.patientCode || `A00${appt.patient.id}`;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl border border-border shadow-2xl w-full max-w-sm overflow-hidden p-6">
+        <div className="flex items-center gap-3 text-red-600 mb-3">
+          <div className="p-3 bg-red-100 rounded-2xl">
+            <Trash2 size={22} />
+          </div>
+          <div>
+            <h3 className="font-bold text-base text-foreground">Delete Appointment</h3>
+            <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+          </div>
+        </div>
 
-  async function handleRenotify() {
-    setRenotifying(true);
-    await onRenotify(appt.id);
-    setRenotifying(false);
-  }
+        <p className="text-xs text-muted-foreground leading-relaxed my-4">
+          Are you sure you want to delete the appointment for{" "}
+          <span className="font-bold text-foreground">{appt.patient.name}</span> ({code})?
+        </p>
 
-  async function handleRequestPermissions() {
-    setRequestingPerm(true);
-    setPermSent(false);
-    await onRequestPermissions(appt.id);
-    setRequestingPerm(false);
-    setPermSent(true);
-    setTimeout(() => setPermSent(false), 4000);
-  }
+        <div className="flex gap-2 justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              onConfirm(appt.id);
+              onClose();
+            }}
+            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shadow-sm"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  async function handleCancel() {
-    setCancelling(true);
-    await onCancel(appt.id);
-    setCancelling(false);
-    setConfirmCancel(false);
-  }
-
-  async function handleReset() {
-    setResetting(true);
-    await onReset(appt.id);
-    setResetting(false);
-  }
-
-  async function handleMarkDone() {
-    setMarkingDone(true);
-    await onMarkDone(appt.id);
-    setMarkingDone(false);
-  }
-
-  async function handleDelete() {
-    setDeleting(true);
-    await onDelete(appt.id);
-    setDeleting(false);
-    setConfirmDelete(false);
-  }
+function OnlineAppointmentsTable({
+  appts,
+  onJoinToggle,
+  onRenotify,
+  onPrescriptionClick,
+  onCancel,
+  onDelete,
+  onResetToPending,
+  onMarkDone,
+}: {
+  appts: OnlineAppt[];
+  onJoinToggle: (id: number, enable: boolean) => void;
+  onRenotify: (id: number) => void;
+  onPrescriptionClick: (appt: OnlineAppt) => void;
+  onCancel: (id: number) => void;
+  onDelete: (id: number) => void;
+  onResetToPending: (id: number) => void;
+  onMarkDone: (id: number) => void;
+}) {
+  const [deletingAppt, setDeletingAppt] = useState<OnlineAppt | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <div className={cn(
-      "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
-      appt.joinEnabled && appt.patientJoinedAt ? "border-emerald-500 ring-2 ring-emerald-100"
-        : appt.joinEnabled ? "border-amber-400 ring-2 ring-amber-100"
-        : "border-border"
-    )}>
-      <div className="px-4 pt-4 pb-3">
-        <div className="flex items-start gap-3">
-          {/* Patient ID */}
-          <div className={cn(
-            "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 border-2",
-            appt.patient.patientCode ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/20" : "bg-blue-50 border-blue-100"
-          )}>
-            {appt.patient.patientCode
-              ? <span className="font-black text-[#1a3d2b] text-sm font-mono">{appt.patient.patientCode}</span>
-              : <User size={20} className="text-muted-foreground" />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-base">{appt.patient.name}</p>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {appt.joinEnabled && appt.patientJoinedAt
-                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">🟢 Live</span>
-                : appt.joinEnabled
-                  ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">⏳ Not Joined Yet</span>
-                  : <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", sc)}>{appt.status}</span>
-              }
-              <GuestCountBadge apptId={appt.id} />
-            </div>
-            <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><Calendar size={11} className="text-[#1a3d2b]" />{fmtFull(appt.slot.date)}</span>
-              <span className="flex items-center gap-1"><Clock size={11} />{fmtTime(appt.slot.startTime)} – {fmtTime(appt.slot.endTime)}</span>
-              {appt.patient.phone && <span>{appt.patient.phone}</span>}
-            </div>
-          </div>
-          {/* Action buttons */}
-          <div className="flex flex-col gap-2 shrink-0">
-            {appt.joinEnabled && (
-              <button
-                onClick={e => { e.stopPropagation(); handleRenotify(); }}
-                disabled={renotifying}
-                title="Re-send chime + voice alert to patient"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition-all">
-                {renotifying ? <Loader2 size={11} className="animate-spin" /> : <Bell size={11} />}
-                Re-notify
-              </button>
-            )}
-            <button
-              onClick={e => { e.stopPropagation(); toggleJoin(); }}
-              disabled={toggling}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
-                appt.joinEnabled
-                  ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-              )}>
-              {toggling ? <Loader2 size={12} className="animate-spin" /> : appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
-              {appt.joinEnabled ? "End Session" : "Enable Join"}
-            </button>
-          </div>
-        </div>
-
-        {appt.reason && (
-          <p className="mt-3 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
-            <span className="font-semibold text-foreground">Reason: </span>{appt.reason}
-          </p>
-        )}
-        {appt.documents.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {appt.documents.map((d, i) => (
-              <a key={i} href={`${BASE}/api/storage${d.objectPath}`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] bg-blue-50 border border-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-100 transition-colors">
-                <FileText size={10} /> {d.name}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Live session controls — only shown during active calls */}
-      {appt.joinEnabled && (
-        <div className="mx-4 mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-3">
-          <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Session Controls
-          </p>
-          <div className="flex flex-wrap gap-2 mb-3">
-            <button
-              onClick={() => onJoinCall(appt.id, appt.patient.name)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#1a3d2b] text-white hover:bg-[#15322a] transition-colors shadow-sm"
-            >
-              <Eye size={12} /> Monitor Call
-            </button>
-          </div>
-
-          {/* Device permission status grid */}
-          <div className="rounded-xl border border-emerald-200 bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-emerald-100 bg-emerald-50/40">
-              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Device Status</span>
-              <button
-                onClick={handleRequestPermissions}
-                disabled={requestingPerm}
-                className="text-[10px] text-emerald-600 hover:text-emerald-900 underline disabled:opacity-50 transition-colors"
-              >
-                {requestingPerm ? "Sending…" : permSent ? "✓ Sent" : "Re-check"}
-              </button>
-            </div>
-            {permissions.length === 0 ? (
-              <p className="px-3 py-2.5 text-[11px] text-gray-400 italic">
-                No status reported yet — click Re-check to prompt the patient
-              </p>
-            ) : (
-              permissions.map((p, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 last:border-0">
-                  <User size={10} className="text-gray-400 shrink-0" />
-                  <span className="text-[11px] font-medium text-gray-800 flex-1 truncate min-w-0">
-                    {p.name}{" "}
-                    <span className="text-gray-400 font-normal text-[10px]">({p.role})</span>
-                  </span>
-                  <PermBadge icon="cam" granted={p.camera} />
-                  <PermBadge icon="mic" granted={p.mic} />
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+      {deletingAppt && (
+        <DeleteConfirmModal
+          appt={deletingAppt}
+          onClose={() => setDeletingAppt(null)}
+          onConfirm={onDelete}
+        />
       )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold tracking-wider border-b border-border">
+            <tr>
+              <th className="py-3.5 px-4">Patient ID</th>
+              <th className="py-3.5 px-4">Name</th>
+              <th className="py-3.5 px-4">Date & Time</th>
+              {/* <th className="py-3.5 px-4">Type</th> */}
+              <th className="py-3.5 px-4">Phone</th>
+              <th className="py-3.5 px-4">Status</th>
+              <th className="py-3.5 px-4 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border text-xs">
+            {appts.map((appt) => {
+              const code = appt.patient.patientCode || `A00${appt.patient.id}`;
+              const slotTime = appt.slot ? `${fmtTime(appt.slot.startTime)} – ${fmtTime(appt.slot.endTime)}` : "";
+              const dateStr = appt.slot?.date ? `${fmtFull(appt.slot.date)} ${slotTime}` : "";
+              const hasRx = !!appt.prescription?.photoObjectPath;
+              const isExpanded = expanded === appt.id;
 
-      {/* Admin actions — Reset to Pending / Mark as Done / Cancel / Delete */}
-      <div className="mx-4 mb-3 flex flex-wrap items-center gap-2">
-        {["completed", "cancelled"].includes(appt.status) && !appt.joinEnabled && (
-          <button
-            onClick={handleReset}
-            disabled={resetting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
-          >
-            {resetting ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-            Reset to Pending
-          </button>
-        )}
-        {["pending", "confirmed"].includes(appt.status) && !appt.joinEnabled && (
-          <button
-            onClick={handleMarkDone}
-            disabled={markingDone}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-          >
-            {markingDone ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
-            Mark as Done
-          </button>
-        )}
-        {["pending", "confirmed"].includes(appt.status) && !appt.joinEnabled && !confirmCancel && (
-          <button
-            onClick={() => setConfirmCancel(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors"
-          >
-            <XCircle size={11} /> Cancel Appointment
-          </button>
-        )}
-        {confirmCancel && (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-orange-700 font-semibold">Cancel this appointment?</span>
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-orange-600 text-white hover:bg-orange-700 transition-colors"
-            >
-              {cancelling ? <Loader2 size={10} className="animate-spin" /> : null}
-              Yes, Cancel
-            </button>
-            <button
-              onClick={() => setConfirmCancel(false)}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-            >
-              Keep
-            </button>
-          </div>
-        )}
-        {!confirmDelete ? (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors ml-auto"
-          >
-            <Trash2 size={11} /> Delete
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-[11px] text-red-600 font-semibold">Permanently delete this appointment?</span>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-red-600 text-white hover:bg-red-700 transition-colors"
-            >
-              {deleting ? <Loader2 size={10} className="animate-spin" /> : null}
-              Yes, Delete
-            </button>
-            <button
-              onClick={() => setConfirmDelete(false)}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
+              return (
+                <React.Fragment key={appt.id}>
+                  <tr className="hover:bg-muted/20 transition-colors">
+                    {/* 1. Patient ID */}
+                    <td className="py-3.5 px-4 font-mono font-bold text-foreground">
+                      <span className="inline-block bg-[#D95B2F1A] text-[#D95B2F] border border-[#1a3d2b]/15 px-2.5 py-1 rounded-lg text-xs">
+                        {code}
+                      </span>
+                    </td>
+
+                    {/* 2. Name */}
+                    <td className="py-3.5 px-4 font-semibold text-foreground">
+                      <div className="text-sm font-bold text-foreground">{appt.patient.name}</div>
+                    </td>
+
+                    {/* 3. Date & Time */}
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <Calendar size={12} className="text-[#1a3d2b]" />
+                        {appt.slot?.date ? fmtFull(appt.slot.date) : "N/A"}
+                      </div>
+                      {slotTime && (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                          <Clock size={11} /> {slotTime}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 5. Phone */}
+                    <td className="py-3.5 px-4 text-muted-foreground font-mono whitespace-nowrap">
+                      {appt.patient.phone || "N/A"}
+                    </td>
+
+                    {/* 6. Status */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {appt.joinEnabled && appt.patientJoinedAt ? (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse">
+                          🟢 Patient Joined
+                        </span>
+                      ) : appt.joinEnabled ? (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500 text-white animate-pulse">
+                          🟢 Live Session
+                        </span>
+                      ) : (
+                        <span className={cn(
+                          "text-[10px] font-bold tracking-wide px-2.5 py-0.5 rounded-full border capitalize",
+                          ONLINE_STATUS_COLORS[appt.status] || "bg-gray-100 text-gray-600 border-gray-200"
+                        )}>
+                          {appt.status}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 7. Actions */}
+                    <td className="py-3.5 px-4 text-left whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Enable Join / End Session / Re-notify */}
+                          {appt.joinEnabled && (
+                            <button
+                              onClick={() => onRenotify(appt.id)}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition-colors inline-flex items-center gap-1"
+                              title="Re-send chime + voice alert"
+                            >
+                              <Bell size={11} /> Re-notify
+                            </button>
+                          )}
+                          <button
+                            onClick={() => onJoinToggle(appt.id, !appt.joinEnabled)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm",
+                              appt.joinEnabled
+                                ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                            )}
+                          >
+                            {appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+                            {appt.joinEnabled ? "End Session" : "Enable Join"}
+                          </button>
+
+                          {/* Upload / View Prescription Popup */}
+                          <button
+                            onClick={() => onPrescriptionClick(appt)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors inline-flex items-center gap-1.5",
+                              hasRx
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                            )}
+                          >
+                            <ImageIcon size={12} />
+                            {hasRx ? "View Rx" : "Upload Rx"}
+                          </button>
+
+                          {/* Reset to Pending — only show when completed */}
+                          {appt.status === "completed" && (
+                            <button
+                              onClick={() => onResetToPending(appt.id)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors inline-flex items-center gap-1.5"
+                              title="Reset appointment to pending"
+                            >
+                              <RotateCcw size={12} />
+                              <span>Reset to Pending</span>
+                            </button>
+                          )}
+
+                          {/* Mark as Done — shown when reset to pending (status is pending) */}
+                          {appt.status === "pending" && (
+                            <button
+                              onClick={() => onMarkDone(appt.id)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1.5"
+                              title="Mark appointment as done"
+                            >
+                              <CheckCircle2 size={12} />
+                              <span>Mark as Done</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => setExpanded(isExpanded ? null : appt.id)}
+                          className="p-1.5 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 ml-auto"
+                          title={isExpanded ? "Hide Details" : "View Details"}
+                        >
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={7} className="px-6 py-4 border-b border-border space-y-2 text-xs">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          
+                          {appt.patient.email && (
+                            <div>
+                              <span className="font-semibold text-foreground">Email: </span>
+                              <span className="text-muted-foreground">{appt.patient.email}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Reason and Delete button on the line after the single divider line */}
+                        <div className="pt-3 mt-3 border-t border-border/60 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+                          <div className="text-xs text-muted-foreground flex-1 pr-4 leading-relaxed">
+                            <span className="font-semibold text-foreground">Reason: </span>
+                            <span>{appt.reason || "N/A"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingAppt(appt)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+}
 
-      {/* Prescription toggle */}
-      <button onClick={() => setOpen(v => !v)}
-        className={cn(
-          "w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold border-t border-border transition-colors",
-          open ? "bg-muted/20 text-muted-foreground" : appt.prescription?.photoObjectPath
-            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            : "bg-muted/10 text-muted-foreground hover:bg-muted/20"
-        )}>
-        <ImageIcon size={11} />
-        {open ? "Hide Prescription" : appt.prescription?.photoObjectPath ? "View / Update Prescription" : "Upload Prescription"}
-        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-      </button>
+function OfflineAppointmentsTable({
+  appts,
+  onApprove,
+  onReschedule,
+  onCancel,
+  onArrive,
+  onPay,
+  onFollowUp,
+  onPrintReceipt,
+  onDelete,
+}: {
+  appts: Appt[];
+  onApprove: (id: number) => void;
+  onReschedule: (appt: Appt) => void;
+  onCancel: (appt: Appt) => void;
+  onArrive: (id: number) => void;
+  onPay: (appt: Appt) => void;
+  onFollowUp: (appt: Appt) => void;
+  onPrintReceipt: (appt: Appt) => void;
+  onDelete: (appt: Appt) => void;
+}) {
+  const [expanded, setExpanded] = useState<number | null>(null);
 
-      {open && (
-        <div className="border-t border-border px-4 py-4">
-          <PrescriptionUpload apptId={appt.id} prescription={appt.prescription}
-            onUploaded={rx => onPrescriptionUploaded(appt.id, rx)} />
-        </div>
-      )}
+  return (
+    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold tracking-wider border-b border-border">
+            <tr>
+              <th className="py-3.5 px-4">Patient ID</th>
+              <th className="py-3.5 px-4">Token</th>
+              <th className="py-3.5 px-4">Name</th>
+              <th className="py-3.5 px-4">Date & Time</th>
+              {/* <th className="py-3.5 px-4">Type</th> */}
+              <th className="py-3.5 px-4">Phone</th>
+              <th className="py-3.5 px-4">Status</th>
+              <th className="py-3.5 px-4 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border text-xs">
+            {appts.map((appt) => {
+              const patientId = (appt as any).patientCode || "—";
+              const token = (appt as any).token || null;
+              const isExpanded = expanded === appt.id;
+              const reschedDates: string[] = appt.rescheduleDates ? JSON.parse(appt.rescheduleDates) : [];
+
+              return (
+                <React.Fragment key={appt.id}>
+                  <tr className="hover:bg-muted/20 transition-colors">
+                    {/* 1. Patient ID */}
+                    <td className="py-3.5 px-4 font-mono font-bold text-foreground">
+                      <span className="inline-block bg-[#D95B2F1A] text-[#D95B2F] border border-[#1a3d2b]/15 px-2.5 py-1 rounded-lg text-xs">
+                        {patientId}
+                      </span>
+                    </td>
+
+                    {/* 2. Token */}
+                    <td className="py-3.5 px-4 font-mono font-bold whitespace-nowrap">
+                      {token ? (
+                        <span className="inline-block bg-orange-50 text-[#D95B2F] border border-orange-200 px-2.5 py-1 rounded-lg text-xs">
+                          {token}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs italic font-normal">—</span>
+                      )}
+                    </td>
+
+                    {/* 2. Name */}
+                    <td className="py-3.5 px-4 font-semibold text-foreground">
+                      <div className="text-sm font-bold text-foreground">{appt.patientName}</div>
+                    </td>
+
+                    {/* 3. Date & Time */}
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <Calendar size={12} className="text-[#1a3d2b]" />
+                        {fmtFull(appt.date)}
+                      </div>
+                      {appt.timeSlot && (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                          <Clock size={11} /> {appt.timeSlot}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 5. Phone */}
+                    <td className="py-3.5 px-4 text-muted-foreground font-mono whitespace-nowrap">
+                      {appt.patientPhone || "N/A"}
+                    </td>
+
+                    {/* 6. Status */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <span
+                        className={cn(
+                          "text-[10px] font-bold tracking-wide px-2.5 py-0.5 rounded-full border capitalize",
+                          STATUS_COLORS[appt.status] || "bg-gray-100 text-gray-600 border-gray-200"
+                        )}
+                      >
+                        {STATUS_LABELS[appt.status] || appt.status}
+                      </span>
+                    </td>
+
+                    {/* 7. Actions */}
+                    <td className="py-3.5 px-4 text-left whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {appt.status === "pending" && (
+                            <>
+                              <button
+                                onClick={() => onApprove(appt.id)}
+                                className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                <CheckCircle2 size={12} /> Approve
+                              </button>
+                              <button
+                                onClick={() => onReschedule(appt)}
+                                className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                <RefreshCw size={12} /> Reschedule
+                              </button>
+                              <button
+                                onClick={() => onCancel(appt)}
+                                className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                <XCircle size={12} /> Cancel
+                              </button>
+                            </>
+                          )}
+                          {appt.status === "confirmed" && (
+                            <>
+                              <button
+                                onClick={() => onArrive(appt.id)}
+                                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                <UserCheck size={12} /> Arrived
+                              </button>
+                              <button
+                                onClick={() => onCancel(appt)}
+                                className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 text-xs font-medium px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {appt.status === "arrived" && appt.paymentStatus === "unpaid" && (
+                            <button
+                              onClick={() => onPay(appt)}
+                              className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                            >
+                              <Banknote size={12} /> Mark Paid
+                            </button>
+                          )}
+                          {appt.status === "completed" && (
+                            <button
+                              onClick={() => onPrintReceipt(appt)}
+                              className="flex items-center gap-1.5 bg-[#1a3d2b] hover:bg-[#15322a] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                            >
+                              <Printer size={12} /> Print Receipt
+                            </button>
+                          )}
+                          {appt.status === "reschedule_accepted" && (
+                            <button
+                              onClick={() => onApprove(appt.id)}
+                              className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                            >
+                              <CheckCircle2 size={12} /> Confirm New Date
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => setExpanded(isExpanded ? null : appt.id)}
+                          className="p-1.5 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 ml-auto"
+                          title={isExpanded ? "Hide Details" : "View Details"}
+                        >
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={8} className="px-6 py-4 border-b border-border space-y-2 text-xs">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          
+                          {appt.patientEmail && (
+                            <div>
+                              <span className="font-semibold text-foreground">Email: </span>
+                              <span className="text-muted-foreground">{appt.patientEmail}</span>
+                            </div>
+                          )}
+                          
+                          {appt.paymentStatus === "paid" ? (
+                            <div className="text-green-700">
+                              <span className="font-semibold">Payment: </span>
+                              Paid via {appt.paymentMode?.toUpperCase() || "CASH"}
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="font-semibold text-foreground">Payment: </span>
+                              <span className="text-amber-700 font-medium">Unpaid</span>
+                            </div>
+                          )}
+                          {appt.followUpDate && (
+                            <div className="text-amber-700">
+                              <span className="font-semibold">Follow-up: </span>
+                              {fmt(appt.followUpDate)} {appt.followUpConfirmed ? "✓ Patient confirmed" : "⏳ Awaiting"}
+                            </div>
+                          )}
+                          {reschedDates.length > 0 && (
+                            <div className="col-span-full">
+                              <span className="font-semibold text-foreground">Proposed dates: </span>
+                              <span className="text-muted-foreground">{reschedDates.map(fmt).join(", ")}</span>
+                              {appt.rescheduleChosen && (
+                                <span className="text-purple-700 ml-2 font-medium">→ Chose: {fmt(appt.rescheduleChosen)}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Reason and Delete button on the line after the single divider line */}
+                        <div className="pt-3 mt-3 border-t border-border/60 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+                          <div className="text-xs text-muted-foreground flex-1 pr-4 leading-relaxed">
+                            <span className="font-semibold text-foreground">Reason: </span>
+                            <span>{appt.reason || "N/A"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onDelete(appt)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -724,8 +1314,8 @@ export default function AdminAppointments() {
   const [appts, setAppts] = useState<Appt[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<number | null>(null);
   const [payModal, setPayModal] = useState<Appt | null>(null);
+  const [receiptModalAppt, setReceiptModalAppt] = useState<Appt | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<Appt | null>(null);
   const [followUpModal, setFollowUpModal] = useState<Appt | null>(null);
   const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
@@ -733,82 +1323,48 @@ export default function AdminAppointments() {
   useEffect(() => { notifyRef.current = notify; }, [notify]);
   const queryClient = useQueryClient();
 
+  // Pagination states
+  const PAGE_SIZE = 10;
+  const [offlinePage, setOfflinePage] = useState(1);
+  const [onlinePage, setOnlinePage] = useState(1);
+
   // Online state
   const [mainTab, setMainTab] = useState<"inperson" | "online">("inperson");
-  const [onlineSubTab, setOnlineSubTab] = useState<"pending" | "completed">("pending");
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [onlineErr, setOnlineErr] = useState("");
-  const onlineIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevOnlineCountRef = useRef<number | null>(null);
   const [adminCall, setAdminCall] = useState<{ apptId: number; patientName: string } | null>(null);
   const [allPermissions, setAllPermissions] = useState<Record<number, ParticipantPerm[]>>({});
-
-  const apptsRef = useRef(appts);
-  useEffect(() => { apptsRef.current = appts; }, [appts]);
-  const onlineApptsRef = useRef(onlineAppts);
-  useEffect(() => { onlineApptsRef.current = onlineAppts; }, [onlineAppts]);
-
-  const reqIdRef = useRef(0);
-
-  // Helper to insert or update an appointment in onlineAppts array without duplicates
-  const upsertOnlineAppt = useCallback((data: any) => {
-    if (!data || !data.id) return;
-    setOnlineAppts(prev => {
-      const idx = prev.findIndex(a => a.id === data.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], ...data };
-        return updated;
-      } else {
-        // Only insert if it looks like a valid appt object (has slot or patient) or loadOnline will populate details
-        return [data, ...prev];
-      }
-    });
-  }, []);
+  const [uploadModalAppt, setUploadModalAppt] = useState<OnlineAppt | null>(null);
 
   // ── Load online appointments ──
-  const loadOnline = useCallback(async (silent = false) => {
-    const currentReqId = ++reqIdRef.current;
-    if (!silent && onlineApptsRef.current.length === 0) setOnlineLoading(true);
+  const loadOnline = useCallback(async () => {
+    setOnlineLoading(true);
     setOnlineErr("");
     try {
       const res = await fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" });
       if (!res.ok) {
-        if (res.status === 401) {
-          setOnlineAppts([]);
-          return;
-        }
-        return;
+        throw new Error(`Failed to load online appointments (HTTP ${res.status})`);
       }
       const list = await res.json();
       const apptsList: OnlineAppt[] = Array.isArray(list) ? list : [];
-
-      // Guard against stale/slower API responses overwriting newer state
-      if (currentReqId < reqIdRef.current) return;
-
-      if (prevOnlineCountRef.current !== null && apptsList.length > prevOnlineCountRef.current) {
-        playChime();
-        notifyRef.current("New Online Appointment", `${apptsList.length - prevOnlineCountRef.current} new online booking(s)`);
-      }
-      prevOnlineCountRef.current = apptsList.length;
       setOnlineAppts(apptsList);
       setLastRefresh(new Date());
-    } catch {
-      // Fail silently on background retry
+    } catch (err: any) {
+      setOnlineErr(err?.message || "Failed to load online appointments.");
     } finally {
-      if (currentReqId === reqIdRef.current) {
-        setOnlineLoading(false);
-      }
+      setOnlineLoading(false);
     }
   }, []);
 
   // ── Load in-person appointments ──
-  const fetchAppts = useCallback(async (silent = false) => {
-    if (!silent && apptsRef.current.length === 0) setLoading(true);
+  const fetchAppts = useCallback(async (currentFilter?: string) => {
+    const activeFilter = currentFilter !== undefined ? currentFilter : filter;
+    setLoading(true);
     try {
-      const url = filter !== "all" ? `/appointments?status=${filter}` : "/appointments";
+      const url = activeFilter !== "all" ? `/appointments?status=${activeFilter}` : "/appointments";
       const data = await apiFetch(url);
       setAppts(Array.isArray(data) ? data : []);
       setLastRefresh(new Date());
@@ -819,65 +1375,46 @@ export default function AdminAppointments() {
     }
   }, [filter]);
 
-  // Initial load on mount & 20s auto-refresh for both offline and online appointments
+  // Initial load on mount - runs ONCE
   useEffect(() => {
-    fetchAppts(false);
-    loadOnline(false);
+    fetchAppts("all");
+    loadOnline();
+  }, []);
 
-    const interval = setInterval(() => {
-      fetchAppts(true);
-      loadOnline(true);
-    }, 20_000); // 20 sec auto-refresh
-
-    return () => clearInterval(interval);
-  }, [fetchAppts, loadOnline]);
-
-  // Trigger immediate load when switching to Online tab
-  useEffect(() => {
-    if (mainTab === "online") {
-      loadOnline(true);
-    }
-  }, [mainTab, loadOnline]);
-
-  // Real-time SSE for online appointments, new bookings & permission updates
+  // Real-time SSE stream for online appointment updates (joinEnabled, patientJoinedAt, status)
   useEffect(() => {
     const es = new EventSource(`${BASE}/api/online-appointments/admin/stream`, { withCredentials: true });
-
-    const handleUpdate = (e: MessageEvent) => {
+    es.addEventListener("appointment_updated", (e) => {
       try {
-        const data = JSON.parse(e.data);
-        if (data && data.id) {
-          upsertOnlineAppt(data);
+        const payload = JSON.parse((e as MessageEvent).data);
+        if (payload && payload.id) {
+          setOnlineAppts(prev => prev.map(a => {
+            if (a.id !== payload.id) return a;
+            return {
+              ...a,
+              ...(payload.joinEnabled !== undefined ? { joinEnabled: payload.joinEnabled } : {}),
+              ...(payload.status !== undefined ? { status: payload.status } : {}),
+              ...(payload.patientJoinedAt !== undefined ? { patientJoinedAt: payload.patientJoinedAt } : {}),
+            };
+          }));
         }
-        loadOnline(true);
       } catch {}
-    };
-
-    const handleNew = (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data && data.id) {
-          upsertOnlineAppt(data);
-          playChime();
-          notifyRef.current("New Online Appointment", "A new online appointment has been booked");
-        }
-        loadOnline(true);
-      } catch {}
-    };
-
-    const handlePerm = (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        setAllPermissions(prev => ({ ...prev, [data.apptId]: data.participants }));
-      } catch {}
-    };
-
-    es.addEventListener("appointment_updated", handleUpdate);
-    es.addEventListener("new_online_appointment", handleNew);
-    es.addEventListener("permission_update", handlePerm);
-
+    });
+    es.addEventListener("new_online_appointment", () => {
+      loadOnline();
+    });
     return () => es.close();
-  }, [loadOnline, upsertOnlineAppt]);
+  }, [loadOnline]);
+
+  // Refetch in-person appointments ONLY when filter state changes
+  const isInitialFilter = useRef(true);
+  useEffect(() => {
+    if (isInitialFilter.current) {
+      isInitialFilter.current = false;
+      return;
+    }
+    fetchAppts(filter);
+  }, [filter]);
 
   async function toggleJoin(id: number, enable: boolean) {
     try {
@@ -908,24 +1445,6 @@ export default function AdminAppointments() {
     } catch { setOnlineErr("Could not send the permission request. Please try again."); }
   }
 
-  async function resetAppt(id: number) {
-    try {
-      await fetch(`${BASE}/api/online-appointments/admin/${id}/reset-pending`, {
-        method: "POST", credentials: "include",
-      });
-      await loadOnline(true);
-    } catch { setOnlineErr("Reset failed. Please try again."); }
-  }
-
-  async function markDone(id: number) {
-    try {
-      await fetch(`${BASE}/api/online-appointments/admin/${id}/complete`, {
-        method: "PATCH", credentials: "include",
-      });
-      setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, joinEnabled: false, status: "completed" } : a));
-    } catch { setOnlineErr("Could not mark as done. Please try again."); }
-  }
-
   async function cancelAppt(id: number) {
     try {
       await fetch(`${BASE}/api/online-appointments/admin/${id}/cancel`, {
@@ -933,6 +1452,24 @@ export default function AdminAppointments() {
       });
       setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, status: "cancelled", joinEnabled: false } : a));
     } catch { setOnlineErr("Cancel failed. Please try again."); }
+  }
+
+  async function resetToPending(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/reset-pending`, {
+        method: "POST", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, status: "pending", joinEnabled: false, patientJoinedAt: null } : a));
+    } catch { setOnlineErr("Reset to pending failed. Please try again."); }
+  }
+
+  async function markDone(id: number) {
+    try {
+      await fetch(`${BASE}/api/online-appointments/admin/${id}/complete`, {
+        method: "POST", credentials: "include",
+      });
+      setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, status: "completed", joinEnabled: false } : a));
+    } catch { setOnlineErr("Mark as done failed. Please try again."); }
   }
 
   async function deleteAppt(id: number) {
@@ -944,30 +1481,63 @@ export default function AdminAppointments() {
     } catch { setOnlineErr("Delete failed. Please try again."); }
   }
 
-  function mutate(updated: Appt) { setAppts(prev => prev.map(a => a.id === updated.id ? updated : a)); }
+  const [deletingOfflineAppt, setDeletingOfflineAppt] = useState<Appt | null>(null);
+  const [cancellingOfflineAppt, setCancellingOfflineAppt] = useState<Appt | null>(null);
+
+  function mutate(updated: any) {
+    setAppts(prev => prev.map(a => {
+      if (a.id !== updated.id) return a;
+      return {
+        ...a,
+        ...updated,
+        patientCode: updated.patientCode || (a as any).patientCode || null,
+        token: updated.token || (a as any).token || null,
+      };
+    }));
+  }
   async function approve(id: number) { mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) })); }
-  async function cancel(id: number) { if (!confirm("Cancel this appointment?")) return; mutate(await apiFetch(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify({ status: "cancelled" }) })); }
   async function arrive(id: number) { mutate(await apiFetch(`/appointments/${id}/arrive`, { method: "PATCH" })); }
+
+  async function confirmDeleteOffline(id: number) {
+    try {
+      await fetch(`${BASE}/api/appointments/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      setAppts(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      console.error("Failed to delete offline appointment:", err);
+    }
+  }
+
+  async function confirmCancelOffline(id: number) {
+    try {
+      const updated = await apiFetch(`/appointments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      mutate(updated);
+    } catch (err) {
+      console.error("Failed to cancel offline appointment:", err);
+    }
+  }
 
   const today = todayIST();
   const pendingCount = appts.filter(a => a.status === "pending").length;
   const onlinePendingCount = onlineAppts.filter(a => ["pending", "confirmed"].includes(a.status) || a.joinEnabled).length;
-  const onlineCompletedCount = onlineAppts.filter(a => ["completed", "cancelled"].includes(a.status) && !a.joinEnabled).length;
   const onlineLiveCount = onlineAppts.filter(a => a.joinEnabled).length;
   const todayAppts = appts.filter(a => a.date === today);
   const shown = filter === "all" ? appts : appts.filter(a => a.status === filter);
+  const paginatedOffline = shown.slice((offlinePage - 1) * PAGE_SIZE, offlinePage * PAGE_SIZE);
+  const paginatedOnline = onlineAppts.slice((onlinePage - 1) * PAGE_SIZE, onlinePage * PAGE_SIZE);
 
-  // Online sub-tab filtering + sorting
-  const onlinePendingList = [...onlineAppts]
-    .filter(a => a.joinEnabled || ["pending", "confirmed"].includes(a.status))
-    .sort((a, b) => {
-      if (a.joinEnabled && !b.joinEnabled) return -1;
-      if (!a.joinEnabled && b.joinEnabled) return 1;
-      return a.slot.date.localeCompare(b.slot.date); // earliest first
-    });
-  const onlineCompletedList = [...onlineAppts]
-    .filter(a => !a.joinEnabled && ["completed", "cancelled"].includes(a.status))
-    .sort((a, b) => b.slot.date.localeCompare(a.slot.date)); // most recent first
+  useEffect(() => {
+    setOfflinePage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    setOnlinePage(1);
+  }, [onlineAppts.length]);
 
   // Prescription pending alert: completed with no prescription
   const prescriptionPending = onlineAppts.filter(
@@ -976,6 +1546,13 @@ export default function AdminAppointments() {
 
   return (
     <AdminLayout>
+      {uploadModalAppt && (
+        <PrescriptionModal
+          appt={uploadModalAppt}
+          onClose={() => setUploadModalAppt(null)}
+          onUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
+        />
+      )}
       {adminCall && (
         <AdminCallOverlay
           apptId={adminCall.apptId}
@@ -983,15 +1560,45 @@ export default function AdminAppointments() {
           onLeave={() => setAdminCall(null)}
         />
       )}
-      {payModal && <PayModal appt={payModal} onClose={() => setPayModal(null)} onPaid={a => { mutate(a); setPayModal(null); }} />}
+      {payModal && (
+        <PayModal
+          appt={payModal}
+          onClose={() => setPayModal(null)}
+          onPaid={(a) => {
+            mutate(a);
+            setPayModal(null);
+            setReceiptModalAppt(a);
+          }}
+        />
+      )}
+      {receiptModalAppt && (
+        <OfflineReceiptModal
+          appt={receiptModalAppt}
+          onClose={() => setReceiptModalAppt(null)}
+        />
+      )}
+      {deletingOfflineAppt && (
+        <OfflineDeleteConfirmModal
+          appt={deletingOfflineAppt}
+          onClose={() => setDeletingOfflineAppt(null)}
+          onConfirm={confirmDeleteOffline}
+        />
+      )}
+      {cancellingOfflineAppt && (
+        <OfflineCancelConfirmModal
+          appt={cancellingOfflineAppt}
+          onClose={() => setCancellingOfflineAppt(null)}
+          onConfirm={confirmCancelOffline}
+        />
+      )}
       {rescheduleModal && <RescheduleModal appt={rescheduleModal} onClose={() => setRescheduleModal(null)} onProposed={a => { mutate(a); }} />}
       {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={a => { mutate(a); }} />}
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">Appointments</h1>
+          {/* <div className="flex flex-wrap items-center gap-2 mt-1">
             {pendingCount > 0 && (
               <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
                 <Clock size={11} /> {pendingCount} in-person pending
@@ -1002,7 +1609,7 @@ export default function AdminAppointments() {
                 <Video size={11} /> {onlinePendingCount} online pending
               </span>
             )}
-          </div>
+          </div> */}
         </div>
         <div className="flex items-center gap-2">
           {mainTab === "inperson" && (
@@ -1013,10 +1620,7 @@ export default function AdminAppointments() {
               {permission === "granted" ? "Notifs On" : "Enable Notifs"}
             </button>
           )}
-          <button onClick={() => mainTab === "inperson" ? fetchAppts() : loadOnline()}
-            className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors" title="Refresh">
-            <RefreshCw size={15} />
-          </button>
+          
         </div>
       </div>
 
@@ -1027,7 +1631,7 @@ export default function AdminAppointments() {
             mainTab === "inperson" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
           <MapPin size={14} /> Offline
           {pendingCount > 0 && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{pendingCount}</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{pendingCount} new</span>
           )}
         </button>
         <button onClick={() => setMainTab("online")}
@@ -1046,10 +1650,10 @@ export default function AdminAppointments() {
       {/* ── ONLINE TAB ───────────────────────────────────────────── */}
       {mainTab === "online" && (
         <div className="space-y-4">
-          {/* Auto-refresh bar */}
+          {/* Status bar */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Auto-refreshes every 20s</span>
-            <span>Last: {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+            {/* <span>Auto-refresh disabled</span> */}
+            {/* <span>Last: {lastRefresh.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span> */}
           </div>
 
           {/* Prescription pending alert */}
@@ -1063,7 +1667,7 @@ export default function AdminAppointments() {
                     : `${prescriptionPending.length} completed appointments have no prescription uploaded yet`}
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  {prescriptionPending.map(a => a.patient.name).join(", ")} — please upload the prescription photo in the Completed tab.
+                  {prescriptionPending.map(a => a.patient.name).join(", ")} — please upload the prescription photo in the table below.
                 </p>
               </div>
             </div>
@@ -1075,104 +1679,40 @@ export default function AdminAppointments() {
               <Video size={16} className="animate-pulse shrink-0" />
               <div>
                 <p className="font-bold text-sm">{onlineLiveCount === 1 ? "1 Session Live Now" : `${onlineLiveCount} Sessions Live Now`}</p>
-                <p className="text-white/70 text-xs">{onlinePendingList.filter(a => a.joinEnabled).map(a => a.patient.name).join(", ")}</p>
+                <p className="text-white/70 text-xs">{onlineAppts.filter(a => a.joinEnabled).map(a => a.patient.name).join(", ")}</p>
               </div>
             </div>
           )}
-
-
-
-          {/* ── Sub-tabs: Pending / Completed ── */}
-          <div className="flex gap-2 bg-muted/40 rounded-xl p-1 border border-border">
-            <button onClick={() => setOnlineSubTab("pending")}
-              className={cn(
-                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2",
-                onlineSubTab === "pending" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}>
-              <Clock size={13} /> Pending
-              {onlinePendingCount > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                  {onlinePendingCount}
-                </span>
-              )}
-              {onlineLiveCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </button>
-            <button onClick={() => setOnlineSubTab("completed")}
-              className={cn(
-                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2",
-                onlineSubTab === "completed" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}>
-              <CheckCircle2 size={13} /> Completed
-              {onlineCompletedCount > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                  {onlineCompletedCount}
-                </span>
-              )}
-              {prescriptionPending.length > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                  {prescriptionPending.length} Rx pending
-                </span>
-              )}
-            </button>
-          </div>
 
           {onlineLoading && onlineAppts.length === 0 ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 size={24} className="animate-spin text-muted-foreground" />
             </div>
-          ) : onlineSubTab === "pending" ? (
-            onlinePendingList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-border p-12 text-center">
-                <CheckCircle2 size={40} className="text-emerald-200 mx-auto mb-3" />
-                <p className="font-semibold text-muted-foreground">No pending appointments</p>
-                <p className="text-xs text-muted-foreground mt-1">All online appointments are completed</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {onlinePendingList.map(appt => (
-                  <OnlineApptCard
-                    key={appt.id} appt={appt}
-                    permissions={allPermissions[appt.id] ?? appt.permissions ?? []}
-                    onJoinToggle={toggleJoin}
-                    onRenotify={renotify}
-                    onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
-                    onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
-                    onRequestPermissions={requestPermissions}
-                    onReset={resetAppt}
-                    onMarkDone={markDone}
-                    onCancel={cancelAppt}
-                    onDelete={deleteAppt}
-                  />
-                ))}
-              </div>
-            )
+          ) : onlineAppts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-border p-12 text-center">
+              <Video size={40} className="text-muted-foreground/20 mx-auto mb-3" />
+              <p className="font-semibold text-muted-foreground">No online appointments found</p>
+            </div>
           ) : (
-            onlineCompletedList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-border p-12 text-center">
-                <Video size={40} className="text-muted-foreground/20 mx-auto mb-3" />
-                <p className="font-semibold text-muted-foreground">No completed appointments yet</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {onlineCompletedList.map(appt => (
-                  <OnlineApptCard
-                    key={appt.id} appt={appt}
-                    permissions={allPermissions[appt.id] ?? appt.permissions ?? []}
-                    onJoinToggle={toggleJoin}
-                    onRenotify={renotify}
-                    onPrescriptionUploaded={(id, rx) => setOnlineAppts(prev => prev.map(a => a.id === id ? { ...a, prescription: rx } : a))}
-                    onJoinCall={(id, name) => setAdminCall({ apptId: id, patientName: name })}
-                    onRequestPermissions={requestPermissions}
-                    onReset={resetAppt}
-                    onMarkDone={markDone}
-                    onCancel={cancelAppt}
-                    onDelete={deleteAppt}
-                  />
-                ))}
-              </div>
-            )
+            <div className="space-y-4">
+              <OnlineAppointmentsTable
+                appts={paginatedOnline}
+                onJoinToggle={toggleJoin}
+                onRenotify={renotify}
+                onPrescriptionClick={appt => setUploadModalAppt(appt)}
+                onCancel={cancelAppt}
+                onDelete={deleteAppt}
+                onResetToPending={resetToPending}
+                onMarkDone={markDone}
+              />
+              <AdminPagination
+                currentPage={onlinePage}
+                totalItems={onlineAppts.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setOnlinePage}
+                itemLabel="online appointments"
+              />
+            </div>
           )}
         </div>
       )}
@@ -1180,35 +1720,22 @@ export default function AdminAppointments() {
       {/* ── IN-PERSON TAB ────────────────────────────────────────── */}
       {mainTab === "inperson" && (
         <div className="space-y-5">
-          {/* Today summary */}
-          {todayAppts.length > 0 && (
-            <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/15 rounded-2xl p-4">
-              <p className="text-[#1a3d2b] font-semibold text-sm flex items-center gap-2 mb-2">
-                <Calendar size={14} /> Today — {todayAppts.length} appointment{todayAppts.length !== 1 && "s"}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {todayAppts.map(a => (
-                  <span key={a.id} className={cn("text-xs px-3 py-1 rounded-full border font-medium", STATUS_COLORS[a.status] || STATUS_COLORS.pending)}>
-                    {a.timeSlot} · {a.patientName}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Filter tabs */}
           <div className="flex flex-wrap gap-2">
             {["all", "pending", "confirmed", "arrived", "completed", "reschedule_proposed", "cancelled"].map(s => (
               <button key={s} onClick={() => setFilter(s)}
-                className={cn("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border capitalize",
-                  filter === s ? "bg-foreground text-white border-foreground" : "bg-white border-border text-muted-foreground hover:border-primary/40")}>
+                className={cn("px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all border capitalize",
+                  filter === s
+                    ? "bg-[#D95B2F] text-white border-[#D95B2F]/5"
+                    : "bg-white border-border text-muted-foreground")}>
                 {STATUS_LABELS[s] || s}
               </button>
             ))}
           </div>
 
-          {/* List */}
-          <div className="space-y-3">
+          {/* Table List with Pagination */}
+          <div>
             {loading && appts.length === 0 ? (
               <div className="py-16 text-center text-muted-foreground flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin" /> Loading…
@@ -1217,103 +1744,91 @@ export default function AdminAppointments() {
               <div className="py-16 text-center text-muted-foreground bg-white rounded-2xl border border-border">
                 No appointments found
               </div>
-            ) : shown.map(a => {
-              const isExpanded = expanded === a.id;
-              const reschedDates: string[] = a.rescheduleDates ? JSON.parse(a.rescheduleDates) : [];
-              return (
-                <div key={a.id} className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden transition-all",
-                  a.status === "pending" ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border")}>
-                  <div className="p-4 flex flex-wrap items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                        <span className="font-bold text-foreground truncate">{a.patientName}</span>
-                        <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", STATUS_COLORS[a.status] || "bg-gray-100 text-gray-600 border-gray-200")}>
-                          {STATUS_LABELS[a.status] || a.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        <span className="flex items-center gap-1"><Calendar size={11} /> {fmt(a.date)}</span>
-                        <span className="flex items-center gap-1"><Clock size={11} /> {a.timeSlot}</span>
-                        <span>{a.patientPhone}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {a.status === "pending" && (
-                        <>
-                          <button onClick={() => approve(a.id)}
-                            className="flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-green-700 transition-colors">
-                            <CheckCircle2 size={13} /> Approve
-                          </button>
-                          <button onClick={() => setRescheduleModal(a)}
-                            className="flex items-center gap-1.5 bg-orange-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-orange-600 transition-colors">
-                            <RefreshCw size={13} /> Reschedule
-                          </button>
-                          <button onClick={() => cancel(a.id)}
-                            className="flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-red-600 transition-colors">
-                            <XCircle size={13} /> Decline
-                          </button>
-                        </>
-                      )}
-                      {a.status === "confirmed" && (
-                        <>
-                          <button onClick={() => arrive(a.id)}
-                            className="flex items-center gap-1.5 bg-teal-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-teal-700 transition-colors">
-                            <UserCheck size={13} /> Arrived
-                          </button>
-                          <button onClick={() => cancel(a.id)}
-                            className="flex items-center gap-1.5 border border-red-300 text-red-600 text-xs font-medium px-3 py-2 rounded-xl hover:bg-red-50 transition-colors">
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                      {a.status === "arrived" && a.paymentStatus === "unpaid" && (
-                        <button onClick={() => setPayModal(a)}
-                          className="flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors">
-                          <Banknote size={13} /> Mark Paid
-                        </button>
-                      )}
-                      {a.status === "completed" && (
-                        <button onClick={() => setFollowUpModal(a)}
-                          className="flex items-center gap-1.5 border border-border text-muted-foreground text-xs font-medium px-3 py-2 rounded-xl hover:bg-muted transition-colors">
-                          <Calendar size={13} /> {a.followUpDate ? "Edit Follow-up" : "Set Follow-up"}
-                        </button>
-                      )}
-                      {a.status === "reschedule_accepted" && (
-                        <button onClick={() => approve(a.id)}
-                          className="flex items-center gap-1.5 bg-purple-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-purple-700 transition-colors">
-                          <CheckCircle2 size={13} /> Confirm New Date
-                        </button>
-                      )}
-                      <button onClick={() => setExpanded(isExpanded ? null : a.id)}
-                        className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted transition-colors">
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                  {isExpanded && (
-                    <div className="border-t border-border bg-muted/30 p-4 space-y-2.5 text-sm">
-                      {a.reason && <div><span className="font-medium">Reason: </span>{a.reason}</div>}
-                      {a.patientEmail && <div><span className="font-medium">Email: </span>{a.patientEmail}</div>}
-                      {a.arrivedAt && <div className="text-teal-700"><span className="font-medium">Arrived: </span>{fmtTimeIST(a.arrivedAt)}</div>}
-                      {a.paymentStatus === "paid" && <div className="text-green-700"><span className="font-medium">Payment: </span>Paid via {a.paymentMode?.toUpperCase()}</div>}
-                      {a.followUpDate && <div className="text-amber-700"><span className="font-medium">Follow-up: </span>{fmt(a.followUpDate)} {a.followUpConfirmed ? "✓ Patient confirmed" : "⏳ Awaiting"}</div>}
-                      {reschedDates.length > 0 && (
-                        <div><span className="font-medium">Proposed dates: </span>{reschedDates.map(fmt).join(", ")}
-                          {a.rescheduleChosen && <span className="text-purple-700 ml-2">→ Chose: {fmt(a.rescheduleChosen)}</span>}
-                        </div>
-                      )}
-                      {a.notes && <div><span className="font-medium">Notes: </span>{a.notes}</div>}
-                      <div className="text-xs text-muted-foreground">Booked: {fmtTimestamp(a.createdAt)}</div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            ) : (
+              <div className="space-y-4">
+                <OfflineAppointmentsTable
+                  appts={paginatedOffline}
+                  onApprove={approve}
+                  onReschedule={setRescheduleModal}
+                  onCancel={(appt) => setCancellingOfflineAppt(appt)}
+                  onDelete={(appt) => setDeletingOfflineAppt(appt)}
+                  onArrive={arrive}
+                  onPay={setPayModal}
+                  onFollowUp={setFollowUpModal}
+                  onPrintReceipt={setReceiptModalAppt}
+                />
+                <AdminPagination
+                  currentPage={offlinePage}
+                  totalItems={shown.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setOfflinePage}
+                  itemLabel="offline appointments"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
 
       <AdminToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Print CSS styling */}
+      <style>{`
+        @page {
+          size: auto;
+          margin: 8mm auto;
+        }
+        @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            width: 100% !important;
+            height: auto !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #printable-receipt, #printable-receipt * {
+            visibility: visible;
+          }
+          #printable-receipt {
+            position: absolute;
+            left: 50%;
+            top: 10px;
+            transform: translateX(-50%);
+            width: 320px;
+            max-width: 80mm;
+            padding: 20px !important;
+            margin: 0 auto !important;
+            border: 1px solid #CBD5E1 !important;
+            border-radius: 16px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          #printable-receipt .receipt-info-table {
+            width: 100% !important;
+          }
+          #printable-receipt .receipt-row {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            width: 100% !important;
+            margin-bottom: 8px !important;
+          }
+          #printable-receipt .receipt-label {
+            text-align: left !important;
+            white-space: nowrap !important;
+            font-weight: 700 !important;
+          }
+          #printable-receipt .receipt-value {
+            text-align: right !important;
+            font-weight: 700 !important;
+          }
+        }
+      `}</style>
     </AdminLayout>
   );
 }

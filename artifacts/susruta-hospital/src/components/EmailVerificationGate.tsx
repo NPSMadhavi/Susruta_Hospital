@@ -5,9 +5,10 @@ import { patientApi } from "@/lib/patient-api";
 interface Props {
   email: string;
   onBack: () => void;
+  onProceed?: () => void;
 }
 
-export function EmailVerificationGate({ email, onBack }: Props) {
+export function EmailVerificationGate({ email, onBack, onProceed }: Props) {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
@@ -29,15 +30,15 @@ export function EmailVerificationGate({ email, onBack }: Props) {
           <MailCheck size={32} className="text-amber-600" />
         </div>
 
-        <h2 className="text-xl font-bold text-foreground mb-2">Verify Your Email First</h2>
+        <h2 className="text-xl font-bold text-foreground mb-2">Verify Your Email</h2>
         <p className="text-sm text-muted-foreground leading-relaxed mb-1">
-          To book an appointment, please verify your email address.
+          To receive consultation updates, please verify your email address.
         </p>
         <p className="text-sm font-semibold text-foreground mb-6">{email}</p>
 
         {sent ? (
           <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 text-sm text-green-800 mb-6">
-            Verification email sent! Please check your inbox and click the link, then come back to book.
+            Verification email sent! Please check your inbox and click the link.
           </div>
         ) : (
           <>
@@ -57,12 +58,22 @@ export function EmailVerificationGate({ email, onBack }: Props) {
           </>
         )}
 
-        <button
-          onClick={onBack}
-          className="w-full py-2.5 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-colors flex items-center justify-center gap-1.5"
-        >
-          <ArrowLeft size={14} /> Go Back
-        </button>
+        <div className="space-y-2">
+          {onProceed && (
+            <button
+              onClick={onProceed}
+              className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors"
+            >
+              Continue to Booking →
+            </button>
+          )}
+          <button
+            onClick={onBack}
+            className="w-full py-2 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <ArrowLeft size={14} /> Go Back to Dashboard
+          </button>
+        </div>
       </div>
     </div>
   );

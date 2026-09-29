@@ -6,7 +6,7 @@ import { Menu, X, Phone, Clock, MapPin, Send, CheckCircle2 } from "lucide-react"
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
-import { BookingLoginModal } from "@/components/BookingLoginModal";
+// import { BookingLoginModal } from "@/components/BookingLoginModal";
 import { patientApi } from "@/lib/patient-api";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -32,7 +32,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     setSubError("");
     setSubLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/subscribers/subscribe`, {
+      const res = await fetch(`${BASE}/api/subscribers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: subName.trim() || subEmail.split("@")[0], email: subEmail.trim() }),
@@ -50,7 +50,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   }
 
   React.useEffect(() => {
-    patientApi.me().then(() => setIsPatientLoggedIn(true)).catch(() => {});
+    patientApi.me()
+      .then((patient) => setIsPatientLoggedIn(Boolean(patient && patient.id)))
+      .catch(() => setIsPatientLoggedIn(false));
   }, []);
 
   React.useEffect(() => {
@@ -137,7 +139,7 @@ const scrollTo = (
     if (isPatientLoggedIn) {
       navigate("/portal/dashboard");
     } else {
-      setBookingModalOpen(true);
+      navigate("/portal");
     }
   };
 
@@ -164,14 +166,14 @@ const scrollTo = (
     isScrolled && "border-b border-[#e2e1de]"
   )}
 >
-  <div className="relative w-full px-3 sm:px-5 lg:px-6 xl:px-10 2xl:px-14 flex items-center h-[75px] gap-2">
+  <div className="relative w-full px-3 sm:px-8 lg:px-13  flex items-center h-[75px] gap-2">
 
     {/* Logo */}
     <a href="#home" onClick={(e) => scrollTo(e, "home")} className="shrink-0">
       <img
         src={logoImg}
         alt="Susruta Hospital"
-        className="h-8 sm:h-9 lg:h-10 xl:h-11 w-auto max-w-[32vw] object-contain"
+        className="h-10 sm:h-10 w-auto max-w-[55vw] sm:max-w-[26vw]  object-contain"
       />
     </a>
 
@@ -197,19 +199,20 @@ const scrollTo = (
 
     {/* Right side: Login + Book CTA */}
     <div className="hidden lg:flex items-center gap-1.5 ml-auto flex-shrink-0">
-      <a
+      {/* <a
         href="/portal"
         className="px-4 py-2 rounded-[10px] border border-[#D95B2F] font-manrope text-[#D95B2F] font-semibold text-[15px] hover:bg-[#D95B2F]/5 hover:-translate-y-0.5 transition-all whitespace-nowrap"
       >
         Login
-      </a>
+      </a> */}
 
-      <button
+      <a
+        href="/portal"
         onClick={handleBookClick}
-        className="px-5 py-2.5 rounded-[10px] bg-[#D95B2F] font-manrope text-[#F5F2E9] font-semibold text-[15px] shadow-md hover:opacity-90 hover:-translate-y-0.5 transition-all whitespace-nowrap"
+        className="px-5 py-2.5 rounded-[10px] bg-[#D95B2F] font-manrope text-[#F5F2E9] font-semibold text-[15px] shadow-md hover:opacity-90 hover:-translate-y-0.5 transition-all whitespace-nowrap inline-flex items-center justify-center cursor-pointer"
       >
         {tr("btn.book", lang)}
-      </button>
+      </a>
     </div>
 
     {/* Mobile hamburger */}
@@ -233,7 +236,7 @@ const scrollTo = (
           className={cn(
             "px-4 py-3 rounded-xl text-base font-medium transition-colors",
             activeSection === link.id
-              ? "bg-primary/10 text-primary"
+              ? "bg-[#D95B2F]/10 text-[#D95B2F]"
               : "text-foreground/75 hover:bg-muted"
           )}
         >
@@ -244,51 +247,57 @@ const scrollTo = (
       <div className="mt-2 flex gap-2">
         <a
           href="/portal"
-          className="flex-1 px-4 py-3 rounded-xl border border-primary/30 text-primary font-bold text-center"
+          className="flex-1 px-4 py-3 rounded-xl border border-[#D95B2F]/30 text-[#D95B2F] font-bold text-center"
         >
           Login
         </a>
 
-        <button
+        <a
+          href="/portal"
           onClick={handleBookClick}
-          className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-bold text-center"
+          className="flex-1 px-4 py-3 rounded-xl bg-[#D95B2F] text-white font-bold text-center inline-flex items-center justify-center cursor-pointer"
         >
           {tr("btn.book", lang)}
-        </button>
+        </a>
       </div>
     </div>
   )}
 </header>
 
-
-      {/* ── Booking Login Modal ── */}
-      <BookingLoginModal
+      {/* ── Booking Login Modal (commented out) ── */}
+      {/* <BookingLoginModal
         open={bookingModalOpen}
         onClose={() => setBookingModalOpen(false)}
-      />
+      /> */}
 
       {/* ── Page content ── */}
       <main className="flex-1 flex flex-col">{children}</main>
 
       {/* ── Footer ── */}
-      <footer className="relative bg-[#15392D] text-white/80 pt-14 pb-6 overflow-hidden">
+      <footer className="relative bg-gradient-to-b from-[#FFFFFF] to-[#FFFFFF] text-white/75 overflow-hidden">
+        
 
         <img
-          src="/ayurveda-herbs.png" alt="" aria-hidden="true"
+          src="/ayurveda-herbs.png"
+          alt=""
+          aria-hidden="true"
           className="absolute bottom-0 right-0 w-72 xl:w-[380px] pointer-events-none select-none"
-          style={{ opacity: 0.22, mixBlendMode: "screen" }}
+          style={{ opacity: 0.12, mixBlendMode: "screen" }}
         />
 
-        <div className="w-full px-4 sm:px-8 lg:px-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 relative z-10">
+        <div className="w-full px-3 sm:px-8 lg:px-14 pt-14 pb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 relative z-10">
           {/* Col 1 — About */}
-          <div className="space-y-5 sm:col-span-2 lg:col-span-1  ">
-            <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto brightness-0 invert" />
-            <p className="text-[14px] md:text-[16px]  leading-relaxed text-white/80">
+          <div className="space-y-5 sm:col-span-2 lg:col-span-1">
+            {/* Original logo colors — no brightness filter */}
+            <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto" />
+
+            <p className="text-[14px] md:text-[15px] leading-relaxed text-[#0A2B21]">
               Rooted in the ancient wisdom of Ayurveda, Susruta Hospital brings authentic classical
               treatments to Tirupati under the expert guidance of Dr. P. Murali Krishna — a
               distinguished Gold Medalist physician and former Principal of S.V. Ayurvedic College,
               T.T. Devasthanams.
             </p>
+
             <div className="space-y-2 pt-1">
               {[
                 "B.A.M.S. (Gold Medalist) · M.D. · Ph.D.",
@@ -296,8 +305,8 @@ const scrollTo = (
                 "Governing Body Member, CCRAS New Delhi",
                 "30+ Years of Clinical Excellence",
               ].map((item, i) => (
-                <div key={i} className="flex items-start gap-2 font-dm-sans text-[13px] md:text-[15px] text-white/80">
-                  <span className="mt-1.5 w-1 h-1 rounded-full bg-green-400/50 flex-shrink-0" />
+                <div key={i} className="flex items-start gap-2.5 text-[13px] md:text-[14px] text-[#0A2B21]">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#D95B2F]/70 flex-shrink-0" />
                   <span>{item}</span>
                 </div>
               ))}
@@ -305,19 +314,20 @@ const scrollTo = (
           </div>
 
           {/* Col 2 — Quick Links */}
-                  <div className="lg:mx-auto">
-            <h3 className=" font-semibold text-lg text-white mb-4 "style={{ fontFamily: 'DM Serif Display',}}>
+          <div className="lg:mx-auto">
+            <h3 className="font-semibold text-lg text-[#0A2B21] mb-5" style={{ fontFamily: "DM Serif Display" }}>
               {tr("footer.quicklinks", lang)}
             </h3>
 
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-3 text-sm">
               {navLinks.map((link) => (
                 <li key={link.id}>
                   <a
                     href={link.href}
                     onClick={(e) => scrollTo(e, link.id)}
-                    className="hover:text-green-400 text-white/80 transition-colors"
+                    className="text-[#0A2B21] hover:text-[#E8A87C] transition-colors duration-200 flex items-center gap-2"
                   >
+                    <span className="w-1 h-1 rounded-full bg-[#D95B2F]/50" />
                     {link.label}
                   </a>
                 </li>
@@ -327,21 +337,26 @@ const scrollTo = (
 
           {/* Col 3 — Contact */}
           <div>
-            <h3 className="font-serif font-semibold text-lg text-white mb-4"style={{ fontFamily: 'DM Serif Display',}}>{tr("footer.contact", lang)}</h3>
-            <ul className="space-y-4 text-sm text-white/80">
+            <h3 className="font-semibold text-lg text-[#0A2B21] mb-5" style={{ fontFamily: "DM Serif Display" }}>
+              {tr("footer.contact", lang)}
+            </h3>
+
+            <ul className="space-y-4 text-sm text-[#0A2B21]">
               <li className="flex gap-3 items-start">
-                <MapPin className="shrink-0 mt-0.5 text-green-400" size={15} />
+                <MapPin className="shrink-0 mt-0.5 text-[#E8A87C]" size={15} />
                 <span>{settings?.clinicAddress || "119, Ramulavari North Mada Street, Tirupati - 517 507"}</span>
               </li>
+
               <li className="flex gap-3 items-center">
-                <Phone className="shrink-0 text-green-400" size={15} />
+                <Phone className="shrink-0 text-[#E8A87C]" size={15} />
                 <span>
                   {settings?.clinicPhone1 || "9492068180"}
                   {settings?.clinicPhone2 ? `, ${settings.clinicPhone2}` : ""}
                 </span>
               </li>
+
               <li className="flex gap-3 items-start">
-                <Clock className="shrink-0 mt-0.5 text-green-400" size={15} />
+                <Clock className="shrink-0 mt-0.5 text-[#E8A87C]" size={15} />
                 <span>{settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
               </li>
             </ul>
@@ -349,17 +364,20 @@ const scrollTo = (
 
           {/* Col 4 — Newsletter */}
           <div>
-            <h3 className="font-serif font-semibold text-lg text-white mb-2"style={{ fontFamily: 'DM Serif Display',}}>Stay Connected</h3>
-            <p className="text-sm text-white/80 leading-relaxed mb-4">
+            <h3 className="font-semibold text-lg text-[#0A2B21] mb-2" style={{ fontFamily: "DM Serif Display" }}>
+              Stay Connected
+            </h3>
+
+            <p className="text-sm text-[#0A2B21] leading-relaxed mb-4">
               Get Ayurvedic wellness tips, seasonal health guides, and clinic updates straight to your inbox.
             </p>
 
             {subSuccess ? (
-              <div className="flex items-start gap-2.5 bg-green-900/40 border border-green-600/30 rounded-xl px-4 py-3.5">
-                <CheckCircle2 size={16} className="text-green-400 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 bg-[#D95B2F]/15 border border-[#D95B2F]/30 rounded-xl px-4 py-3.5">
+                <CheckCircle2 size={16} className="text-[#E8A87C] shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-green-300">You're subscribed!</p>
-                  <p className="text-xs text-white/80 mt-0.5">Thank you for joining. We'll be in touch.</p>
+                  <p className="text-sm font-semibold text-[#E8A87C]">You're subscribed!</p>
+                  <p className="text-sm text-[#0A2B21] mt-0.5">Thank you for joining. We'll be in touch.</p>
                 </div>
               </div>
             ) : (
@@ -368,31 +386,36 @@ const scrollTo = (
                   type="text"
                   placeholder="Your name (optional)"
                   value={subName}
-                  onChange={e => setSubName(e.target.value)}
-                  className="w-full bg-white/8 border border-white/55 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-white/60 focus:outline-none focus:border-green-500/60 focus:bg-white/10 transition-all"
+                  onChange={(e) => setSubName(e.target.value)}
+                  className="w-full bg-[#0A2B21]/5 border border-[#0A2B21]/15 rounded-xl px-3.5 py-2.5 text-sm text-[#0A2B21] placeholder:text-[#0A2B21]/40 focus:outline-none focus:border-[#D95B2F]/60 focus:bg-white/8 transition-all"
                 />
+
                 <div className="flex gap-2">
                   <input
                     type="email"
                     required
                     placeholder="Your email address"
                     value={subEmail}
-                    onChange={e => setSubEmail(e.target.value)}
-                    className="flex-1 min-w-0 bg-white/8 border border-white/55 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-white/60 focus:outline-none focus:border-green-500/60 focus:bg-white/10 transition-all"
+                    onChange={(e) => setSubEmail(e.target.value)}
+                    className="flex-1 min-w-0 bg-[#0A2B21]/5 border border-[#0A2B21]/15 rounded-xl px-3.5 py-2.5 text-sm text-[#0A2B21] placeholder:text-[#0A2B21]/40 focus:outline-none focus:border-[#D95B2F]/60 focus:bg-white/8 transition-all"
                   />
+
                   <button
                     type="submit"
                     disabled={subLoading}
-                    className="shrink-0 bg-green-700 hover:bg-green-600 text-white rounded-xl px-3.5 py-2.5 transition-colors disabled:opacity-60 flex items-center gap-1.5 text-sm font-semibold"
+                    className="shrink-0 bg-[#D95B2F] hover:bg-[#C44E24] text-white rounded-xl px-3.5 py-2.5 transition-colors disabled:opacity-60 flex items-center gap-1.5 text-sm font-semibold"
                   >
-                    {subLoading
-                      ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      : <Send size={14} />
-                    }
+                    {subLoading ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Send size={14} />
+                    )}
                   </button>
                 </div>
+
                 {subError && <p className="text-xs text-red-400">{subError}</p>}
-                <p className="text-sm text-white/80 leading-snug">
+
+                <p className="text-sm text-[#0A2B21] leading-snug">
                   No spam, ever. Unsubscribe at any time.
                 </p>
               </form>
@@ -400,21 +423,57 @@ const scrollTo = (
           </div>
         </div>
 
-        <div className="w-full px-4 sm:px-8 lg:px-14 mt-10 pt-6 border-t border-white/20 relative z-10 flex flex-col items-center gap-3">
-          <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-white/80">
-            <a href={`${BASE}/terms`} className="hover:text-white transition-colors">Terms &amp; Conditions</a>
-            <span className="opacity-95">·</span>
-            <a href={`${BASE}/medical-disclaimer`} className="hover:text-white transition-colors">Medical Disclaimer</a>
-            <span className="opacity-95">·</span>
-            <a href={`${BASE}/privacy-policy`} className="hover:text-white transition-colors">Privacy Policy</a>
-          </div>
-          <p className="text-xs text-white/80 text-center">
-            © {new Date().getFullYear()} Susruta Hospital, Tirupati. All rights reserved.  Designed with Gratitude from{" "}{" "}
-            <a href="https://myrsv.com" target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-green-400 underline underline-offset-2 transition-colors">
-              RSV Infotech Pte. Ltd.
-            </a>
-          </p>
-        </div>
+        {/* Bottom bar */}
+<div className="w-full px-4 sm:px-8 lg:px-14 py-5 border-t border-[#0A2B21]/10 relative z-10">
+  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-[#0A2B21] text-center">
+    
+    {/* Copyright */}
+    <p>
+      © {new Date().getFullYear()} Susruta Hospital, Tirupati. All rights reserved.
+      {" "}Designed with Gratitude from{" "}
+      <a
+        href="https://myrsv.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:text-[#E8A87C] underline underline-offset-2 transition-colors"
+      >
+        RSV Infotech Pte. Ltd.
+      </a>
+    </p>
+
+<div>
+
+    {/* Terms */}
+
+    <a
+      href={`${BASE}/terms`}
+      className="hover:text-[#E8A87C] transition-colors"
+    >
+      Terms &amp; Conditions
+    </a>
+
+    <span className="opacity-50 px-3">|</span>
+
+    {/* Medical Disclaimer */}
+    <a
+      href={`${BASE}/medical-disclaimer`}
+      className="hover:text-[#E8A87C] transition-colors"
+    >
+      Medical Disclaimer
+    </a>
+
+    <span className="opacity-50 px-3">|</span>
+
+    {/* Privacy Policy */}
+    <a
+      href={`${BASE}/privacy-policy`}
+      className="hover:text-[#E8A87C] transition-colors"
+    >
+      Privacy Policy
+    </a>
+</div>
+  </div>
+</div>
       </footer>
     </div>
   );

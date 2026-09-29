@@ -567,6 +567,7 @@ CREATE TABLE public.patients (
     google_id character varying(255),
     name character varying(255) NOT NULL,
     phone character varying(20),
+    address text,
     avatar_url text,
     password_hash text,
     created_at timestamp without time zone DEFAULT now() NOT NULL,

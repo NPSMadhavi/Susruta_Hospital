@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable } from "@workspace/db";
-import { eq, desc, inArray, and, gte, lte, ne, sql } from "drizzle-orm";
+import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable } from "@workspace/db";
+import { eq, desc, inArray, and, gte, lte, ne, sql, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod/v4";
@@ -11,6 +11,10 @@ import {
   normalizeVerificationEmail,
   verificationEmailMatchesPatient,
 } from "../lib/verification";
+import {
+  computeNextPatientId,
+  validateManualCounterSetting,
+} from "../lib/patient-id";
 
 const router = Router();
 
@@ -77,7 +81,7 @@ async function getOrCreateSettings() {
         clinicPhone2: "0877-2220663",
         clinicEmail: null,
         clinicAddress: "119, Ramulavari North Mada Street, Tirupati - 517 507",
-        workingHours: "Mon-Sat: 9:00 AM - 1:00 PM, 4:00 PM - 7:00 PM",
+        workingHours: "Mon-Sat: 10:00 AM - 1:00 PM, 6:00 PM - 10:00 PM | Sun: 10:00 AM - 1:00 PM",
         smtpFromName: "Susruta Hospital",
         smtpFromEmail: "noreply@susrutahospital.com",
         smtpSubscriberFrom: "updates@susrutahospital.com",
@@ -114,8 +118,9 @@ function serializeSettings(s: typeof siteSettingsTable.$inferSelect) {
     patientIdCurrentNumber: s.patientIdCurrentNumber,
     // Computed: current patient ID display (last assigned)
     currentPatientId: s.patientIdCurrentNumber > 0
-      ? `${s.patientIdPrefix}${s.patientIdCurrentNumber.toString().padStart(3, "0")}`
+      ? `${s.patientIdPrefix}${s.patientIdCurrentNumber.toString().padStart(s.patientIdPrefix.length === 1 ? 3 : s.patientIdPrefix.length === 2 ? 2 : 1, "0")}`
       : null,
+    nextPatientId: computeNextPatientId(s.patientIdPrefix, s.patientIdCurrentNumber),
   };
 }
 
@@ -144,14 +149,52 @@ router.patch("/settings", requireAdmin, async (req, res) => {
   if (req.body.phonepeQrObjectPath !== undefined) {
     updates.phonepeQrObjectPath = req.body.phonepeQrObjectPath;
   }
-  // Patient ID counter — admin can manually set prefix and current number
+  // Patient ID counter — admin can manually set prefix (A-Z, AA-ZZ, or AAA-ZZZ) and current number
+  let targetPrefix: string | undefined = undefined;
+  let targetNumber: number | undefined = undefined;
+
   if (req.body.patientIdPrefix !== undefined) {
     const prefix = String(req.body.patientIdPrefix).toUpperCase().trim();
-    if (/^[A-Z]$/.test(prefix)) updates.patientIdPrefix = prefix;
+    if (/^[A-Z]{1,3}$/.test(prefix)) {
+      targetPrefix = prefix;
+    } else {
+      res.status(400).json({
+        error: "invalid_prefix",
+        message: "Patient ID Prefix must be 1 to 3 uppercase letters (A-Z, AA-ZZ, AAA-ZZZ).",
+      });
+      return;
+    }
   }
+
   if (req.body.patientIdCurrentNumber !== undefined) {
-    const num = parseInt(req.body.patientIdCurrentNumber);
-    if (!isNaN(num) && num >= 0 && num <= 999) updates.patientIdCurrentNumber = num;
+    const num = parseInt(String(req.body.patientIdCurrentNumber), 10);
+    if (isNaN(num) || num < 0) {
+      res.status(400).json({
+        error: "invalid_number",
+        message: "Current Number must be a valid non-negative integer.",
+      });
+      return;
+    }
+    targetNumber = num;
+  }
+
+  if (targetPrefix !== undefined || targetNumber !== undefined) {
+    const existing = await getOrCreateSettings();
+    const resolvedPrefix = targetPrefix ?? existing.patientIdPrefix ?? "A";
+    const resolvedNumber = targetNumber ?? existing.patientIdCurrentNumber ?? 0;
+
+    const validation = await validateManualCounterSetting(resolvedPrefix, resolvedNumber);
+    if (!validation.valid) {
+      res.status(400).json({
+        error: "counter_collision",
+        message: validation.error,
+        nextCode: validation.nextCode,
+      });
+      return;
+    }
+
+    updates.patientIdPrefix = resolvedPrefix;
+    updates.patientIdCurrentNumber = resolvedNumber;
   }
 
   updates.updatedAt = new Date();
@@ -212,8 +255,11 @@ router.get("/patients", requireAdmin, async (_req, res) => {
         id: patientsTable.id,
         patientCode: patientsTable.patientCode,
         name: patientsTable.name,
+        age: patientsTable.age,
+        gender: patientsTable.gender,
         email: patientsTable.email,
         phone: patientsTable.phone,
+        address: patientsTable.address,
         emailVerified: patientsTable.emailVerified,
         createdAt: patientsTable.createdAt,
       })
@@ -228,8 +274,9 @@ router.get("/patients", requireAdmin, async (_req, res) => {
 
 const UpdatePatientBody = z.object({
   name: z.string().trim().min(2).max(100),
-  email: z.string().trim().email().max(255),
+  email: z.string().trim().email().max(255).or(z.literal("")).nullable().optional(),
   phone: z.string().trim().max(20).nullable().optional(),
+  address: z.string().trim().nullable().optional(),
 });
 
 // ── PATCH /admin/patients/:id — edit patient contact details ───
@@ -241,21 +288,25 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
   if (!parsed.success) {
     res.status(400).json({
       error: "validation_error",
-      message: "Name must be at least 2 characters, and a valid email address is required. Phone number must be 20 characters or fewer.",
+      message: "Name must be at least 2 characters. Phone number must be 20 characters or fewer.",
     });
     return;
   }
 
   const name = parsed.data.name;
-  const email = parsed.data.email.toLowerCase();
+  const rawEmail = parsed.data.email ? parsed.data.email.trim().toLowerCase() : null;
+  const email = rawEmail || null;
   const phone = parsed.data.phone?.trim() || null;
 
   try {
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
     if (!patient) { res.status(404).json({ error: "not_found", message: "Patient not found." }); return; }
 
-    const emailChanged = !verificationEmailMatchesPatient(patient.email, email);
-    if (emailChanged) {
+    const emailChanged = email
+      ? !verificationEmailMatchesPatient(patient.email, email)
+      : Boolean(patient.email);
+
+    if (email && emailChanged) {
       const [duplicate] = await db
         .select({ id: patientsTable.id })
         .from(patientsTable)
@@ -273,8 +324,8 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
       }
     }
 
-    const verificationToken = emailChanged ? randomBytes(48).toString("hex") : null;
-    const verificationExpiresAt = emailChanged
+    const verificationToken = email && emailChanged ? randomBytes(48).toString("hex") : null;
+    const verificationExpiresAt = email && emailChanged
       ? new Date(Date.now() + 24 * 60 * 60 * 1000)
       : null;
     let updatedPatient: typeof patientsTable.$inferSelect | undefined;
@@ -301,7 +352,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
       if (!updated) throw new Error("Patient update returned no record.");
       updatedPatient = updated;
 
-      if (emailChanged && verificationToken && verificationExpiresAt) {
+      if (email && emailChanged && verificationToken && verificationExpiresAt) {
         await tx
           .update(loginTokensTable)
           .set({ used: true })
@@ -318,7 +369,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
     });
 
     let verificationEmailSent: boolean | null = null;
-    if (emailChanged && verificationToken) {
+    if (email && emailChanged && verificationToken) {
       let frontendUrl: string;
       if (process.env.REPLIT_DEPLOYMENT === "1") {
         frontendUrl = process.env.APP_URL || "https://susrutahospital.com";
@@ -353,9 +404,11 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
 
     const message = !emailChanged
       ? "Patient record updated successfully."
-      : verificationEmailSent
-        ? `Patient record updated. A verification email was sent to ${email}.`
-        : "Patient record updated, but the verification email could not be sent. Check SMTP settings and resend it when ready.";
+      : email
+        ? verificationEmailSent
+          ? `Patient record updated. A verification email was sent to ${email}.`
+          : "Patient record updated, but the verification email could not be sent. Check SMTP settings and resend it when ready."
+        : "Patient record updated successfully.";
 
     res.json({
       success: true,
@@ -384,6 +437,10 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
 
   const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
   if (!patient) { res.status(404).json({ error: "not_found" }); return; }
+  if (!patient.email) {
+    res.status(400).json({ error: "no_email", message: "Patient does not have an email address." });
+    return;
+  }
   if (patient.emailVerified) {
     res.status(400).json({ error: "already_verified", message: "Email is already verified." });
     return;
@@ -446,17 +503,100 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
   const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
   if (!patient) { res.status(404).json({ error: "not_found" }); return; }
 
-  // Delete in FK-safe order
-  const appts = await db.select({ id: onlineAppointmentsTable.id })
-    .from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.patientId, id));
-  if (appts.length > 0) {
-    const apptIds = appts.map(a => a.id);
-    await db.delete(prescriptionsTable).where(inArray(prescriptionsTable.onlineAppointmentId, apptIds));
+  const patientEmail = patient.email ? normalizeVerificationEmail(patient.email) : null;
+  const patientPhone = patient.phone || null;
+
+  // Find all patient record IDs matching ID, email, or phone
+  const matchingPatients = await db.select({ id: patientsTable.id }).from(patientsTable).where(
+    or(
+      eq(patientsTable.id, id),
+      ...(patientEmail ? [eq(patientsTable.email, patientEmail)] : []),
+      ...(patientPhone ? [eq(patientsTable.phone, patientPhone)] : [])
+    )
+  );
+  const allPatientIds = Array.from(new Set(matchingPatients.map(p => p.id)));
+
+  // Find all online appointments matching patient IDs
+  const onlineAppts = await db.select({ id: onlineAppointmentsTable.id }).from(onlineAppointmentsTable).where(
+    inArray(onlineAppointmentsTable.patientId, allPatientIds)
+  );
+  const onlineApptIds = onlineAppts.map(a => a.id);
+
+  // Find all physical appointments matching patient IDs, email, or phone
+  const physicalAppts = await db.select({ id: appointmentsTable.id }).from(appointmentsTable).where(
+    or(
+      inArray(appointmentsTable.patientId, allPatientIds),
+      ...(patientEmail ? [eq(appointmentsTable.patientEmail, patientEmail)] : []),
+      ...(patientPhone ? [eq(appointmentsTable.patientPhone, patientPhone)] : [])
+    )
+  );
+  const physicalApptIds = physicalAppts.map(a => a.id);
+
+  // Delete prescriptions tied to online appointments
+  if (onlineApptIds.length > 0) {
+    await db.delete(prescriptionsTable).where(inArray(prescriptionsTable.onlineAppointmentId, onlineApptIds));
   }
-  await db.delete(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.patientId, id));
-  await db.delete(patientSessionsTable).where(eq(patientSessionsTable.patientId, id));
-  await db.delete(loginTokensTable).where(eq(loginTokensTable.patientId, id));
-  await db.delete(patientsTable).where(eq(patientsTable.id, id));
+
+  // Delete medicine orders and items
+  const medicineOrders = await db.select({ id: medicineOrdersTable.id }).from(medicineOrdersTable).where(
+    or(
+      inArray(medicineOrdersTable.patientId, allPatientIds),
+      ...(onlineApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, onlineApptIds)] : []),
+      ...(physicalApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, physicalApptIds)] : [])
+    )
+  );
+  if (medicineOrders.length > 0) {
+    const orderIds = medicineOrders.map(o => o.id);
+    await db.delete(medicineOrderItemsTable).where(inArray(medicineOrderItemsTable.orderId, orderIds));
+    await db.delete(medicineOrdersTable).where(inArray(medicineOrdersTable.id, orderIds));
+  }
+
+  // Delete patient documents
+  await db.delete(patientDocumentsTable).where(inArray(patientDocumentsTable.patientId, allPatientIds));
+
+  // Delete donations
+  await db.delete(donationsTable).where(
+    or(
+      inArray(donationsTable.patientId, allPatientIds),
+      ...(patientEmail ? [eq(donationsTable.patientEmail, patientEmail)] : [])
+    )
+  );
+
+  // Delete patient OTPs
+  await db.delete(patientOtpsTable).where(
+    or(
+      inArray(patientOtpsTable.patientId, allPatientIds),
+      ...(patientEmail ? [eq(patientOtpsTable.targetValue, patientEmail)] : []),
+      ...(patientPhone ? [eq(patientOtpsTable.targetValue, patientPhone)] : [])
+    )
+  );
+
+  // Delete direct calls
+  await db.delete(directCallsTable).where(inArray(directCallsTable.patientId, allPatientIds));
+
+  // Delete online appointments
+  if (onlineApptIds.length > 0) {
+    await db.delete(onlineAppointmentsTable).where(inArray(onlineAppointmentsTable.id, onlineApptIds));
+  }
+
+  // Delete physical appointments
+  if (physicalApptIds.length > 0) {
+    await db.delete(appointmentsTable).where(inArray(appointmentsTable.id, physicalApptIds));
+  }
+
+  // Delete login tokens
+  await db.delete(loginTokensTable).where(
+    or(
+      inArray(loginTokensTable.patientId, allPatientIds),
+      ...(patientEmail ? [eq(loginTokensTable.verificationEmail, patientEmail)] : [])
+    )
+  );
+
+  // Delete patient sessions
+  await db.delete(patientSessionsTable).where(inArray(patientSessionsTable.patientId, allPatientIds));
+
+  // Delete patient record(s)
+  await db.delete(patientsTable).where(inArray(patientsTable.id, allPatientIds));
 
   res.json({ success: true });
 });

@@ -11,8 +11,8 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const SubscribeBody = z.object({
-  name: z.string().min(2).max(100),
-  phone: z.string().min(6).max(20),
+  name: z.string().max(100).optional().or(z.literal("")),
+  phone: z.string().max(20).optional().or(z.literal("")),
   email: z.string().email(),
   country: z.string().max(100).optional(),
 });
@@ -216,13 +216,15 @@ router.get("/notifications", requireAdmin, (req, res) => {
 });
 
 // ── Public: Subscribe ────────────────────────────────────────
-router.post("/", async (req, res) => {
+const handleSubscribe = async (req: any, res: any) => {
   const parsed = SubscribeBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "validation_error", message: "Please provide a valid name, phone number, and email address." });
+    res.status(400).json({ error: "validation_error", message: "Please provide a valid email address." });
     return;
   }
   const { name, phone, email, country } = parsed.data;
+  const subscriberName = name?.trim() || email.split("@")[0];
+  const subscriberPhone = phone?.trim() || "N/A";
 
   const existing = await db.select().from(subscribersTable).where(eq(subscribersTable.email, email));
   if (existing.length > 0) {
@@ -230,15 +232,23 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const [sub] = await db.insert(subscribersTable).values({ name, phone, email, country: country ?? null }).returning();
+  const [sub] = await db.insert(subscribersTable).values({
+    name: subscriberName,
+    phone: subscriberPhone,
+    email,
+    country: country ?? null
+  }).returning();
   const serialized = { ...sub, subscribedAt: sub.subscribedAt.toISOString() };
 
   // Real-time push to admin panel
   notifyNewSubscriber(serialized);
 
-  sendSubscriptionConfirmation({ to: email, name }).catch(() => {});
+  sendSubscriptionConfirmation({ to: email, name: subscriberName }).catch(() => {});
   res.status(201).json({ id: sub.id, message: "Subscribed successfully." });
-});
+};
+
+router.post("/", handleSubscribe);
+router.post("/subscribe", handleSubscribe);
 
 // ── Admin: List ──────────────────────────────────────────────
 router.get("/", requireAdmin, async (_req, res) => {

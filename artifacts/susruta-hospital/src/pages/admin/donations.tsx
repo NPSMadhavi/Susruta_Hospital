@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Heart, CheckCircle2, Clock, Mail, MailCheck, ChevronDown, IndianRupee, Search, RefreshCw } from "lucide-react";
+import { Heart, CheckCircle2, Clock, Mail, MailCheck, ChevronDown, IndianRupee, Search, RefreshCw, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -106,6 +106,7 @@ export default function AdminDonations() {
   const totalAmount = filtered.reduce((sum, d) => sum + parseFloat(d.amount || "0"), 0);
   const verifiedCount = filtered.filter(d => d.status === "verified").length;
   const pendingCount = filtered.filter(d => d.status === "pending").length;
+  const donorCount = new Set(filtered.map(d => d.patientCode || d.patientEmail || d.patientName).filter(Boolean)).size;
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
@@ -124,75 +125,92 @@ export default function AdminDonations() {
             <Heart size={20} className="text-rose-600" fill="currentColor" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Donations</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Donations</h1>
             <p className="text-sm text-gray-500">Track patient donations, verify payments, and send thank-you emails.</p>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center mb-6">
-        <label className="flex items-center gap-2 text-sm font-semibold text-gray-600 cursor-pointer select-none">
-          <input type="checkbox" checked={allTime} onChange={e => setAllTime(e.target.checked)} className="rounded" />
-          All time
-        </label>
-        {!allTime && (
-          <>
-            <div className="relative">
-              <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}
-                className="appearance-none bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#1a3d2b]">
-                {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            </div>
-            <div className="relative">
-              <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
-                className="appearance-none bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#1a3d2b]">
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            </div>
-          </>
-        )}
-        <button onClick={load} className="p-2 text-gray-400 hover:text-[#1a3d2b] hover:bg-gray-100 rounded-xl transition-colors" title="Refresh">
-          <RefreshCw size={15} />
-        </button>
-        <div className="flex-1 min-w-[180px] relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search by name, Patient ID, amount…"
-            value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1a3d2b]" />
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" checked={allTime} onChange={e => setAllTime(e.target.checked)} className="rounded" />
+            All time
+          </label>
+          {!allTime && (
+            <>
+              <div className="relative">
+                <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}
+                  className="appearance-none bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#1a3d2b]">
+                  {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
+                  className="appearance-none bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#1a3d2b]">
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <button onClick={load} className="p-2 bg-white border border-gray-200 text-gray-500 hover:text-[#1a3d2b] hover:bg-gray-50 rounded-xl transition-colors" title="Refresh">
+            <RefreshCw size={15} />
+          </button>
+          <div className="relative w-64 sm:w-80">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Search by name, Patient ID, amount…"
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1a3d2b]" />
+          </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-            <IndianRupee size={20} className="text-emerald-700" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-muted-foreground text-sm">Total Donations</h3>
+            <div className="p-2 bg-emerald-500/10 text-emerald-700 rounded-lg">
+              <IndianRupee size={18} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total Donated</p>
-            <p className="text-2xl font-black text-gray-800">₹{totalAmount.toLocaleString("en-IN")}</p>
-          </div>
+          <p className="text-4xl font-bold font-sans">₹{totalAmount.toLocaleString("en-IN")}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} className="text-green-700" />
+
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-muted-foreground text-sm">Number of Donors</h3>
+            <div className="p-2 bg-blue-500/10 text-blue-600 rounded-lg">
+              <Users size={18} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Received</p>
-            <p className="text-2xl font-black text-green-700">{verifiedCount}</p>
-          </div>
+          <p className="text-4xl font-bold font-sans text-blue-600">{donorCount}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-            <Clock size={20} className="text-amber-600" />
+
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-muted-foreground text-sm">Amount Received</h3>
+            <div className="p-2 bg-green-500/10 text-green-600 rounded-lg">
+              <CheckCircle2 size={18} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Not Received</p>
-            <p className="text-2xl font-black text-amber-600">{pendingCount}</p>
+          <p className="text-4xl font-bold font-sans text-green-600">{verifiedCount}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-muted-foreground text-sm">Amount Not Received</h3>
+            <div className="p-2 bg-yellow-500/10 text-yellow-600 rounded-lg">
+              <Clock size={18} />
+            </div>
           </div>
+          <p className="text-4xl font-bold font-sans text-yellow-600">{pendingCount}</p>
         </div>
       </div>
 
@@ -229,7 +247,7 @@ export default function AdminDonations() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {d.patientCode && (
-                          <span className="text-sm font-black text-[#1a3d2b] font-mono tracking-widest bg-[#1a3d2b]/8 border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">
+                          <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">
                             {d.patientCode}
                           </span>
                         )}
@@ -251,7 +269,7 @@ export default function AdminDonations() {
                         className="flex items-center gap-2 cursor-pointer group select-none">
                         <div className={cn(
                           "relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0",
-                          d.status === "verified" ? "bg-green-500" : "bg-gray-200 group-hover:bg-gray-300"
+                          d.status === "verified" ? "bg-emerald-600" : "bg-gray-200 group-hover:bg-gray-300"
                         )}>
                           <div className={cn(
                             "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",

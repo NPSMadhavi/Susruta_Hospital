@@ -6,13 +6,14 @@ import {
   ArrowRight, CheckCircle2, AlertCircle, Loader2, FileText, Leaf
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
+import { isSlotExceeded } from "@/lib/ist";
 import logoImg from "@assets/logo_1773840200056.png";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
 import { MathCaptcha } from "@/components/MathCaptcha";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type Slot = { id: number; date: string; startTime: string; endTime: string; intervalMinutes: number };
+type Slot = { id: number; date: string; startTime: string; endTime: string; intervalMinutes: number; slotNumber?: number; isBooked?: boolean; isExceeded?: boolean };
 type DateGroup = { date: string; slots: Slot[] };
 
 function fmtDate(d: string) {
@@ -38,6 +39,7 @@ export default function OnlineBook() {
   const [step, setStep] = useState<Step>("select-slot");
   const [dateGroups, setDateGroups] = useState<DateGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [reason, setReason] = useState("");
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
@@ -46,14 +48,22 @@ export default function OnlineBook() {
   const [error, setError] = useState("");
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [patientEmail, setPatientEmail] = useState("");
+  const [bypassGate, setBypassGate] = useState(false);
   const [captchaOk, setCaptchaOk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Verify patient is logged in and check email verification
     patientApi.me()
-      .then(p => { setEmailVerified(p.emailVerified); setPatientEmail(p.email); })
-      .catch(() => navigate("/portal?next=/portal/online-book"));
+      .then(p => {
+        if (!p || !p.id) {
+          navigate("/portal?next=/portal/online-book", { replace: true });
+          return;
+        }
+        setEmailVerified(p.emailVerified);
+        setPatientEmail(p.email);
+      })
+      .catch(() => navigate("/portal?next=/portal/online-book", { replace: true }));
 
     fetch(`${BASE}/api/online-slots/available`, { credentials: "include" })
       .then(r => r.json())
@@ -115,10 +125,25 @@ export default function OnlineBook() {
         if (!r.ok) throw data;
         return data;
       });
+
+      // Optimistically decrease slots available count by removing booked slot
+      setDateGroups(prev => prev.map(g =>
+        g.date === selectedSlot.date
+          ? { ...g, slots: g.slots.filter(s => s.id !== selectedSlot.id) }
+          : g
+      ));
+
       setStep("done");
     } catch (err: any) {
-      if (err?.error === "slot_taken") setError("This slot was just booked by someone else. Please pick another.");
-      else setError(err?.message || "Booking failed. Please try again.");
+      if (err?.error === "slot_taken") {
+        setError("This slot was just booked by someone else. Please pick another.");
+        fetch(`${BASE}/api/online-slots/available`, { credentials: "include" })
+          .then(r => r.json())
+          .then(data => { if (Array.isArray(data)) setDateGroups(data); })
+          .catch(() => {});
+      } else {
+        setError(err?.message || "Booking failed. Please try again.");
+      }
     } finally {
       setBooking(false);
     }
@@ -126,8 +151,8 @@ export default function OnlineBook() {
 
   const inputCls = "w-full px-3.5 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white";
 
-  if (emailVerified === false) {
-    return <EmailVerificationGate email={patientEmail} onBack={() => navigate("/portal/dashboard")} />;
+  if (emailVerified === false && !bypassGate) {
+    return <EmailVerificationGate email={patientEmail} onBack={() => navigate("/portal/dashboard")} onProceed={() => setBypassGate(true)} />;
   }
 
   return (
@@ -157,7 +182,9 @@ export default function OnlineBook() {
             <h2 className="text-2xl font-serif font-bold text-foreground mb-2">Booking Confirmed!</h2>
             <p className="text-muted-foreground mb-2">Your online consultation has been booked for:</p>
             <p className="font-bold text-primary text-lg">{selectedSlot && fmtDate(selectedSlot.date)}</p>
-            <p className="text-foreground font-medium">{selectedSlot && `${fmtTime(selectedSlot.startTime)} – ${fmtTime(selectedSlot.endTime)}`}</p>
+            <p className="text-foreground font-medium">
+              {selectedSlot && `${fmtTime(selectedSlot.startTime)} – ${fmtTime(selectedSlot.endTime)} (15 mins duration)`}
+            </p>
             <p className="text-sm text-muted-foreground mt-4 max-w-md mx-auto">
               Dr. P. Murali Krishna will review your documents and issue a prescription after the consultation.
               You'll be able to view it in your dashboard.
@@ -210,55 +237,108 @@ export default function OnlineBook() {
                   </div>
                 ) : dateGroups.length === 0 ? (
                   <div className="text-center py-16 bg-white rounded-2xl border border-border">
-                    <Video size={40} className="mx-auto mb-3 text-muted-foreground/30" />
-                    <p className="text-muted-foreground font-medium">No slots available right now.</p>
-                    <p className="text-sm text-muted-foreground mt-1">Check back soon — new Sunday slots are added weekly.</p>
+                    <Video size={40} className="mx-auto mb-3 text-red-400" />
+                    <p className="text-base font-bold text-red-600">Slots are not available</p>
+                    <p className="text-sm text-muted-foreground mt-1">All online consultation slots are currently booked or have passed. Please check back later.</p>
                     <button onClick={() => navigate("/portal/dashboard")}
                       className="mt-5 text-sm text-primary font-semibold hover:underline flex items-center gap-1 mx-auto">
                       <ChevronLeft size={13} /> Back to Dashboard
                     </button>
                   </div>
                 ) : (
-                  dateGroups.map(group => (
-                    <div key={group.date} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-                      <div className="px-5 py-3.5 bg-muted/30 border-b border-border">
-                        <p className="font-bold text-foreground">{fmtDate(group.date)}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{group.slots.length} slots available</p>
+                  dateGroups.map(group => {
+                    const availableSlots = group.slots.filter(s => !s.isBooked && !isSlotExceeded(group.date, s.startTime) && !s.isExceeded);
+                    const allBooked = availableSlots.length === 0;
+                    return (
+                      <div key={group.date} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden mb-4">
+                        <div className="px-5 py-3.5 bg-muted/30 border-b border-border flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-foreground">{fmtDate(group.date)}</p>
+                            <p className={`text-xs mt-0.5 font-medium ${allBooked ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                              10 AM – 1 PM   {allBooked ? "0 available slots" : `${availableSlots.length} available slots`}
+                            </p>
+                          </div>
+                          {allBooked && (
+                            <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
+                              Slots are not available
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          {allBooked && (
+                            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                              <span>All consultation slots for this date have been booked or time has passed.</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                              <Clock size={14} className="text-[#D95B2F]" />
+                              Select Consultation Timing (15 mins duration):
+                            </p>
+                            {selectedSlot && selectedSlot.date === group.date && (
+                              <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
+                                Selected: {fmtTime(selectedSlot.startTime)} – {fmtTime(selectedSlot.endTime)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                            {group.slots.map((slot) => {
+                              const isExceeded = isSlotExceeded(group.date, slot.startTime) || slot.isExceeded;
+                              const isSlotAvailable = !slot.isBooked && !isExceeded;
+                              const isSlotSelected = selectedSlot?.id === slot.id;
+                              return (
+                                <button
+                                  key={slot.id}
+                                  type="button"
+                                  disabled={!isSlotAvailable}
+                                  onClick={() => {
+                                    if (isSlotAvailable) setSelectedSlot(slot);
+                                  }}
+                                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                                    !isSlotAvailable
+                                      ? "bg-muted/40 border-border text-muted-foreground/50 cursor-not-allowed opacity-60"
+                                      : isSlotSelected
+                                      ? "bg-primary border-primary text-white shadow-sm ring-2 ring-primary/30 cursor-pointer"
+                                      : "bg-card border-border hover:border-primary/50 hover:bg-primary/5 text-foreground cursor-pointer"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between w-full">
+                                    <span className="text-xs font-bold leading-tight">
+                                      {fmtTime(slot.startTime)} – {fmtTime(slot.endTime)}
+                                    </span>
+                                    {isSlotSelected && (
+                                      <CheckCircle2 size={13} className="text-white shrink-0 ml-1" />
+                                    )}
+                                  </div>
+                                  <span className={`text-[10px] mt-1.5 font-medium ${
+                                    !isSlotAvailable
+                                      ? "text-red-500 font-semibold"
+                                      : isSlotSelected
+                                      ? "text-white/80"
+                                      : "text-muted-foreground"
+                                  }`}>
+                                    {!isSlotAvailable
+                                      ? (slot.isBooked ? "Booked" : "Time passed")
+                                      : "15 mins duration"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                        {group.slots.map(slot => {
-                          const selected = selectedSlot?.id === slot.id;
-                          return (
-                            <button key={slot.id} onClick={() => setSelectedSlot(slot)}
-                              className={cn(
-                                "rounded-xl border px-3 py-3 text-left transition-all",
-                                selected
-                                  ? "bg-primary border-primary text-white shadow-lg shadow-primary/20"
-                                  : "bg-white border-border hover:border-primary hover:bg-primary/5"
-                              )}>
-                              <p className={`text-sm font-bold ${selected ? "text-white" : "text-foreground"}`}>
-                                <Clock size={11} className="inline mr-1" />
-                                {fmtTime(slot.startTime)}
-                              </p>
-                              <p className={`text-xs mt-0.5 ${selected ? "text-white/75" : "text-muted-foreground"}`}>
-                                to {fmtTime(slot.endTime)}
-                              </p>
-                              {selected && <p className="text-[10px] text-white/80 mt-1 font-semibold">✓ Selected</p>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
-                {selectedSlot && (
-                  <div className="flex justify-end">
-                    <button onClick={() => setStep("upload-docs")}
-                      className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
-                      Continue <ArrowRight size={15} />
-                    </button>
-                  </div>
-                )}
+                <div className="flex justify-end">
+                  <button
+                    disabled={!selectedSlot || selectedSlot.isBooked || isSlotExceeded(selectedSlot.date, selectedSlot.startTime) || selectedSlot.isExceeded}
+                    onClick={() => setStep("upload-docs")}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Continue <ArrowRight size={15} />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -359,8 +439,10 @@ export default function OnlineBook() {
                       <p className="font-bold text-foreground">{fmtDate(selectedSlot.date)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Time</p>
-                      <p className="font-bold text-foreground">{fmtTime(selectedSlot.startTime)} – {fmtTime(selectedSlot.endTime)}</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Slot</p>
+                      <p className="font-bold text-foreground">
+                        {fmtTime(selectedSlot.startTime)} – {fmtTime(selectedSlot.endTime)} (15 mins duration)
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Documents</p>

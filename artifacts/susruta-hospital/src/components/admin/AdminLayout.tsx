@@ -50,17 +50,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!admin) return;
     checkNewAppts();
-    const interval = setInterval(checkNewAppts, 20_000);
-    return () => clearInterval(interval);
   }, [admin, checkNewAppts]);
 
-  // SSE — listen for call_ended so admin gets an immediate chime
+  // SSE — single consolidated stream for all admin notifications
   useEffect(() => {
     if (!admin) return;
     const es = new EventSource(`${API}/appointments/notifications`, { withCredentials: true });
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        window.dispatchEvent(new CustomEvent("susruta:admin_notification", { detail: data }));
         if (data.type === "call_ended") {
           const title = data.patientName
             ? `Call ended — ${data.patientName}`
@@ -70,12 +69,18 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             : "The consultation call has finished. You can now review the appointment.";
           notify(title, body);
         } else if (data.type === "new_appointment") {
-          // Handled by polling but also surfaces here for immediacy
+          const name = data.appointment?.patientName || "A patient";
+          notify("New In-Person Booking!", `${name} booked an in-person appointment.`);
+        } else if (data.type === "new_online_appointment") {
+          const name = data.patient?.name || "A patient";
+          notify("New Online Booking!", `${name} booked an online consultation.`);
+        } else if (data.type === "direct_call_updated" && data.status === "ended") {
+          notify("Direct Call Ended", "The patient consultation call has ended.");
         }
       } catch { /* ignore parse errors */ }
     };
     return () => es.close();
-  }, [admin?.username]);
+  }, [admin?.username, notify]);
 
   // Protect route
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
@@ -108,7 +113,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const mobileNavItems = [...dashboardGroup, ...managementGroup].slice(0, 6);
 
   const renderNavItem = (item: { href: string; icon: React.ReactNode; label: string }) => {
-    const isActive = location === item.href;
+    const isActive = location === item.href || (item.href === "/admin/availability" && location === "/admin/offline-register");
     return (
       <Link 
         key={item.href} 

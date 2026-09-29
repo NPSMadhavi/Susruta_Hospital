@@ -15,7 +15,10 @@ interface Patient {
   id: number;
   patientCode: string | null;
   name: string;
-  email: string;
+  age?: number | null;
+  gender?: string | null;
+  address?: string | null;
+  email: string | null;
   phone: string | null;
   emailVerified: boolean;
   createdAt: string;
@@ -34,7 +37,14 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-const POLL_INTERVAL_MS = 20_000;
+function formatDisplayPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+")) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  return trimmed;
+}
 
 function EditPatientDialog({
   patient,
@@ -46,12 +56,14 @@ function EditPatientDialog({
   onSaved: (patient: Patient, message: string, ok: boolean) => void;
 }) {
   const [name, setName] = useState(patient.name);
-  const [email, setEmail] = useState(patient.email);
-  const [phone, setPhone] = useState(patient.phone ?? "");
+  const [email, setEmail] = useState(patient.email ?? "");
+  const [phone, setPhone] = useState(formatDisplayPhone(patient.phone));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const emailChanged = email.trim().toLowerCase() !== patient.email.trim().toLowerCase();
+  const originalEmail = (patient.email ?? "").trim().toLowerCase();
+  const newEmail = email.trim().toLowerCase();
+  const emailChanged = newEmail !== originalEmail && newEmail.length > 0;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,14 +75,19 @@ function EditPatientDialog({
       setError("Name must be at least 2 characters.");
       return;
     }
-    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError("Please enter a valid email address.");
       return;
     }
-    if (phone.trim().length > 20) {
-      setError("Phone number must be 20 characters or fewer.");
+    const cleanDigits = phone.trim().replace(/\D/g, "");
+    if (cleanDigits.length > 0 && cleanDigits.length < 10) {
+      setError("Phone number must have at least 10 digits.");
       return;
     }
+
+    const phoneToSave = cleanDigits.length === 10
+      ? `+91${cleanDigits}`
+      : (phone.trim() || null);
 
     setSaving(true);
     try {
@@ -79,8 +96,8 @@ function EditPatientDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: trimmedName,
-          email: trimmedEmail,
-          phone: phone.trim() || null,
+          email: trimmedEmail || null,
+          phone: phoneToSave,
         }),
       });
       const data = await response.json();
@@ -145,14 +162,16 @@ function EditPatientDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="edit-patient-email" className="text-sm font-semibold text-gray-800">Email address</label>
+            <label htmlFor="edit-patient-email" className="text-sm font-semibold text-gray-800">
+              Email address <span className="font-normal text-gray-400">({patient.email ? "for portal login" : "optional for offline patients"})</span>
+            </label>
             <input
               id="edit-patient-email"
               type="email"
               value={email}
               onChange={event => setEmail(event.target.value)}
               maxLength={255}
-              required
+              placeholder="e.g. patient@example.com (optional)"
               className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
           </div>
@@ -218,7 +237,6 @@ export default function AdminPatients() {
   const [monitoring, setMonitoring] = useState<MonitorCredentials | null>(null);
   const [monitoringCallId, setMonitoringCallId] = useState<number | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -245,7 +263,15 @@ export default function AdminPatients() {
     try {
       const r = await fetch(`${BASE}/api/direct-calls/admin/active`, { credentials: "include" });
       const data = await r.json();
-      setActiveCalls(Array.isArray(data) ? data : []);
+      const calls: DirectCall[] = Array.isArray(data) ? data : [];
+      setActiveCalls(calls);
+      setMonitoringCallId(prev => {
+        if (prev && !calls.some(c => c.id === prev)) {
+          setMonitoring(null);
+          return null;
+        }
+        return prev;
+      });
     } catch {
       setActiveCalls([]);
     }
@@ -254,21 +280,53 @@ export default function AdminPatients() {
   useEffect(() => {
     fetchPatients(false);
     fetchActiveCalls();
-    pollRef.current = setInterval(() => { fetchPatients(true); fetchActiveCalls(); }, POLL_INTERVAL_MS);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchPatients, fetchActiveCalls]);
+
+  // Real-time direct call updates from AdminLayout's single SSE connection
+  useEffect(() => {
+    function handleEvent(e: Event) {
+      const data = (e as CustomEvent).detail;
+      if (!data) return;
+      if (data.type === "direct_call_updated") {
+        if (data.status === "ended") {
+          setActiveCalls(prev => prev.filter(c => c.id !== data.id));
+          setMonitoringCallId(prev => {
+            if (prev === data.id) {
+              setMonitoring(null);
+              return null;
+            }
+            return prev;
+          });
+        } else {
+          fetchActiveCalls();
+        }
+      }
+    }
+    window.addEventListener("susruta:admin_notification", handleEvent);
+    return () => window.removeEventListener("susruta:admin_notification", handleEvent);
+  }, [fetchActiveCalls]);
+
+  // Fallback poll while a direct call is active so UI reflects doctor ending call immediately
+  useEffect(() => {
+    if (activeCalls.length === 0) return;
+    const interval = setInterval(() => {
+      fetchActiveCalls();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeCalls.length, fetchActiveCalls]);
 
   const filtered = patients.filter(p => {
     const q = search.toLowerCase();
     return (
       p.name.toLowerCase().includes(q) ||
-      p.email.toLowerCase().includes(q) ||
+      (p.email ?? "").toLowerCase().includes(q) ||
       (p.phone ?? "").includes(q) ||
       (p.patientCode ?? "").toLowerCase().includes(q)
     );
   });
 
   async function resendVerification(p: Patient) {
+    if (!p.email) return;
     setActionLoading(prev => ({ ...prev, [p.id]: "resend" }));
     try {
       const r = await apiFetch(`/patients/${p.id}/resend-verification`, { method: "POST" });
@@ -334,14 +392,15 @@ export default function AdminPatients() {
 
   async function endDirectCall(call: DirectCall) {
     setActionLoading(prev => ({ ...prev, [call.patient.id]: "end-call" }));
+    setActiveCalls(prev => prev.filter(c => c.id !== call.id));
+    if (monitoringCallId === call.id) { setMonitoring(null); setMonitoringCallId(null); }
     try {
       const r = await fetch(`${BASE}/api/direct-calls/admin/${call.id}/end`, { method: "POST", credentials: "include" });
       if (!r.ok) throw new Error();
-      setActiveCalls(prev => prev.filter(c => c.id !== call.id));
-      if (monitoringCallId === call.id) { setMonitoring(null); setMonitoringCallId(null); }
       showToast(`Direct call with ${call.patient.name} ended.`);
     } catch {
-      showToast("Could not end the direct call.", false);
+      showToast("Could not end the direct call on server.", false);
+      fetchActiveCalls();
     } finally {
       setActionLoading(prev => { const n = { ...prev }; delete n[call.patient.id]; return n; });
     }
@@ -392,7 +451,7 @@ export default function AdminPatients() {
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-7">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Patient?</h3>
             <p className="text-sm text-gray-600 mb-1">
-              This will permanently delete <strong>{confirmDelete.name}</strong> ({confirmDelete.email}) and all their appointments and data.
+              This will permanently delete <strong>{confirmDelete.name}</strong> {confirmDelete.email ? `(${confirmDelete.email})` : confirmDelete.phone ? `(${confirmDelete.phone})` : ""} and all their appointments and data.
             </p>
             <p className="text-xs text-red-600 font-semibold mb-6">This action cannot be undone.</p>
             <div className="flex gap-3">
@@ -419,7 +478,7 @@ export default function AdminPatients() {
 
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Registered Patients</h1>
+          <h1 className="text-3xl font-bold text-foreground">Registered Patients</h1>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-muted-foreground text-sm">
               {loading ? "Loading…" : `${patients.length} patient${patients.length !== 1 ? "s" : ""} registered`}
@@ -497,106 +556,123 @@ export default function AdminPatients() {
           <p className="text-sm">{search ? "No patients match your search." : "No registered patients yet."}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-2xl border border-border overflow-x-auto">
+          <table className="w-full text-sm min-w-[1050px]">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Patient ID</th>
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Name</th>
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Contact</th>
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Registered</th>
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap">Patient ID</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap">Name</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell whitespace-nowrap">Contact</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell whitespace-nowrap">Registered</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap min-w-[140px]">Status</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap min-w-[340px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filtered.map(p => (
                 <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-5 py-4">
+                  <td className="px-5 py-4 whitespace-nowrap">
                     {p.patientCode
-                      ? <span className="font-black text-primary font-mono text-base tracking-widest">{p.patientCode}</span>
+                      ? <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">{p.patientCode}</span>
                       : <span className="text-muted-foreground text-xs italic">—</span>
                     }
                   </td>
                   <td className="px-5 py-4">
-                    <p className="font-semibold text-foreground">{p.name}</p>
+                    <p className="font-semibold text-foreground truncate max-w-[200px]">{p.name}</p>
                   </td>
                   <td className="px-5 py-4 hidden md:table-cell">
-                    <div className="space-y-0.5">
-                      <p className="flex items-center gap-1.5 text-muted-foreground">
-                        <Mail size={12} className="shrink-0" /> {p.email}
-                      </p>
-                      {p.phone && (
-                        <p className="flex items-center gap-1.5 text-muted-foreground">
-                          <Phone size={12} className="shrink-0" /> {p.phone}
+                    <div className="space-y-0.5 min-w-0 max-w-[240px]">
+                      {p.email && (
+                        <p className="flex items-center gap-1.5 text-muted-foreground truncate">
+                          <Mail size={12} className="shrink-0" /> {p.email}
                         </p>
+                      )}
+                      {p.phone && (
+                        <p className="flex items-center gap-1.5 text-muted-foreground truncate font-mono text-xs">
+                          <Phone size={12} className="shrink-0" /> {formatDisplayPhone(p.phone)}
+                        </p>
+                      )}
+                      {p.address && (
+                        <p className="text-xs text-muted-foreground/80 truncate">
+                          📍 {p.address}
+                        </p>
+                      )}
+                      {!p.email && !p.phone && !p.address && (
+                        <span className="text-muted-foreground text-xs italic">—</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-4 hidden lg:table-cell text-muted-foreground">
+                  <td className="px-5 py-4 hidden lg:table-cell text-muted-foreground whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <Clock size={12} /> {fmtDate(p.createdAt)}
                     </div>
                   </td>
-                  <td className="px-5 py-4">
-                    {p.emailVerified
-                      ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+                  <td className="px-5 py-4 whitespace-nowrap min-w-[140px]">
+                    {p.email ? (
+                      p.emailVerified ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 shrink-0">
                           <BadgeCheck size={12} /> Verified
                         </span>
-                      : <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 shrink-0">
                           <Clock size={12} /> Unverified
                         </span>
-                    }
+                      )
+                    ) : (
+                      <span className="text-muted-foreground text-sm font-semibold px-2">—</span>
+                    )}
                   </td>
-                  <td className="px-5 py-4">
-                     <div className="flex flex-wrap items-center gap-2">
+                  <td className="px-5 py-4 whitespace-nowrap min-w-[340px]">
+                     <div className="flex items-center gap-2 whitespace-nowrap">
                        <button
                          onClick={() => setEditingPatient(p)}
                          disabled={!!actionLoading[p.id]}
                          title={`Edit ${p.name}`}
                          aria-label={`Edit ${p.name}`}
-                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors disabled:opacity-50"
+                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors disabled:opacity-50 shrink-0"
                        >
                          <Pencil size={12} />
-                         <span className="hidden sm:inline">Edit</span>
+                         <span>Edit</span>
                        </button>
-                      {!p.emailVerified && (
+                      {p.email && !p.emailVerified && (
                         <button
                           onClick={() => resendVerification(p)}
                           disabled={!!actionLoading[p.id]}
                           title="Resend verification email"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
                         >
                           {actionLoading[p.id] === "resend"
                             ? <Loader2 size={12} className="animate-spin" />
                             : <Send size={12} />
                           }
-                          <span className="hidden sm:inline">Resend Email</span>
+                          <span>Resend Email</span>
                         </button>
                       )}
-                      <button
-                        onClick={() => startDirectCall(p)}
-                        disabled={!!actionLoading[p.id] || activeCalls.length > 0}
-                        title={activeCalls.length > 0 ? "End the active direct call before starting another" : `Start a direct video call with ${p.name}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {actionLoading[p.id] === "call"
-                          ? <Loader2 size={12} className="animate-spin" />
-                          : <Video size={12} />
-                        }
-                        <span className="hidden sm:inline">Call Patient</span>
-                      </button>
+                      {p.email && (
+                        <button
+                          onClick={() => startDirectCall(p)}
+                          disabled={!!actionLoading[p.id] || activeCalls.length > 0}
+                          title={activeCalls.length > 0 ? "End the active direct call before starting another" : `Start a direct video call with ${p.name}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          {actionLoading[p.id] === "call"
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : <Video size={12} />
+                          }
+                          <span>Call Patient</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setConfirmDelete(p)}
                         disabled={!!actionLoading[p.id]}
                         title="Delete patient"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
                       >
                         {actionLoading[p.id] === "delete"
                           ? <Loader2 size={12} className="animate-spin" />
                           : <Trash2 size={12} />
                         }
-                        <span className="hidden sm:inline">Delete</span>
+                        <span>Delete</span>
                       </button>
                     </div>
                   </td>

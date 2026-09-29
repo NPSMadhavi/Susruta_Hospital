@@ -13,7 +13,7 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
-  register: (body: { name: string; email: string; phone: string; countryCode: string; password: string }) =>
+  register: (body: { name: string; age: number; gender: string; address: string; email: string; phone: string; countryCode: string; password: string }) =>
     req("/auth/register", { method: "POST", body: JSON.stringify(body) }),
 
   login: (body: { email: string; password: string }) =>
@@ -41,4 +41,25 @@ export const patientApi = {
 
   chooseReschedule: (id: number, chosenDate: string) =>
     req(`/appointments/${id}/choose-reschedule`, { method: "PATCH", body: JSON.stringify({ chosenDate }) }),
+
+  updateName: (name: string) =>
+    req("/profile/name", { method: "PATCH", body: JSON.stringify({ name }) }),
+
+  updateDetails: (body: { age?: number; gender?: string; address?: string }) =>
+    req("/profile/details", { method: "PATCH", body: JSON.stringify(body) }),
+
+  updateAddress: (address: string) =>
+    req("/profile/address", { method: "PATCH", body: JSON.stringify({ address }) }),
+
+  requestEmailOtp: (newEmail: string) =>
+    req("/profile/request-email-otp", { method: "POST", body: JSON.stringify({ newEmail }) }),
+
+  verifyEmailOtp: (newEmail: string, otp: string) =>
+    req("/profile/verify-email-otp", { method: "POST", body: JSON.stringify({ newEmail, otp }) }),
+
+  requestPhoneOtp: (newPhone: string) =>
+    req("/profile/request-phone-otp", { method: "POST", body: JSON.stringify({ newPhone }) }),
+
+  verifyPhoneOtp: (newPhone: string, otp: string) =>
+    req("/profile/verify-phone-otp", { method: "POST", body: JSON.stringify({ newPhone, otp }) }),
 };

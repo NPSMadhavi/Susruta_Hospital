@@ -1,4 +1,16 @@
-import { defineConfig } from "vite";
+import { defineConfig, createLogger } from "vite";
+
+const customLogger = createLogger();
+const originalLoggerError = customLogger.error;
+customLogger.error = (msg, options) => {
+  if (
+    (typeof msg === "string" && (msg.includes("http proxy error") || msg.includes("ECONNREFUSED"))) ||
+    (options?.error && ((options.error as any).code === "ECONNREFUSED" || (options.error as any).message?.includes("ECONNREFUSED")))
+  ) {
+    return;
+  }
+  originalLoggerError(msg, options);
+};
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
@@ -57,6 +69,7 @@ function publicDirIndexPlugin() {
 }
 
 export default defineConfig({
+  customLogger,
   base: basePath,
   plugins: [
     publicDirIndexPlugin(),
@@ -95,8 +108,17 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: process.env.BACKEND_URL || "http://localhost:5000",
+        target: process.env.BACKEND_URL || "http://127.0.0.1:5000",
         changeOrigin: true,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on("error", (_err, _req, res) => {
+            if (res && "writeHead" in res && !res.headersSent) {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "backend_not_ready", message: "Backend server is initializing." }));
+            }
+          });
+        },
       },
     },
     fs: {
@@ -110,8 +132,17 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: process.env.BACKEND_URL || "http://localhost:5000",
+        target: process.env.BACKEND_URL || "http://127.0.0.1:5000",
         changeOrigin: true,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on("error", (_err, _req, res) => {
+            if (res && "writeHead" in res && !res.headersSent) {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "backend_not_ready", message: "Backend server is initializing." }));
+            }
+          });
+        },
       },
     },
   },

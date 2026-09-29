@@ -8,12 +8,35 @@ test("accepts an Indian local number and normalizes it to E.164", () => {
     e164: "+919876543210",
     countryCode: "IN",
   });
+  assert.deepEqual(validatePatientPhone("7032588765", "IN"), {
+    valid: true,
+    e164: "+917032588765",
+    countryCode: "IN",
+  });
 });
 
-test("rejects an incomplete Indian number", () => {
-  const result = validatePatientPhone("987654321", "IN");
-  assert.equal(result.valid, false);
-  if (!result.valid) assert.match(result.message, /10 digits/);
+test("accepts an already-normalized Indian E.164 number idempotently", () => {
+  assert.deepEqual(validatePatientPhone("+917032588765", "IN"), {
+    valid: true,
+    e164: "+917032588765",
+    countryCode: "IN",
+  });
+  assert.deepEqual(validatePatientPhone("+919876543210", "IN"), {
+    valid: true,
+    e164: "+919876543210",
+    countryCode: "IN",
+  });
+});
+
+test("rejects invalid Indian numbers (too short, too long, invalid start digit)", () => {
+  assert.equal(validatePatientPhone("703258876", "IN").valid, false);
+  assert.equal(validatePatientPhone("70325887651", "IN").valid, false);
+  assert.equal(validatePatientPhone("1234567890", "IN").valid, false);
+  assert.equal(validatePatientPhone("5032588765", "IN").valid, false);
+  assert.equal(validatePatientPhone("+911234567890", "IN").valid, false);
+  assert.equal(validatePatientPhone("+915032588765", "IN").valid, false);
+  assert.equal(validatePatientPhone("+91703258876", "IN").valid, false);
+  assert.equal(validatePatientPhone("+9170325887651", "IN").valid, false);
 });
 
 test("accepts an eight-digit Singapore number", () => {

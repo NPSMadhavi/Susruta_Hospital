@@ -13,7 +13,7 @@ import {
   patientDocumentsTable,
   donationsTable,
 } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and, gte, lte } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
 import { notifyPatientSessionEnded } from "./patient";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
@@ -110,6 +110,8 @@ router.get("/appointments", requireDoctor, async (_req, res) => {
       email: r.patient.email,
       phone: r.patient.phone,
       avatarUrl: r.patient.avatarUrl,
+      age: r.patient.age ?? null,
+      gender: r.patient.gender ?? null,
     },
     prescription: r.prescription ? {
       id: r.prescription.id,
@@ -137,8 +139,12 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
       .where(inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"]))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
     db
-      .select()
+      .select({
+        appt: appointmentsTable,
+        patient: patientsTable,
+      })
       .from(appointmentsTable)
+      .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
       .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
       .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt)),
     db.select().from(patientDocumentsTable),
@@ -160,10 +166,12 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     slotId: r.slot.id,
     patient: {
       id: r.patient.id,
-      patientCode: r.patient.patientCode ?? null,
+      patientCode: r.patient.patientCode ?? `A${String(r.patient.id).padStart(3, "0")}`,
       name: r.patient.name,
       email: r.patient.email,
       phone: r.patient.phone ?? null,
+      age: r.patient.age ?? null,
+      gender: r.patient.gender ?? null,
     },
     prescription: r.prescription ? {
       id: r.prescription.id,
@@ -173,27 +181,33 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     } : null,
   }));
 
-  const offline = offlineRows.map((r) => ({
-    id: r.id,
-    type: "offline" as const,
-    status: r.status,
-    reason: r.reason ?? null,
-    documents: [] as any[],
-    patientDocs: [] as any[],
-    joinEnabled: false,
-    createdAt: r.createdAt?.toISOString() ?? "",
-    date: r.date,
-    timeLabel: r.timeSlot,
-    patient: {
-      id: null,
-      patientCode: null,
-      name: r.patientName,
-      email: r.patientEmail ?? null,
-      phone: r.patientPhone,
-    },
-    prescription: null,
-    notes: r.notes ?? null,
-  }));
+  const offline = offlineRows.map((r) => {
+    const pCode = r.patient?.patientCode || (r.appt.patientId ? `P${String(r.appt.patientId).padStart(3, "0")}` : `P${String(r.appt.id).padStart(3, "0")}`);
+    const patId = r.patient?.id;
+    return {
+      id: r.appt.id,
+      type: "offline" as const,
+      status: r.appt.status,
+      reason: r.appt.reason ?? null,
+      documents: [] as any[],
+      patientDocs: patId ? allPatientDocs.filter(d => d.patientId === patId).map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })) : [],
+      joinEnabled: false,
+      createdAt: r.appt.createdAt?.toISOString() ?? "",
+      date: r.appt.date,
+      timeLabel: r.appt.timeSlot,
+      patient: {
+        id: r.patient?.id ?? r.appt.patientId ?? null,
+        patientCode: pCode,
+        name: r.appt.patientName,
+        email: r.appt.patientEmail ?? null,
+        phone: r.appt.patientPhone,
+        age: r.patient?.age ?? null,
+        gender: r.patient?.gender ?? null,
+      },
+      prescription: null,
+      notes: r.appt.notes ?? null,
+    };
+  });
 
   res.json({ online, offline });
 });
@@ -212,6 +226,22 @@ router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) =
     .returning();
 
   res.json({ ...updated, createdAt: updated.createdAt?.toISOString() });
+});
+
+// ── PATCH /api/doctor/offline-appointments/:id/notes ──────────
+router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { notes } = req.body;
+  if (typeof notes !== "string") { res.status(400).json({ error: "notes must be a string" }); return; }
+
+  const [updated] = await db
+    .update(appointmentsTable)
+    .set({ notes })
+    .where(eq(appointmentsTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  res.json({ ok: true, notes: updated.notes });
 });
 
 // ── POST /api/doctor/online-appointments/:id/complete ─────────
@@ -240,9 +270,19 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
   res.json({ ok: true });
 });
 
+function isRealClinicalNotes(notes: string | null | undefined): boolean {
+  if (!notes || typeof notes !== "string") return false;
+  const trimmed = notes.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("{") && (trimmed.includes('"token"') || trimmed.includes('"amount"') || trimmed.includes('"paymentMode"'))) {
+    return false;
+  }
+  return true;
+}
+
 // ── GET /api/doctor/patients — All registered patients with docs + appt history ──
 router.get("/patients", requireDoctor, async (_req, res) => {
-  const [patients, docs, onlineRows] = await Promise.all([
+  const [patients, docs, onlineRows, offlineRows] = await Promise.all([
     db.select().from(patientsTable).orderBy(patientsTable.name),
     db.select().from(patientDocumentsTable),
     db
@@ -255,35 +295,70 @@ router.get("/patients", requireDoctor, async (_req, res) => {
       .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
       .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
+    db.select().from(appointmentsTable).orderBy(desc(appointmentsTable.date)),
   ]);
 
-  res.json(patients.map(p => ({
-    id: p.id,
-    patientCode: p.patientCode ?? null,
-    name: p.name,
-    email: p.email,
-    phone: p.phone ?? null,
-    createdAt: p.createdAt.toISOString(),
-    documents: docs
-      .filter(d => d.patientId === p.id)
-      .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
-    appointments: onlineRows
+  res.json(patients.map(p => {
+    const onlineAppts = onlineRows
       .filter(r => r.appt.patientId === p.id)
-      .map(r => ({
-        id: r.appt.id,
-        status: r.appt.status,
-        date: r.slot.date,
-        timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
-        reason: r.appt.reason ?? null,
-        joinEnabled: r.appt.joinEnabled,
-        documents: r.appt.documents as any[],
-        prescription: r.prescription ? {
-          photoObjectPath: r.prescription.photoObjectPath ?? null,
-          notes: r.prescription.notes ?? null,
-          updatedAt: r.prescription.updatedAt.toISOString(),
-        } : null,
-      })),
-  })));
+      .map(r => {
+        const hasNotes = isRealClinicalNotes(r.prescription?.notes);
+        const hasPhoto = !!r.prescription?.photoObjectPath;
+        return {
+          id: r.appt.id,
+          type: "online" as const,
+          status: r.appt.status,
+          date: r.slot.date,
+          timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
+          reason: isRealClinicalNotes(r.appt.reason) ? r.appt.reason : null,
+          joinEnabled: r.appt.joinEnabled,
+          documents: (r.appt.documents as any[]) || [],
+          prescription: (hasPhoto || hasNotes) ? {
+            photoObjectPath: r.prescription?.photoObjectPath ?? null,
+            notes: hasNotes ? r.prescription!.notes : null,
+            updatedAt: r.prescription!.updatedAt.toISOString(),
+          } : null,
+        };
+      });
+
+    const offlineAppts = offlineRows
+      .filter(r => r.patientId === p.id || (r.patientName && p.name && r.patientName.trim().toLowerCase() === p.name.trim().toLowerCase()))
+      .map(r => {
+        const hasNotes = isRealClinicalNotes(r.notes);
+        return {
+          id: r.id,
+          type: "offline" as const,
+          status: r.status,
+          date: r.date,
+          timeLabel: r.timeSlot,
+          reason: isRealClinicalNotes(r.reason) ? r.reason : null,
+          joinEnabled: false,
+          documents: [],
+          prescription: hasNotes ? {
+            photoObjectPath: null,
+            notes: r.notes,
+            updatedAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+          } : null,
+        };
+      });
+
+    const allAppts = [...onlineAppts, ...offlineAppts].sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      id: p.id,
+      patientCode: p.patientCode ?? null,
+      name: p.name,
+      email: p.email,
+      phone: p.phone ?? null,
+      age: p.age ?? null,
+      gender: p.gender ?? null,
+      createdAt: p.createdAt.toISOString(),
+      documents: docs
+        .filter(d => d.patientId === p.id)
+        .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size, createdAt: d.createdAt ? d.createdAt.toISOString() : null })),
+      appointments: allAppts,
+    };
+  }));
 });
 
 // ── GET /doctor/online-appointments/sse — live appointment updates ─
@@ -308,9 +383,24 @@ router.get("/donations/sse", requireDoctor, (req, res) => {
 });
 
 // ── GET /doctor/donations ──────────────────────────────────────
-router.get("/donations", requireDoctor, async (_req, res) => {
+router.get("/donations", requireDoctor, async (req, res) => {
   try {
-    const rows = await db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+    const { month, year } = req.query;
+    let query = db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+
+    if (month && year) {
+      const y = parseInt(year as string);
+      const m = parseInt(month as string);
+      if (!isNaN(y) && !isNaN(m)) {
+        const from = new Date(y, m - 1, 1);
+        const to = new Date(y, m, 1);
+        query = db.select().from(donationsTable)
+          .where(and(gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .orderBy(desc(donationsTable.createdAt)) as any;
+      }
+    }
+
+    const rows = await query;
     res.json(rows);
   } catch (err) {
     console.error("Doctor donations error:", err);

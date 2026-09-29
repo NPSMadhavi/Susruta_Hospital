@@ -32,7 +32,15 @@ export function broadcastNewOnlineAppointment(appt: object) {
   broadcast("new_online_appointment", appt);
 }
 
-export function broadcastAppointmentUpdated(payload: { id: number; joinEnabled: boolean; status: string }) {
+export function broadcastAppointmentUpdated(payload: {
+  id: number;
+  joinEnabled?: boolean;
+  status?: string;
+  patientJoinedAt?: string | null;
+  patientName?: string;
+  patientCode?: string | null;
+  roomName?: string;
+}) {
   broadcast("appointment_updated", payload);
 }
 

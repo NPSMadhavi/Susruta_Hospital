@@ -38,7 +38,7 @@ export function makeRoomName(apptId: number) {
 
 // ── Token helpers ─────────────────────────────────────────────
 
-export function createPatientToken(apptId: number, patientName: string, patientId: number) {
+export async function createPatientToken(apptId: number, patientName: string, patientId: number): Promise<string> {
   const { apiKey, apiSecret } = getLiveKitConfig();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: `patient-${patientId}`,
@@ -49,7 +49,7 @@ export function createPatientToken(apptId: number, patientName: string, patientI
   return at.toJwt();
 }
 
-export function createDoctorToken(apptId: number) {
+export async function createDoctorToken(apptId: number): Promise<string> {
   const { apiKey, apiSecret } = getLiveKitConfig();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: "doctor",
@@ -70,7 +70,7 @@ export function makeDirectRoomName(callId: number) {
   return `susruta-direct-${callId}`;
 }
 
-export function createDirectPatientToken(callId: number, patientName: string, patientId: number, roomName: string) {
+export async function createDirectPatientToken(callId: number, patientName: string, patientId: number, roomName: string): Promise<string> {
   const { apiKey, apiSecret } = getLiveKitConfig();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: `patient-${patientId}`,
@@ -81,7 +81,7 @@ export function createDirectPatientToken(callId: number, patientName: string, pa
   return at.toJwt();
 }
 
-export function createDirectDoctorToken(roomName: string) {
+export async function createDirectDoctorToken(roomName: string): Promise<string> {
   const { apiKey, apiSecret } = getLiveKitConfig();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: "doctor",
@@ -92,7 +92,7 @@ export function createDirectDoctorToken(roomName: string) {
   return at.toJwt();
 }
 
-export function createGuestToken(apptId: number, guestName = "Guest") {
+export async function createGuestToken(apptId: number, guestName = "Guest"): Promise<string> {
   const { apiKey, apiSecret } = getLiveKitConfig();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: `guest-${Date.now()}`,
@@ -212,8 +212,9 @@ router.get("/direct-patient-token/:callId", async (req: any, res) => {
     return;
   }
   const { url } = getLiveKitConfig();
+  const token = await createDirectPatientToken(callId, patient.name, patient.id, row.call.roomName);
   res.json({
-    token: createDirectPatientToken(callId, patient.name, patient.id, row.call.roomName),
+    token,
     roomName: row.call.roomName,
     serverUrl: url,
   });
@@ -232,7 +233,8 @@ router.get("/direct-doctor-token/:callId", async (req: any, res) => {
     return;
   }
   const { url } = getLiveKitConfig();
-  res.json({ token: createDirectDoctorToken(call.roomName), roomName: call.roomName, serverUrl: url });
+  const token = await createDirectDoctorToken(call.roomName);
+  res.json({ token, roomName: call.roomName, serverUrl: url });
 });
 
 router.get("/direct-admin-token/:callId", requireAdmin, async (req, res) => {
@@ -280,9 +282,11 @@ router.post("/webhook", express.raw({ type: "application/webhook+json" }), async
           broadcastAppointmentUpdated({ id: apptId, joinEnabled: false, status: "completed" });
         }
       } else if (roomName?.startsWith("susruta-direct-")) {
-        const callId = parseInt(roomName.replace("susruta-direct-", ""), 10);
-        if (!isNaN(callId)) {
-          await endDirectCall(callId);
+        const [directCall] = await db.select().from(directCallsTable)
+          .where(eq(directCallsTable.roomName, roomName))
+          .limit(1);
+        if (directCall && directCall.status === "active") {
+          await endDirectCall(directCall.id);
         }
       }
     }

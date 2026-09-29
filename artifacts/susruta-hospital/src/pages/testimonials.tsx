@@ -19,7 +19,7 @@ export default function Testimonials() {
   return (
     <PublicLayout>
       <div className="bg-secondary/30 py-12 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl font-serif font-bold text-foreground">
             {lang === 'en' ? "Patient Experiences" : "రోగుల అనుభవాలు"}
           </h1>
