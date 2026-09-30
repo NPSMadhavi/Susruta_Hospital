@@ -24,6 +24,8 @@ import type {
   BlockDateRequest,
   BlockedDate,
   CreateAppointmentRequest,
+  CustomDayTiming,
+  SetCustomTimingRequest,
   CreateTestimonialRequest,
   ErrorResponse,
   GetAvailabilityParams,
@@ -1004,6 +1006,201 @@ export const useUnblockDate = <
   TContext
 > => {
   return useMutation(getUnblockDateMutationOptions(options));
+};
+
+/**
+ * @summary List all custom day timings (admin)
+ */
+export const getListCustomTimingsUrl = () => {
+  return `/api/availability/custom-timings`;
+};
+
+export const listCustomTimings = async (
+  options?: RequestInit,
+): Promise<CustomDayTiming[]> => {
+  return customFetch<CustomDayTiming[]>(getListCustomTimingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCustomTimingsQueryKey = () => {
+  return [`/api/availability/custom-timings`] as const;
+};
+
+export const getListCustomTimingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCustomTimings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: QueryOptions<
+    Awaited<ReturnType<typeof listCustomTimings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListCustomTimingsQueryKey();
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCustomTimings>>
+  > = ({ signal }) => listCustomTimings({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCustomTimings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export function useListCustomTimings<
+  TData = Awaited<ReturnType<typeof listCustomTimings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: QueryOptions<
+    Awaited<ReturnType<typeof listCustomTimings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCustomTimingsQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set custom timings for a day (admin)
+ */
+export const getSetCustomTimingUrl = () => {
+  return `/api/availability/custom-timings`;
+};
+
+export const setCustomTiming = async (
+  setCustomTimingRequest: SetCustomTimingRequest,
+  options?: RequestInit,
+): Promise<CustomDayTiming> => {
+  return customFetch<CustomDayTiming>(getSetCustomTimingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setCustomTimingRequest),
+  });
+};
+
+export const getSetCustomTimingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setCustomTiming>>,
+    TError,
+    { data: BodyType<SetCustomTimingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setCustomTiming>>,
+  TError,
+  { data: BodyType<SetCustomTimingRequest> },
+  TContext
+> => {
+  const mutationOptions = options?.mutation ?? {};
+  const requestOptions = options?.request ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setCustomTiming>>,
+    { data: BodyType<SetCustomTimingRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+    return setCustomTiming(data, requestOptions);
+  };
+  return { mutationFn, ...mutationOptions };
+};
+
+export const useSetCustomTiming = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setCustomTiming>>,
+    TError,
+    { data: BodyType<SetCustomTimingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setCustomTiming>>,
+  TError,
+  { data: BodyType<SetCustomTimingRequest> },
+  TContext
+> => {
+  return useMutation(getSetCustomTimingMutationOptions(options));
+};
+
+/**
+ * @summary Delete custom day timing (admin)
+ */
+export const getDeleteCustomTimingUrl = (id: number) => {
+  return `/api/availability/custom-timings/${id}`;
+};
+
+export const deleteCustomTiming = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteCustomTimingUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCustomTimingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCustomTiming>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCustomTiming>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationOptions = options?.mutation ?? {};
+  const requestOptions = options?.request ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCustomTiming>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+    return deleteCustomTiming(id, requestOptions);
+  };
+  return { mutationFn, ...mutationOptions };
+};
+
+export const useDeleteCustomTiming = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCustomTiming>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCustomTiming>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteCustomTimingMutationOptions(options));
 };
 
 /**

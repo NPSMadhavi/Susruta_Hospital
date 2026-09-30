@@ -1,9 +1,33 @@
 import { Router } from "express";
-import { db, blockedDatesTable, openMonthsTable, appointmentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, blockedDatesTable, openMonthsTable, appointmentsTable, customDayTimingsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 
 const router = Router();
+
+// Ensure custom_day_timings table exists in PostgreSQL database
+async function ensureCustomDayTimingsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS public.custom_day_timings (
+        id SERIAL PRIMARY KEY,
+        date VARCHAR(10) NOT NULL UNIQUE,
+        morning_enabled BOOLEAN NOT NULL DEFAULT true,
+        morning_start VARCHAR(10) NOT NULL DEFAULT '10:00 AM',
+        morning_end VARCHAR(10) NOT NULL DEFAULT '01:00 PM',
+        evening_enabled BOOLEAN NOT NULL DEFAULT true,
+        evening_start VARCHAR(10) NOT NULL DEFAULT '06:00 PM',
+        evening_end VARCHAR(10) NOT NULL DEFAULT '10:00 PM',
+        slot_interval_minutes INTEGER NOT NULL DEFAULT 30,
+        note TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+  } catch (err: any) {
+    console.error("⚠️ Failed to ensure custom_day_timings table:", err.message);
+  }
+}
+ensureCustomDayTimingsTable();
 
 const MORNING_SLOTS = [
   "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
@@ -14,6 +38,38 @@ const EVENING_SLOTS = [
   "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM",
   "08:00 PM", "08:30 PM", "09:00 PM", "09:30 PM", "10:00 PM"
 ];
+
+export function parseTimeString(timeStr: string): number {
+  if (!timeStr) return 0;
+  const [time, period] = timeStr.trim().split(/\s+/);
+  let [h, m] = (time || "").split(":").map(Number);
+  if (isNaN(h)) h = 0;
+  if (isNaN(m)) m = 0;
+  if (period?.toUpperCase() === "PM" && h < 12) h += 12;
+  if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+  return h * 60 + m;
+}
+
+export function formatMinutesToTimeString(mins: number): string {
+  let h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h >= 12 ? "PM" : "AM";
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+export function generateTimeSlots(startStr: string, endStr: string, intervalMins: number = 30): string[] {
+  const startMins = parseTimeString(startStr);
+  const endMins = parseTimeString(endStr);
+  if (endMins <= startMins) return [];
+  const slots: string[] = [];
+  const step = intervalMins > 0 ? intervalMins : 30;
+  for (let current = startMins; current <= endMins; current += step) {
+    slots.push(formatMinutesToTimeString(current));
+  }
+  return slots;
+}
 
 function getDaysInMonth(year: number, month: number): string[] {
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -71,10 +127,26 @@ router.get("/slots", async (req, res) => {
     return;
   }
 
-  const dayOfWeek = new Date(date).getDay(); // 0 = Sunday
-  const isSunday = dayOfWeek === 0;
+  const [customTiming] = await db
+    .select()
+    .from(customDayTimingsTable)
+    .where(eq(customDayTimingsTable.date, date));
 
-  const allSlots = isSunday ? MORNING_SLOTS : [...MORNING_SLOTS, ...EVENING_SLOTS];
+  let allSlots: string[] = [];
+
+  if (customTiming) {
+    const morningSlots = customTiming.morningEnabled
+      ? generateTimeSlots(customTiming.morningStart, customTiming.morningEnd, customTiming.slotIntervalMinutes)
+      : [];
+    const eveningSlots = customTiming.eveningEnabled
+      ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes)
+      : [];
+    allSlots = [...morningSlots, ...eveningSlots];
+  } else {
+    const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay(); // 0 = Sunday
+    const isSunday = dayOfWeek === 0;
+    allSlots = isSunday ? MORNING_SLOTS : [...MORNING_SLOTS, ...EVENING_SLOTS];
+  }
 
   const bookedAppts = await db
     .select()
@@ -86,7 +158,92 @@ router.get("/slots", async (req, res) => {
   res.json(allSlots.map((t) => ({ time: t, available: !bookedSlots.has(t) })));
 });
 
-router.get("/blocked-dates", requireAdmin, async (req, res) => {
+// ── CUSTOM DAY TIMINGS ──────────────────────────────────────
+router.get("/custom-timings", async (_req, res) => {
+  await ensureCustomDayTimingsTable();
+  const timings = await db
+    .select()
+    .from(customDayTimingsTable)
+    .orderBy(customDayTimingsTable.date);
+  res.json(
+    timings.map((t) => ({
+      ...t,
+      createdAt: t.createdAt.toISOString(),
+    }))
+  );
+});
+
+router.post("/custom-timings", requireAdmin, async (req, res) => {
+  await ensureCustomDayTimingsTable();
+  const {
+    date,
+    morningEnabled = true,
+    morningStart = "10:00 AM",
+    morningEnd = "01:00 PM",
+    eveningEnabled = true,
+    eveningStart = "06:00 PM",
+    eveningEnd = "10:00 PM",
+    slotIntervalMinutes = 30,
+    note = null,
+  } = req.body;
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ error: "invalid_date", message: "Date must be YYYY-MM-DD" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(customDayTimingsTable)
+    .where(eq(customDayTimingsTable.date, date));
+
+  if (existing) {
+    const [updated] = await db
+      .update(customDayTimingsTable)
+      .set({
+        morningEnabled: Boolean(morningEnabled),
+        morningStart,
+        morningEnd,
+        eveningEnabled: Boolean(eveningEnabled),
+        eveningStart,
+        eveningEnd,
+        slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
+        note: note || null,
+      })
+      .where(eq(customDayTimingsTable.date, date))
+      .returning();
+
+    res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+    return;
+  }
+
+  const [created] = await db
+    .insert(customDayTimingsTable)
+    .values({
+      date,
+      morningEnabled: Boolean(morningEnabled),
+      morningStart,
+      morningEnd,
+      eveningEnabled: Boolean(eveningEnabled),
+      eveningStart,
+      eveningEnd,
+      slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
+      note: note || null,
+    })
+    .returning();
+
+  res.status(201).json({ ...created, createdAt: created.createdAt.toISOString() });
+});
+
+router.delete("/custom-timings/:id", requireAdmin, async (req, res) => {
+  await ensureCustomDayTimingsTable();
+  const id = parseInt(req.params.id, 10);
+  await db.delete(customDayTimingsTable).where(eq(customDayTimingsTable.id, id));
+  res.status(204).send();
+});
+
+// ── BLOCKED DATES ───────────────────────────────────────────
+router.get("/blocked-dates", requireAdmin, async (_req, res) => {
   const blocked = await db.select().from(blockedDatesTable).orderBy(blockedDatesTable.date);
   res.json(blocked.map((b) => ({ ...b, createdAt: b.createdAt.toISOString() })));
 });
@@ -115,7 +272,8 @@ router.delete("/blocked-dates/:id", requireAdmin, async (req, res) => {
   res.status(204).send();
 });
 
-router.get("/months", async (req, res) => {
+// ── OPEN MONTHS ─────────────────────────────────────────────
+router.get("/months", async (_req, res) => {
   const months = await db.select().from(openMonthsTable).orderBy(openMonthsTable.month);
   res.json(months.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })));
 });

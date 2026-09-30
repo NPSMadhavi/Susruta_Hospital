@@ -90,6 +90,32 @@ export interface BlockDateRequest {
   reason?: string | null;
 }
 
+export interface CustomDayTiming {
+  id: number;
+  date: string;
+  morningEnabled: boolean;
+  morningStart: string;
+  morningEnd: string;
+  eveningEnabled: boolean;
+  eveningStart: string;
+  eveningEnd: string;
+  slotIntervalMinutes: number;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface SetCustomTimingRequest {
+  date: string;
+  morningEnabled?: boolean;
+  morningStart?: string;
+  morningEnd?: string;
+  eveningEnabled?: boolean;
+  eveningStart?: string;
+  eveningEnd?: string;
+  slotIntervalMinutes?: number;
+  note?: string | null;
+}
+
 export interface OpenMonth {
   id: number;
   /** YYYY-MM format */

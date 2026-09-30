@@ -50,13 +50,10 @@ function CalendarGrid({
         <div key={d} className="text-center text-xs font-semibold text-muted-foreground py-1">{d}</div>
       ))}
       {cells.map((day, i) => {
-        if (!day) return <div key={`e${i}`} />;
         const dateStr = `${month}-${String(day).padStart(2, "0")}`;
         const isPast = dateStr < today;
-        const isSunday = getDay(new Date(dateStr + "T12:00:00")) === 0;
         const isBlocked =
           !isMonthOpen ||
-          isSunday ||
           blockedDates.includes(dateStr) ||
           blockedDays.includes(getDay(new Date(dateStr + "T12:00:00")));
         const isDisabled = isPast || isBlocked;

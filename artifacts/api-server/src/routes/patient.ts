@@ -907,11 +907,7 @@ router.post("/appointments", requirePatient, async (req, res) => {
     res.status(400).json({ error: "date_passed", message: "Cannot book appointments for past dates." });
     return;
   }
-  const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
-  if (isSunday) {
-    res.status(400).json({ error: "sunday_closed", message: "Offline consultations are closed on Sundays. Please book an online consultation for Sunday." });
-    return;
-  }
+
   if (date === todayStr) {
     if (isMorning && currentMinutes >= 13 * 60) {
       res.status(400).json({ error: "session_expired", message: "Morning session has already ended. Please select another date or evening session." });

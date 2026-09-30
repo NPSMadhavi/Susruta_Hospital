@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
-import { db, appointmentsTable, patientsTable, onlineSlotsTable } from "@workspace/db";
+import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
+import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
 import { verifyPatientSession } from "../lib/patient-auth";
@@ -160,6 +161,11 @@ router.get("/offline/slots-status", async (req, res) => {
 
   const eveningBooked = offlineEveningBooked + onlineEveningBooked;
 
+  const [customTiming] = await db
+    .select()
+    .from(customDayTimingsTable)
+    .where(eq(customDayTimingsTable.date, date));
+
   const now = new Date();
   const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -176,23 +182,56 @@ router.get("/offline/slots-status", async (req, res) => {
   const isToday = date === todayStr;
   const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
 
-  // Morning session (10 AM - 1 PM) cutoff is 13:00 (1:00 PM); Sunday offline is closed
-  const morningExceeded = isSunday || isPastDate || (isToday && currentMinutes >= 13 * 60);
-  // Evening session (6 PM - 10 PM) cutoff is 22:00 (10:00 PM); Sunday offline is closed
-  const eveningExceeded = isSunday || isPastDate || (isToday && currentMinutes >= 22 * 60);
+  let morningLabel = "10 AM - 1 PM";
+  let morningTotal = 12;
+  let morningCutoffMins = 13 * 60; // 1:00 PM
+  let morningEnabled = true;
 
-  const morningTotal = isSunday ? 0 : 12;
+  let eveningLabel = "6 PM - 10 PM";
+  let eveningTotal = 16;
+  let eveningCutoffMins = 22 * 60; // 10:00 PM
+  let eveningEnabled = true;
+
+  if (customTiming) {
+    morningEnabled = customTiming.morningEnabled;
+    morningLabel = morningEnabled ? `${customTiming.morningStart} - ${customTiming.morningEnd}` : "Closed";
+    morningTotal = morningEnabled
+      ? generateTimeSlots(customTiming.morningStart, customTiming.morningEnd, customTiming.slotIntervalMinutes).length
+      : 0;
+    morningCutoffMins = parseTimeString(customTiming.morningEnd);
+
+    eveningEnabled = customTiming.eveningEnabled;
+    eveningLabel = eveningEnabled ? `${customTiming.eveningStart} - ${customTiming.eveningEnd}` : "Closed";
+    eveningTotal = eveningEnabled
+      ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes).length
+      : 0;
+    eveningCutoffMins = parseTimeString(customTiming.eveningEnd);
+  } else if (isSunday) {
+    morningLabel = "10 AM - 1 PM (Sunday)";
+    morningTotal = 12;
+    morningCutoffMins = 13 * 60;
+    morningEnabled = true;
+
+    eveningLabel = "Closed on Sunday";
+    eveningTotal = 0;
+    eveningCutoffMins = 0;
+    eveningEnabled = false;
+  }
+
+  const morningExceeded = !morningEnabled || isPastDate || (isToday && currentMinutes >= morningCutoffMins);
+  const eveningExceeded = !eveningEnabled || isPastDate || (isToday && currentMinutes >= eveningCutoffMins);
+
   const morningRemaining = morningExceeded ? 0 : Math.max(0, morningTotal - morningBooked);
   const morningAvailable = !morningExceeded && morningBooked < morningTotal;
 
-  const eveningTotal = isSunday ? 0 : 16;
   const eveningRemaining = eveningExceeded ? 0 : Math.max(0, eveningTotal - eveningBooked);
   const eveningAvailable = !eveningExceeded && eveningBooked < eveningTotal;
 
   res.json({
     date,
+    note: customTiming?.note || null,
     morning: {
-      label: isSunday ? "Closed on Sunday" : "10 AM - 1 PM",
+      label: morningLabel,
       total: morningTotal,
       booked: morningBooked,
       remaining: morningRemaining,
@@ -200,7 +239,7 @@ router.get("/offline/slots-status", async (req, res) => {
       isExceeded: morningExceeded,
     },
     evening: {
-      label: isSunday ? "Closed on Sunday" : "6 PM - 10 PM",
+      label: eveningLabel,
       total: eveningTotal,
       booked: eveningBooked,
       remaining: eveningRemaining,

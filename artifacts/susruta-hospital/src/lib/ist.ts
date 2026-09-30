@@ -118,7 +118,7 @@ export function isOfflineSessionExceeded(date: string, session: "morning" | "eve
   const today = todayIST();
   if (date < today) return true;
   const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
-  if (isSunday) return true;
+  if (isSunday && session === "evening") return true;
   if (date > today) return false;
   const currentMins = nowISTMinutes();
   if (session === "morning") {

@@ -206,11 +206,6 @@ export default function AdminOfflineRegister() {
     e.preventDefault();
     setErrorMsg("");
 
-    const isSunday = new Date(appointmentDate + "T12:00:00+05:30").getDay() === 0;
-    if (isSunday) {
-      setErrorMsg("Offline clinic is closed on Sundays. Please choose a Monday–Saturday date.");
-      return;
-    }
     if (!isCurrentSessionAvailable) {
       setErrorMsg(`No slots are available for ${currentSession.label} on this date.`);
       return;

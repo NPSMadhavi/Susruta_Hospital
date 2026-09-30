@@ -90,8 +90,7 @@ function CalendarGrid({ month, openMonths, availability, selectedDate, onSelect 
         if (!day) return <div key={`e${i}`} />;
         const dateStr = `${month}-${String(day).padStart(2, "0")}`;
         const isPast = dateStr < today;
-        const isSunday = getDay(new Date(dateStr + "T12:00:00")) === 0;
-        const isBlocked = !isMonthOpen || isSunday || blockedDates.includes(dateStr) ||
+        const isBlocked = !isMonthOpen || blockedDates.includes(dateStr) ||
           blockedDays.includes(getDay(new Date(dateStr + "T12:00:00")));
         const isDisabled = isPast || isBlocked;
         const isSelected = dateStr === selectedDate;
