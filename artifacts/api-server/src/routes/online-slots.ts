@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable, appointmentsTable } from "@workspace/db";
 import { eq, desc, asc, and, gte, inArray, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
+import { sendSlotAvailabilityUpdateBroadcastEmail } from "../lib/email";
 import { z } from "zod/v4";
 
 const router = Router();
@@ -103,6 +104,15 @@ router.post("/sessions", requireAdmin, async (req, res): Promise<void> => {
   );
 
   const createdSlots = await db.select().from(onlineSlotsTable).where(eq(onlineSlotsTable.sessionId, session.id));
+
+  // Notify registered patients via email about updated online slots
+  sendSlotAvailabilityUpdateBroadcastEmail({
+    date,
+    type: "online",
+    startTime,
+    endTime,
+    intervalMinutes,
+  }).catch(() => {});
 
   res.status(201).json({ session, slots: createdSlots });
 });

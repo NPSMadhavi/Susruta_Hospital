@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { createHmac } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { db, siteSettingsTable } from "@workspace/db";
+import { db, siteSettingsTable, patientsTable } from "@workspace/db";
 
 // ── Inline logo for emails (CID attachment — works in Gmail, Outlook, Apple Mail) ──
 const LOGO_CID = "logo@susrutahospital.com";
@@ -959,4 +959,108 @@ export async function testSmtpConnection(cfg: SmtpConfig, testTo: string): Promi
     text,
     attachments: logoAttachments(),
   });
+}
+
+// ── Broadcast Doctor Availability & Slot Updates to Patients ──
+export async function sendSlotAvailabilityUpdateBroadcastEmail(details: {
+  date: string;
+  type: "offline" | "online";
+  morningSession?: string;
+  eveningSession?: string;
+  intervalMinutes?: number;
+  note?: string;
+  startTime?: string;
+  endTime?: string;
+}): Promise<void> {
+  try {
+    const smtp = await getSmtpConfig();
+    if (!smtp) return;
+
+    const patients = await db
+      .select({ email: patientsTable.email, name: patientsTable.name })
+      .from(patientsTable);
+
+    const emails = Array.from(
+      new Set(
+        patients
+          .map((p) => p.email?.trim().toLowerCase())
+          .filter((e): e is string => Boolean(e && e.includes("@")))
+      )
+    );
+
+    if (emails.length === 0) return;
+
+    const dateObj = new Date(details.date + "T12:00:00+05:30");
+    const formattedDate = dateObj.toLocaleDateString("en-IN", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const isOffline = details.type === "offline";
+    const subject = `📅 Doctor Availability Update: ${isOffline ? "Offline Consultation" : "Online Video Call"} Slots (${formattedDate})`;
+
+    let sessionText = "";
+    if (isOffline) {
+      sessionText = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold; color: #1e293b;">Consultation Timings for ${formattedDate}:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #334155; font-size: 14px;">
+            <li><strong>Morning Session:</strong> ${details.morningSession || "Closed"}</li>
+            <li><strong>Evening Session:</strong> ${details.eveningSession || "Closed"}</li>
+            ${details.intervalMinutes ? `<li><strong>Slot Interval:</strong> ${details.intervalMinutes} mins</li>` : ""}
+            ${details.note ? `<li><strong>Note:</strong> ${details.note}</li>` : ""}
+          </ul>
+        </div>
+      `;
+    } else {
+      sessionText = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold; color: #1e293b;">Online Consultation Session for ${formattedDate}:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #334155; font-size: 14px;">
+            <li><strong>Session Hours:</strong> ${details.startTime || ""} – ${details.endTime || ""} IST</li>
+            ${details.intervalMinutes ? `<li><strong>Slot Duration:</strong> ${details.intervalMinutes} mins</li>` : ""}
+          </ul>
+        </div>
+      `;
+    }
+
+    const bodyHtml = `
+      <tr><td style="padding: 36px;">
+        <h2 style="color: #1a3d2b; font-size: 20px; margin: 0 0 12px; font-family: Arial, sans-serif;">Doctor Consultation Schedule Update</h2>
+        <p style="color: #444; font-size: 14px; line-height: 1.6; margin: 0 0 16px; font-family: Arial, sans-serif;">
+          Dear Patient,
+        </p>
+        <p style="color: #444; font-size: 14px; line-height: 1.6; margin: 0 0 16px; font-family: Arial, sans-serif;">
+          Dr. P. Murali Krishna's consultation time slots have been updated for <strong>${formattedDate}</strong>.
+        </p>
+
+        ${sessionText}
+
+        <p style="color: #444; font-size: 14px; line-height: 1.6; margin: 16px 0; font-family: Arial, sans-serif;">
+          Please visit your patient portal to select and book your preferred consultation slot.
+        </p>
+      </td></tr>
+    `;
+
+    const html = emailWrapper(bodyHtml);
+    const transport = buildTransport(smtp);
+
+    for (const email of emails) {
+      transport
+        .sendMail({
+          from: senderStr(smtp.fromName, smtp.fromEmail),
+          to: email,
+          subject,
+          html,
+          attachments: logoAttachments(),
+        })
+        .catch((err) => {
+          console.warn(`[email] Could not send availability notification to ${email}:`, err.message);
+        });
+    }
+  } catch (err: any) {
+    console.error("⚠️ Failed to broadcast availability update email:", err.message);
+  }
 }

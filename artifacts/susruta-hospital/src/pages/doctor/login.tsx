@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Stethoscope, Lock, Eye, EyeOff, ArrowRight, Leaf } from "lucide-react";
+import { Stethoscope, Lock, Eye, EyeOff, ArrowRight, RotateCcw } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -48,57 +48,39 @@ export default function DoctorLogin() {
     }
   }
 
-  const inputCls = "w-full pl-9 pr-10 py-3 border border-border rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all";
+  const inputCls = "w-full h-[46px] py-0 border border-[#dce4ef] rounded-[12px] bg-white text-[14px] outline-none focus:border-[#93a5bf] focus:shadow-[0_0_0_3px_#93a5bf26] pl-11 pr-10 placeholder:text-[#93a5bf]";
 
   return (
-    <div className="doctor-portal min-h-screen flex">
-      {/* Left panel — desktop only */}
-      <div className="hidden lg:flex lg:w-[45%] bg-[#1a3d2b] relative overflow-hidden flex-col items-center justify-center p-14 text-white">
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")"
-        }} />
-        <div className="relative z-10 max-w-md text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-8 border border-white/20">
-              <Stethoscope size={42} className="text-green-300" />
-            </div>
-            <h2 className="text-3xl font-serif font-bold mb-4">Doctor Portal</h2>
-            <p className="text-white/65 text-base leading-relaxed mb-10">
-              View your online consultation appointments, review patient documents, and issue prescriptions from one place.
-            </p>
-            <div className="grid grid-cols-1 gap-4 text-left">
-              {[
-                { icon: "📋", title: "Patient Documents", desc: "Review uploaded reports & records before each consult" },
-                { icon: "💊", title: "Issue Prescriptions", desc: "Add medicines with dosage instructions for each patient" },
-                { icon: "📝", title: "Private Notes", desc: "Keep internal notes visible only to you" },
-                { icon: "📅", title: "Slot Schedule", desc: "See all your booked Sunday consultation slots" },
-              ].map(f => (
-                <div key={f.title} className="bg-white/10 rounded-2xl p-4 border border-white/10 flex items-start gap-3">
-                  <div className="text-2xl">{f.icon}</div>
-                  <div>
-                    <div className="font-semibold text-sm">{f.title}</div>
-                    <div className="text-white/55 text-xs mt-0.5">{f.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+    <div className="min-h-svh font-['DM_Sans',sans-serif] flex bg-white text-[#2d3d59]">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" />
+      <aside className="w-[48.611111%] shrink-0 flex items-center justify-center p-16 bg-cover bg-center text-white max-[1199px]:py-10 max-[1199px]:px-7 max-[1023px]:hidden" style={{ backgroundImage: `url(${BASE}/images/doctor-login-bg.png)` }}>
+        <div className="w-full max-w-[572px] text-center -translate-y-[25px]">
+          <div className="size-20 mx-auto mb-6 border border-[#2d846780] rounded-full flex items-center justify-center bg-[#3c796140] text-[#3de084]"><Stethoscope size={34} /></div>
+          <div className="w-fit mx-auto mb-[18px] flex items-center justify-center gap-2.5 h-[31px] px-4 border border-[#177654] rounded-full bg-[#063b2cc9] text-[#8ce5c8] font-['DM_Serif_Display',Georgia,serif] text-[11px] tracking-[.25px] shadow-[0_4px_8px_#0002]"><span className="size-2 rounded-full bg-[#2dd4a0]" /> SUSRUTA HOSPITAL <span className="text-[#759e89]">•</span> DOCTOR PORTAL</div>
+          <h2 className="font-['DM_Serif_Display',Georgia,serif] text-[48px] font-normal leading-[55px] tracking-[-1.5px] mb-2">Doctor Portal</h2>
+          <p className="text-[#accbbb] text-base leading-6 mb-[34px]">View your online consultation appointments, review patient<br className="max-[1199px]:hidden" /> documents, and issue prescriptions from one place.</p>
+          <div className="grid grid-cols-2 gap-3.5 text-left">
+            {[
+              { icon: "📋", title: "Patient Documents", desc: "Review uploaded reports & records before each consult" },
+              { icon: "💊", title: "Issue Prescriptions", desc: "Add medicines with dosage instructions for each patient" },
+              { icon: "📝", title: "Private Notes", desc: "Keep internal notes visible only to you" },
+              { icon: "📅", title: "Slot Schedule", desc: "See all your booked Sunday consultation slots" },
+            ].map((f, index) => (
+              <div key={f.title} className="flex items-start gap-3.5 p-4 border border-[#ffffff14] rounded-[17px] bg-[#173b2cb3] max-[1199px]:gap-2.5 max-[1199px]:p-3.5">
+                <div className={`shrink-0 size-10 flex items-center justify-center border rounded-[12px] text-[21px] ${index < 2 ? "bg-[#ac994026] border-[#b2a14b59]" : "bg-[#527fbc26] border-[#527fbc59]"}`} aria-hidden="true">{f.icon}</div>
+                <div><h3 className="m-0 mb-1 font-['DM_Sans',sans-serif] text-[14px] leading-5 font-semibold tracking-[.25px]">{f.title}</h3><p className="max-w-[155px] text-[12px] leading-5 text-[#f0f4f1]">{f.desc}</p></div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col min-h-screen bg-gradient-to-br from-white via-green-50/20 to-white">
-        <div className="lg:hidden bg-[#1a3d2b] py-4 px-5 flex items-center gap-2.5">
-          <Stethoscope size={18} className="text-green-300" />
-          <span className="text-white font-semibold text-sm">Doctor Portal</span>
-        </div>
-
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-[380px]">
-            <div className="text-center mb-8">
-              <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto object-contain mx-auto mb-3" />
-              <h1 className="text-xl font-serif font-bold text-foreground">Welcome, Doctor</h1>
-              <p className="text-muted-foreground text-sm mt-1">Sign in to your consultation portal</p>
+      </aside>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div className="hidden max-[1023px]:flex items-center gap-2.5 py-[18px] px-6 bg-[#1a3d2b] text-white text-[14px]"><Stethoscope size={18} /> Doctor Portal</div>
+        <div className="flex-1 flex items-center justify-center p-12 max-[1023px]:py-8 max-[1023px]:px-6">
+          <div className="w-full max-w-[532px]">
+            <div className="text-center mb-10">
+              <img src={logoImg} alt="Susruta Hospital" className="block w-full h-[60px] object-contain mx-auto mb-2" />
+              <h1 className="font-['DM_Sans',sans-serif] text-[#647897] text-[14px] font-normal leading-5 tracking-normal">Doctor Portal</h1>
             </div>
 
             {error && (
@@ -108,12 +90,13 @@ export default function DoctorLogin() {
               </motion.div>
             )}
 
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={submit} >
               <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1.5">Portal Password</label>
+                <label className="block mb-[7px] text-[14px] leading-5 font-normal" htmlFor="doctor-password">Portal Password</label>
                 <div className="relative">
-                  <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#93a5bf]" />
                   <input
+                    id="doctor-password"
                     type={showPw ? "text" : "password"}
                     required
                     value={password}
@@ -122,15 +105,15 @@ export default function DoctorLogin() {
                     autoComplete="current-password"
                     className={inputCls}
                   />
-                  <button type="button" onClick={() => setShowPw(v => !v)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <button type="button" aria-label={showPw ? "Hide password" : "Show password"} onClick={() => setShowPw(v => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#93a5bf] hover:text-foreground transition-colors">
                     {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
 
               <button type="submit" disabled={loading}
-                className="w-full bg-primary text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 transition-all disabled:opacity-60 shadow-lg shadow-primary/20">
+                className="w-full h-[49px] flex items-center justify-center gap-2 rounded-[12px] bg-[#da592b] text-white text-[14px] font-semibold cursor-pointer transition-[background] duration-200 hover:bg-[#c84d23] disabled:opacity-60 disabled:cursor-wait focus-visible:outline-[3px] focus-visible:outline-[#93a5bf] focus-visible:outline-offset-[3px] mt-6">
                 {loading
                   ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   : <><span>Sign In to Portal</span><ArrowRight size={15} /></>
@@ -138,9 +121,9 @@ export default function DoctorLogin() {
               </button>
             </form>
 
-            <div className="mt-6 text-center">
-              <a href="/" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
-                <Leaf size={13} /> Back to Susruta Hospital
+            <div className="mt-8 text-center text-[#647897] text-[14px] leading-[22px]">
+              <a href="/" className="inline-flex items-center gap-1.5 hover:text-[#da592b]">
+                <RotateCcw size={13} /> Back to Susruta Hospital
               </a>
             </div>
           </div>

@@ -22,6 +22,21 @@ type Patient = { id: number; name: string; email: string; phone?: string };
 
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+function getConsultationTitle(label: string, defaultTitle: string): string {
+  if (!label || label === "Closed" || label === "Closed on Sunday") return defaultTitle;
+  const firstPart = label.split("-")[0]?.trim() || "";
+  const match = firstPart.match(/(\d{1,2})(?::(\d{2}))?\s*([AaPp][Mm])/);
+  if (match) {
+    let h = parseInt(match[1], 10);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    if (h >= 12) return "Evening Consultation";
+    if (h < 12) return "Morning Consultation";
+  }
+  return defaultTitle;
+}
+
 function toYMD(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
@@ -130,8 +145,8 @@ export default function PortalBook() {
   const { data: availability } = useGetAvailability({ month: currentMonth }, { query: { enabled: !!currentMonth } });
 
   const [offlineSlotStatus, setOfflineSlotStatus] = useState<{
-    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
-    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
+    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
   } | null>(null);
   const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false);
 
@@ -428,21 +443,22 @@ export default function PortalBook() {
                       {[
                         {
                           id: "morning",
-                          label: "10 AM - 1 PM",
-                          title: "Morning Consultation",
+                          label: offlineSlotStatus?.morning?.label || "10 AM - 1 PM",
+                          title: getConsultationTitle(offlineSlotStatus?.morning?.label || "", "Morning Consultation"),
                           status: offlineSlotStatus?.morning,
                         },
                         {
                           id: "evening",
-                          label: "6 PM - 10 PM",
-                          title: "Evening Consultation",
+                          label: offlineSlotStatus?.evening?.label || "6 PM - 10 PM",
+                          title: getConsultationTitle(offlineSlotStatus?.evening?.label || "", "Evening Consultation"),
                           status: offlineSlotStatus?.evening,
                         },
                       ].map((session) => {
+                        const isClosed = session.label === "Closed" || session.label === "Closed on Sunday" || session.status?.label === "Closed" || session.status?.label === "Closed on Sunday";
                         const isSelected = selectedSlot === session.label;
-                        const isExceeded = isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening");
+                        const isExceeded = session.status?.isExceeded ?? (isClosed || (selectedDate ? isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening") : false));
                         const remaining = isExceeded ? 0 : (session.status?.remaining ?? 0);
-                        const isAvailable = !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
+                        const isAvailable = !isClosed && !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
 
                         return (
                           <button
@@ -497,8 +513,10 @@ export default function PortalBook() {
                               >
                                 {isAvailable
                                   ? `${remaining} Slots Available`
-                                  : selectedDate && new Date(selectedDate + "T12:00:00+05:30").getDay() === 0 && session.id === "evening"
+                                  : isClosed || session.label === "Closed on Sunday"
                                   ? "Closed on Sunday"
+                                  : session.label === "Closed"
+                                  ? "Closed"
                                   : "No slots available"}
                               </span>
                               {isSelected && <CheckCircle2 size={16} className="text-white shrink-0" />}

@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable } from "@workspace/db";
+import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
@@ -128,26 +128,39 @@ router.get("/offline/slots-status", async (req, res) => {
 
   const offlineMorningBooked = existingOffline.filter((a) =>
     a.timeSlot.includes("10 AM") ||
+    a.timeSlot.includes("9 AM") ||
     a.timeSlot.includes("Morning") ||
+    a.timeSlot.startsWith("08:") ||
+    a.timeSlot.startsWith("09:") ||
     a.timeSlot.startsWith("10:") ||
-    a.timeSlot.startsWith("11:") ||
-    a.timeSlot.startsWith("12:")
+    a.timeSlot.startsWith("11:")
   ).length;
 
   const onlineMorningBooked = existingOnlineSlots.filter((s) => {
     const [h] = s.startTime.split(":").map(Number);
-    return h >= 10 && h < 13;
+    return h < 12;
   }).length;
 
   const morningBooked = offlineMorningBooked + onlineMorningBooked;
 
   const offlineEveningBooked = existingOffline.filter((a) =>
+    a.timeSlot.includes("12 PM") ||
     a.timeSlot.includes("6 PM") ||
+    a.timeSlot.includes("4 PM") ||
+    a.timeSlot.includes("5 PM") ||
     a.timeSlot.includes("Evening") ||
+    a.timeSlot.startsWith("12:") ||
+    a.timeSlot.startsWith("13:") ||
+    a.timeSlot.startsWith("14:") ||
+    a.timeSlot.startsWith("15:") ||
+    a.timeSlot.startsWith("04:") ||
+    a.timeSlot.startsWith("05:") ||
     a.timeSlot.startsWith("06:") ||
     a.timeSlot.startsWith("07:") ||
     a.timeSlot.startsWith("08:") ||
     a.timeSlot.startsWith("09:") ||
+    a.timeSlot.startsWith("16:") ||
+    a.timeSlot.startsWith("17:") ||
     a.timeSlot.startsWith("18:") ||
     a.timeSlot.startsWith("19:") ||
     a.timeSlot.startsWith("20:") ||
@@ -156,15 +169,31 @@ router.get("/offline/slots-status", async (req, res) => {
 
   const onlineEveningBooked = existingOnlineSlots.filter((s) => {
     const [h] = s.startTime.split(":").map(Number);
-    return h >= 18 && h < 22;
+    return h >= 12;
   }).length;
 
   const eveningBooked = offlineEveningBooked + onlineEveningBooked;
+
+  function formatHHMMTo12Hour(hhmm: string): string {
+    if (!hhmm) return "";
+    const [hStr, mStr] = hhmm.split(":");
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr || "0", 10);
+    const period = h >= 12 ? "PM" : "AM";
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${h}:${String(m).padStart(2, "0")} ${period}`;
+  }
 
   const [customTiming] = await db
     .select()
     .from(customDayTimingsTable)
     .where(eq(customDayTimingsTable.date, date));
+
+  const onlineSessions = await db
+    .select()
+    .from(onlineSlotSessionsTable)
+    .where(eq(onlineSlotSessionsTable.date, date));
 
   const now = new Date();
   const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -206,16 +235,65 @@ router.get("/offline/slots-status", async (req, res) => {
       ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes).length
       : 0;
     eveningCutoffMins = parseTimeString(customTiming.eveningEnd);
-  } else if (isSunday) {
-    morningLabel = "10 AM - 1 PM (Sunday)";
-    morningTotal = 12;
-    morningCutoffMins = 13 * 60;
-    morningEnabled = true;
+  } else {
+    const morningOnlineSession = onlineSessions.find((s) => {
+      const [h] = s.startTime.split(":").map(Number);
+      return h < 12;
+    });
 
-    eveningLabel = "Closed on Sunday";
-    eveningTotal = 0;
-    eveningCutoffMins = 0;
-    eveningEnabled = false;
+    const eveningOnlineSession = onlineSessions.find((s) => {
+      const [h] = s.startTime.split(":").map(Number);
+      return h >= 12;
+    });
+
+    if (isSunday) {
+      if (onlineSessions.length > 0) {
+        if (morningOnlineSession) {
+          morningLabel = `${formatHHMMTo12Hour(morningOnlineSession.startTime)} - ${formatHHMMTo12Hour(morningOnlineSession.endTime)}`;
+          morningTotal = morningOnlineSession.maxBookings || 12;
+          morningCutoffMins = parseTimeString(formatHHMMTo12Hour(morningOnlineSession.endTime));
+          morningEnabled = true;
+        } else {
+          morningLabel = "Closed on Sunday";
+          morningTotal = 0;
+          morningCutoffMins = 0;
+          morningEnabled = false;
+        }
+
+        if (eveningOnlineSession) {
+          eveningLabel = `${formatHHMMTo12Hour(eveningOnlineSession.startTime)} - ${formatHHMMTo12Hour(eveningOnlineSession.endTime)}`;
+          eveningTotal = eveningOnlineSession.maxBookings || 16;
+          eveningCutoffMins = parseTimeString(formatHHMMTo12Hour(eveningOnlineSession.endTime));
+          eveningEnabled = true;
+        } else {
+          eveningLabel = "Closed on Sunday";
+          eveningTotal = 0;
+          eveningCutoffMins = 0;
+          eveningEnabled = false;
+        }
+      } else {
+        morningLabel = "10 AM - 1 PM";
+        morningTotal = 12;
+        morningCutoffMins = 13 * 60;
+        morningEnabled = true;
+
+        eveningLabel = "Closed on Sunday";
+        eveningTotal = 0;
+        eveningCutoffMins = 0;
+        eveningEnabled = false;
+      }
+    } else {
+      if (morningOnlineSession) {
+        morningLabel = `${formatHHMMTo12Hour(morningOnlineSession.startTime)} - ${formatHHMMTo12Hour(morningOnlineSession.endTime)}`;
+        morningTotal = morningOnlineSession.maxBookings || 12;
+        morningCutoffMins = parseTimeString(formatHHMMTo12Hour(morningOnlineSession.endTime));
+      }
+      if (eveningOnlineSession) {
+        eveningLabel = `${formatHHMMTo12Hour(eveningOnlineSession.startTime)} - ${formatHHMMTo12Hour(eveningOnlineSession.endTime)}`;
+        eveningTotal = eveningOnlineSession.maxBookings || 16;
+        eveningCutoffMins = parseTimeString(formatHHMMTo12Hour(eveningOnlineSession.endTime));
+      }
+    }
   }
 
   const morningExceeded = !morningEnabled || isPastDate || (isToday && currentMinutes >= morningCutoffMins);
@@ -418,9 +496,9 @@ router.post("/", async (req, res) => {
     const maxSlots = isMorningSession ? 16 : 12;
     const sessionBooked = existing.filter((a) => {
       if (isMorningSession) {
-        return a.timeSlot.includes("9 AM") || a.timeSlot.includes("Morning") || a.timeSlot.startsWith("09:") || a.timeSlot.startsWith("10:") || a.timeSlot.startsWith("11:") || a.timeSlot.startsWith("12:");
+        return a.timeSlot.includes("9 AM") || a.timeSlot.includes("Morning") || a.timeSlot.startsWith("09:") || a.timeSlot.startsWith("10:") || a.timeSlot.startsWith("11:");
       } else {
-        return a.timeSlot.includes("4 PM") || a.timeSlot.includes("Evening") || a.timeSlot.startsWith("04:") || a.timeSlot.startsWith("05:") || a.timeSlot.startsWith("06:") || a.timeSlot.startsWith("16:") || a.timeSlot.startsWith("17:") || a.timeSlot.startsWith("18:");
+        return a.timeSlot.includes("4 PM") || a.timeSlot.includes("Evening") || a.timeSlot.includes("12 PM") || a.timeSlot.startsWith("12:") || a.timeSlot.startsWith("13:") || a.timeSlot.startsWith("14:") || a.timeSlot.startsWith("15:") || a.timeSlot.startsWith("04:") || a.timeSlot.startsWith("05:") || a.timeSlot.startsWith("06:") || a.timeSlot.startsWith("16:") || a.timeSlot.startsWith("17:") || a.timeSlot.startsWith("18:");
       }
     });
 

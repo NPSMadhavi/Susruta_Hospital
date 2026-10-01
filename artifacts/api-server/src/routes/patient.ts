@@ -928,15 +928,45 @@ router.post("/appointments", requirePatient, async (req, res) => {
   );
 
   if (isMorning) {
-    const offlineM = existingOffline.filter(a => a.timeSlot.includes("10 AM") || a.timeSlot.includes("Morning") || a.timeSlot.startsWith("10:") || a.timeSlot.startsWith("11:") || a.timeSlot.startsWith("12:")).length;
-    const onlineM = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h >= 10 && h < 13; }).length;
+    const offlineM = existingOffline.filter(a =>
+      a.timeSlot.includes("10 AM") ||
+      a.timeSlot.includes("9 AM") ||
+      a.timeSlot.includes("Morning") ||
+      a.timeSlot.startsWith("08:") ||
+      a.timeSlot.startsWith("09:") ||
+      a.timeSlot.startsWith("10:") ||
+      a.timeSlot.startsWith("11:")
+    ).length;
+    const onlineM = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h < 12; }).length;
     if (offlineM + onlineM >= 12) {
       res.status(409).json({ error: "slot_unavailable", message: "Morning session is fully booked for this date." });
       return;
     }
   } else if (isEvening) {
-    const offlineE = existingOffline.filter(a => a.timeSlot.includes("6 PM") || a.timeSlot.includes("Evening") || a.timeSlot.startsWith("06:") || a.timeSlot.startsWith("07:") || a.timeSlot.startsWith("18:") || a.timeSlot.startsWith("19:")).length;
-    const onlineE = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h >= 18 && h < 22; }).length;
+    const offlineE = existingOffline.filter(a =>
+      a.timeSlot.includes("12 PM") ||
+      a.timeSlot.includes("6 PM") ||
+      a.timeSlot.includes("4 PM") ||
+      a.timeSlot.includes("5 PM") ||
+      a.timeSlot.includes("Evening") ||
+      a.timeSlot.startsWith("12:") ||
+      a.timeSlot.startsWith("13:") ||
+      a.timeSlot.startsWith("14:") ||
+      a.timeSlot.startsWith("15:") ||
+      a.timeSlot.startsWith("04:") ||
+      a.timeSlot.startsWith("05:") ||
+      a.timeSlot.startsWith("06:") ||
+      a.timeSlot.startsWith("07:") ||
+      a.timeSlot.startsWith("08:") ||
+      a.timeSlot.startsWith("09:") ||
+      a.timeSlot.startsWith("16:") ||
+      a.timeSlot.startsWith("17:") ||
+      a.timeSlot.startsWith("18:") ||
+      a.timeSlot.startsWith("19:") ||
+      a.timeSlot.startsWith("20:") ||
+      a.timeSlot.startsWith("21:")
+    ).length;
+    const onlineE = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h >= 12; }).length;
     if (offlineE + onlineE >= 16) {
       res.status(409).json({ error: "slot_unavailable", message: "Evening session is fully booked for this date." });
       return;

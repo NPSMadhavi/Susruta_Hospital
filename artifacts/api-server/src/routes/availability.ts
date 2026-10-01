@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { db, blockedDatesTable, openMonthsTable, appointmentsTable, customDayTimingsTable } from "@workspace/db";
+import { db, blockedDatesTable, openMonthsTable, appointmentsTable, customDayTimingsTable, onlineSlotSessionsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
+import { sendSlotAvailabilityUpdateBroadcastEmail } from "../lib/email";
 
 const router = Router();
 
@@ -132,6 +133,11 @@ router.get("/slots", async (req, res) => {
     .from(customDayTimingsTable)
     .where(eq(customDayTimingsTable.date, date));
 
+  const onlineSessions = await db
+    .select()
+    .from(onlineSlotSessionsTable)
+    .where(eq(onlineSlotSessionsTable.date, date));
+
   let allSlots: string[] = [];
 
   if (customTiming) {
@@ -142,6 +148,31 @@ router.get("/slots", async (req, res) => {
       ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes)
       : [];
     allSlots = [...morningSlots, ...eveningSlots];
+  } else if (onlineSessions.length > 0) {
+    function formatHHMMTo12Hour(hhmm: string): string {
+      if (!hhmm) return "";
+      const [hStr, mStr] = hhmm.split(":");
+      let h = parseInt(hStr, 10);
+      const m = parseInt(mStr || "0", 10);
+      const period = h >= 12 ? "PM" : "AM";
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+      return `${h}:${String(m).padStart(2, "0")} ${period}`;
+    }
+
+    const sessionSlots: string[] = [];
+    for (const session of onlineSessions) {
+      const startStr = formatHHMMTo12Hour(session.startTime);
+      const endStr = formatHHMMTo12Hour(session.endTime);
+      const slots = generateTimeSlots(startStr, endStr, session.intervalMinutes || 30);
+      sessionSlots.push(...slots);
+    }
+    const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay();
+    const isSunday = dayOfWeek === 0;
+    if (isSunday && !onlineSessions.some((s) => parseInt(s.startTime.split(":")[0], 10) < 12)) {
+      sessionSlots.unshift(...MORNING_SLOTS);
+    }
+    allSlots = Array.from(new Set(sessionSlots));
   } else {
     const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay(); // 0 = Sunday
     const isSunday = dayOfWeek === 0;
@@ -197,6 +228,8 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
     .from(customDayTimingsTable)
     .where(eq(customDayTimingsTable.date, date));
 
+  let resultRecord: any;
+
   if (existing) {
     const [updated] = await db
       .update(customDayTimingsTable)
@@ -213,26 +246,37 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
       .where(eq(customDayTimingsTable.date, date))
       .returning();
 
-    res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
-    return;
+    resultRecord = updated;
+  } else {
+    const [created] = await db
+      .insert(customDayTimingsTable)
+      .values({
+        date,
+        morningEnabled: Boolean(morningEnabled),
+        morningStart,
+        morningEnd,
+        eveningEnabled: Boolean(eveningEnabled),
+        eveningStart,
+        eveningEnd,
+        slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
+        note: note || null,
+      })
+      .returning();
+
+    resultRecord = created;
   }
 
-  const [created] = await db
-    .insert(customDayTimingsTable)
-    .values({
-      date,
-      morningEnabled: Boolean(morningEnabled),
-      morningStart,
-      morningEnd,
-      eveningEnabled: Boolean(eveningEnabled),
-      eveningStart,
-      eveningEnd,
-      slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
-      note: note || null,
-    })
-    .returning();
+  // Notify registered patients via email about updated offline consultation timings
+  sendSlotAvailabilityUpdateBroadcastEmail({
+    date,
+    type: "offline",
+    morningSession: morningEnabled ? `${morningStart} - ${morningEnd}` : "Closed",
+    eveningSession: eveningEnabled ? `${eveningStart} - ${eveningEnd}` : "Closed",
+    intervalMinutes: Number(slotIntervalMinutes) || 30,
+    note: note || undefined,
+  }).catch(() => {});
 
-  res.status(201).json({ ...created, createdAt: created.createdAt.toISOString() });
+  res.status(existing ? 200 : 201).json({ ...resultRecord, createdAt: resultRecord.createdAt.toISOString() });
 });
 
 router.delete("/custom-timings/:id", requireAdmin, async (req, res) => {

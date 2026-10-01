@@ -22,6 +22,21 @@ type DateGroup = { date: string; slots: OnlineSlot[] };
 type UploadedDoc = { name: string; objectPath: string; contentType: string; size: number };
 
 // ── Helpers ──────────────────────────────────────────────────────
+function getConsultationTitle(label: string, defaultTitle: string): string {
+  if (!label || label === "Closed" || label === "Closed on Sunday") return defaultTitle;
+  const firstPart = label.split("-")[0]?.trim() || "";
+  const match = firstPart.match(/(\d{1,2})(?::(\d{2}))?\s*([AaPp][Mm])/);
+  if (match) {
+    let h = parseInt(match[1], 10);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    if (h >= 12) return "Evening Consultation";
+    if (h < 12) return "Morning Consultation";
+  }
+  return defaultTitle;
+}
+
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
@@ -222,8 +237,8 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
   // 2 slots based on admin offline slots (Morning 9 AM - 1 PM, Evening 4 PM - 7 PM)
   const [offlineSlotStatus, setOfflineSlotStatus] = useState<{
-    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
-    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean };
+    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
+    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
   } | null>(null);
   const [loadingOfflineSlots, setLoadingOfflineSlots] = useState(false);
 
@@ -275,6 +290,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
         patientName: patient.name,
         patientPhone: effectivePhone,
       });
+      fetchOnlineSlots();
       setOfflineStep("done");
     } catch (err: any) {
       setOfflineError(err?.message ?? "Booking failed. Please try again.");
@@ -422,6 +438,16 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
           ? { ...g, slots: g.slots.filter(s => s.id !== onlineSlot.id) }
           : g
       ));
+
+      // Refresh offline slot status for the booked date
+      fetch(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/appointments/offline/slots-status?date=${onlineSlot.date}`, { credentials: "include" })
+        .then(res => res.json())
+        .then(data => {
+          if (data?.morning && data?.evening) {
+            setOfflineSlotStatus({ morning: data.morning, evening: data.evening });
+          }
+        })
+        .catch(() => {});
 
       setOnlineStep("done");
     } catch (err: any) {
@@ -593,21 +619,22 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {[
                       {
                         id: "morning",
-                        label: "10 AM - 1 PM",
-                        title: "Morning Consultation",
+                        label: offlineSlotStatus?.morning?.label || "10 AM - 1 PM",
+                        title: getConsultationTitle(offlineSlotStatus?.morning?.label || "", "Morning Consultation"),
                         status: offlineSlotStatus?.morning,
                       },
                       {
                         id: "evening",
-                        label: "6 PM - 10 PM",
-                        title: "Evening Consultation",
+                        label: offlineSlotStatus?.evening?.label || "6 PM - 10 PM",
+                        title: getConsultationTitle(offlineSlotStatus?.evening?.label || "", "Evening Consultation"),
                         status: offlineSlotStatus?.evening,
                       },
                     ].map((session) => {
+                      const isClosed = session.label === "Closed" || session.label === "Closed on Sunday" || session.status?.label === "Closed" || session.status?.label === "Closed on Sunday";
                       const isSelected = selectedSlot === session.label;
-                      const isExceeded = selectedDate ? isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening") : false;
+                      const isExceeded = session.status?.isExceeded ?? (isClosed || (selectedDate ? isOfflineSessionExceeded(selectedDate, session.id as "morning" | "evening") : false));
                       const remaining = isExceeded ? 0 : (session.status?.remaining ?? 0);
-                      const isAvailable = !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
+                      const isAvailable = !isClosed && !isExceeded && (session.status?.isAvailable ?? true) && remaining > 0;
 
                       return (
                         <button
@@ -662,8 +689,10 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                             >
                               {isAvailable
                                 ? `${remaining} Slots Available`
-                                : selectedDate && new Date(selectedDate + "T12:00:00+05:30").getDay() === 0 && session.id === "evening"
+                                : isClosed || session.label === "Closed on Sunday"
                                 ? "Closed on Sunday"
+                                : session.label === "Closed"
+                                ? "Closed"
                                 : "No slots available"}
                             </span>
                             {isSelected && <CheckCircle2 size={18} className="text-white shrink-0" />}
@@ -785,13 +814,16 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {dateGroups.map(group => {
                       const availableSlots = group.slots.filter(s => !s.isBooked && !isSlotExceeded(group.date, s.startTime) && !s.isExceeded);
                       const allUnavailable = availableSlots.length === 0;
+                      const sessionTimeRange = group.slots.length > 0
+                        ? `${fmtTime(group.slots[0].startTime)} – ${fmtTime(group.slots[group.slots.length - 1].endTime)}`
+                        : "Online Session";
                       return (
                         <div key={group.date} className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
                           <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white">
                             <div>
                               <p className="font-bold text-gray-900 text-sm">{fmtDate(group.date)}</p>
                               <p className={`text-xs mt-0.5 font-medium ${allUnavailable ? "text-[#D95B2F] font-semibold" : "text-gray-500"}`}>
-                                10 AM – 1 PM <span className="ml-1">
+                                {sessionTimeRange} <span className="ml-1">
                                               {allUnavailable ? "0 available slots" : `${availableSlots.length} available slots`}
                                             </span>
                               </p>
