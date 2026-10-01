@@ -53,8 +53,29 @@ export default function DoctorLogin() {
   return (
     <div className="min-h-svh font-['DM_Sans',sans-serif] flex bg-white text-[#2d3d59]">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" />
-      <aside className="w-[48.611111%] shrink-0 flex items-center justify-center p-16 bg-cover bg-center text-white max-[1199px]:py-10 max-[1199px]:px-7 max-[1023px]:hidden" style={{ backgroundImage: `url(${BASE}/images/doctor-login-bg.png)` }}>
-        <div className="w-full max-w-[572px] text-center -translate-y-[25px]">
+<aside
+  className="
+    relative
+    w-[48.611111%]
+    shrink-0
+    flex
+    items-center
+    justify-center
+    p-16
+    bg-[url('/doctor_login_img.png')]
+    bg-cover
+    bg-center
+    bg-no-repeat
+    text-white
+    overflow-hidden
+    max-[1199px]:py-10
+    max-[1199px]:px-7
+    max-[1023px]:hidden
+  "
+>
+  {/* Dark Green Background Overlay */}
+  <div className="absolute inset-0 bg-[#063d2d]/80" />
+  <div className="w-full max-w-[572px] text-center -translate-y-[25px]">
           <div className="size-20 mx-auto mb-6 border border-[#2d846780] rounded-full flex items-center justify-center bg-[#3c796140] text-[#3de084]"><Stethoscope size={34} /></div>
           <div className="w-fit mx-auto mb-[18px] flex items-center justify-center gap-2.5 h-[31px] px-4 border border-[#177654] rounded-full bg-[#063b2cc9] text-[#8ce5c8] font-['DM_Serif_Display',Georgia,serif] text-[11px] tracking-[.25px] shadow-[0_4px_8px_#0002]"><span className="size-2 rounded-full bg-[#2dd4a0]" /> SUSRUTA HOSPITAL <span className="text-[#759e89]">•</span> DOCTOR PORTAL</div>
           <h2 className="font-['DM_Serif_Display',Georgia,serif] text-[48px] font-normal leading-[55px] tracking-[-1.5px] mb-2">Doctor Portal</h2>

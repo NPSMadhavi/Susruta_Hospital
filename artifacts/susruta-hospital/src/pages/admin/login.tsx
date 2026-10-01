@@ -30,8 +30,23 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-svh font-['DM_Sans',sans-serif] flex items-center justify-center py-8 px-5 bg-cover bg-center text-[#1d1d1d]" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/admin-login-bg.png)` }}>
-      <div className="w-[637px] min-h-[674px] pt-[151px] px-[65px] pb-[150px] rounded-[24px] bg-[#fafafa] text-center max-[640px]:min-h-[560px] max-[640px]:py-[90px] max-[640px]:px-7">
+    <div
+  className="
+    min-h-svh
+    font-['DM_Sans',sans-serif]
+    flex
+    items-center
+    justify-center
+    py-8
+    px-5
+    bg-[url('/admin_login_img.png')]
+    bg-cover
+    bg-center
+    bg-no-repeat
+    text-[#1d1d1d]
+  "
+>
+     <div className="w-[637px] min-h-[674px] pt-[151px] px-[65px] pb-[150px] rounded-[24px] bg-[#fafafa] text-center max-[640px]:min-h-[560px] max-[640px]:py-[90px] max-[640px]:px-7">
         <img src={logoImg} alt="Susruta Hospital" className="block w-full h-[57px] object-contain mx-auto max-[640px]:h-auto" />
         <h1 className="mt-[10px] mb-[18px] font-['DM_Sans']  text-[30px] font-bold leading-[46px] tracking-[-1px] max-[640px]:text-[30px]">Admin Access</h1>
         

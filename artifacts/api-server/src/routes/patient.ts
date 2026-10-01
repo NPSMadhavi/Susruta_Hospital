@@ -1091,8 +1091,22 @@ router.delete("/documents/:id", requirePatient, async (req: any, res) => {
     .from(patientDocumentsTable)
     .where(and(eq(patientDocumentsTable.id, id), eq(patientDocumentsTable.patientId, patient.id)));
   if (!doc) { res.status(404).json({ error: "not_found" }); return; }
-  await db.delete(patientDocumentsTable).where(eq(patientDocumentsTable.id, id));
-  res.json({ ok: true });
+  await db.transaction(async (tx) => {
+    // Remove this file from every appointment belonging to this patient.
+    // Filter in SQL so concurrent attachment updates are not overwritten.
+    await tx.update(onlineAppointmentsTable).set({
+      documents: sql`coalesce((
+        select json_agg(document order by position)
+        from json_array_elements(${onlineAppointmentsTable.documents}) with ordinality as attached(document, position)
+        where document->>'objectPath' is distinct from ${doc.objectPath}
+      ), '[]'::json)`,
+    }).where(eq(onlineAppointmentsTable.patientId, patient.id));
+    await tx.delete(patientDocumentsTable).where(and(
+      eq(patientDocumentsTable.patientId, patient.id),
+      eq(patientDocumentsTable.objectPath, doc.objectPath),
+    ));
+  });
+  res.json({ ok: true, objectPath: doc.objectPath });
 });
 
 // ── POST /api/patient/donations — record a donation ───────────

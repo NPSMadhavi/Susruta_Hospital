@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   db, onlineAppointmentsTable, onlineSlotsTable,
-  prescriptionsTable, patientsTable, siteSettingsTable,
+  prescriptionsTable, patientsTable, siteSettingsTable, patientDocumentsTable,
 } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -78,12 +78,27 @@ router.post("/", requirePatient, async (req: any, res) => {
     .where(and(eq(onlineAppointmentsTable.slotId, slotId), eq(onlineAppointmentsTable.patientId, patient.id)));
   if (existing.length > 0) { res.status(409).json({ error: "already_booked" }); return; }
 
-  await db.update(onlineSlotsTable).set({ isBooked: true }).where(eq(onlineSlotsTable.id, slotId));
+  // Commit the booking and its document library entries together.
+  const appt = await db.transaction(async (tx) => {
+    const [claimedSlot] = await tx.update(onlineSlotsTable).set({ isBooked: true })
+      .where(and(eq(onlineSlotsTable.id, slotId), eq(onlineSlotsTable.isBooked, false)))
+      .returning();
+    if (!claimedSlot) return null;
 
-  const [appt] = await db
-    .insert(onlineAppointmentsTable)
-    .values({ slotId, patientId: patient.id, reason: reason ?? null, documents: documents as DocumentFile[], status: "pending" })
-    .returning();
+    const [created] = await tx.insert(onlineAppointmentsTable)
+      .values({ slotId, patientId: patient.id, reason: reason ?? null, documents: documents as DocumentFile[], status: "pending" })
+      .returning();
+
+    for (const document of documents) {
+      const [saved] = await tx.select({ id: patientDocumentsTable.id }).from(patientDocumentsTable)
+        .where(and(eq(patientDocumentsTable.patientId, patient.id), eq(patientDocumentsTable.objectPath, document.objectPath)));
+      if (!saved) {
+        await tx.insert(patientDocumentsTable).values({ ...document, patientId: patient.id });
+      }
+    }
+    return created;
+  });
+  if (!appt) { res.status(409).json({ error: "slot_taken", message: "This slot has already been booked." }); return; }
 
   // Send acknowledgement email (fire and forget)
   if (patient.email) {

@@ -397,12 +397,6 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
           size: file.size,
         }]);
 
-        // Save to patient's document library in the background
-        fetch(`${BASE}/api/patient/documents`, {
-          method: "POST", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: file.name, objectPath, contentType: file.type, size: file.size }),
-        }).catch(() => {});
       } catch {
         setOnlineError(`Failed to upload "${file.name}". Please try again.`);
       }

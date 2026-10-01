@@ -7,7 +7,7 @@ import {
   Download, Heart, QrCode, X,
   AlertCircle, Phone, ChevronDown, ChevronUp,
   Bell, ImageIcon, Loader2, Trash2, Upload, Camera, FolderOpen,
-  Mic, VideoIcon, ShieldCheck, LayoutDashboard, RotateCcw, Eye,
+  Mic, VideoIcon, ShieldCheck, LayoutDashboard, RotateCcw, Eye, Search,
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,113 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string }>
   cancelled:   { label: "Cancelled",         cls: "bg-gray-100 text-gray-500 border-gray-200",       dot: "bg-gray-400" },
   rescheduled: { label: "Rescheduled",       cls: "bg-purple-100 text-purple-700 border-purple-200", dot: "bg-purple-500" },
 };
+
+type AppointmentItem =
+  | { type: "online"; date: string; data: OnlineAppt }
+  | { type: "physical"; date: string; data: PhysicalAppt };
+
+function appointmentTime(item: AppointmentItem) {
+  if (item.type === "physical") return item.data.timeSlot.replace(/\s*-\s*/g, " – ").replace(/\s*IST$/i, "") + " IST";
+  const time = (value: string) => {
+    const [hour, minute] = value.split(":");
+    return (Number(hour) % 12 || 12) + ":" + minute + (Number(hour) >= 12 ? " PM" : " AM");
+  };
+  return time(item.data.slot.startTime) + " – " + time(item.data.slot.endTime) + " IST";
+}
+
+function AppointmentStatus({ status }: { status: string }) {
+  return <span className={cn(
+    "inline-flex min-w-[60px] items-center justify-center gap-1 rounded-full border px-3 py-1 text-[12px] font-medium leading-[13px] capitalize",
+    status === "pending" ? "border-[#ffda75] bg-[#fffbeb] text-[#bd5900]" :
+    status === "confirmed" ? "border-[#99ebc5] bg-[#ecfdf5] text-[#008568]" :
+    status === "completed" ? "border-[#cccfcc] bg-[#e4e6e3] text-[#505650]" :
+    STATUS_CONFIG[status]?.cls || "border-gray-200 bg-gray-100 text-gray-600"
+  )}><span className="size-1 rounded-full bg-current" />{status === "pending" ? "Pending" : STATUS_CONFIG[status]?.label || status}</span>;
+}
+
+function AppointmentActions({ item, onJoin }: { item: AppointmentItem; onJoin: (id: number) => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocFile | null>(null);
+  const online = item.type === "online" ? item.data : null;
+  return <div className="flex flex-wrap  items-center gap-2">
+    {online?.joinEnabled && <button onClick={() => onJoin(online.id)} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1.5 text-[12px] text-white hover:bg-emerald-700"><Video size={11} /> Join Video Call</button>}
+    <button onClick={() => dialogRef.current?.showModal()} aria-label={"View documents for " + fmtDateShort(item.date)} className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-[#D95B2F] px-3 py-1.5 text-[12px] font-medium leading-3 text-white hover:bg-[#c94e25]"><Eye size={12} /> View Documents</button>
+    <dialog ref={dialogRef} aria-label="Appointment documents" className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-5 text-sm shadow-xl backdrop:bg-black/40">
+      <div className="mb-4 flex items-center justify-between gap-4"><h3 className="font-bold text-[#20392b]">Documents · {fmtDateShort(item.date)}</h3><button onClick={() => dialogRef.current?.close()} aria-label="Close documents" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X size={18} /></button></div>
+      {online?.documents?.length ? <div className="space-y-2">{online.documents.map((doc, index) => <button key={index} type="button" onClick={() => setPreviewDocument(doc)} className="flex w-full text-left items-center gap-2 rounded-lg border border-[#eee8e3] p-3 text-[#d95b2f] hover:bg-orange-50"><FileText size={16} className="shrink-0" /><span className="break-all">{doc.name}</span></button>)}</div> : <p className="py-4 text-gray-500">No documents attached to this appointment.</p>}
+    </dialog>
+    {previewDocument && <MedicalDocumentPreview key={previewDocument.objectPath} doc={previewDocument} onClose={() => setPreviewDocument(null)} />}
+  </div>;
+}
+
+const MedicalPdfPreview = React.lazy(() => import("@/components/CleanPdfViewer").then(module => ({ default: module.CleanPdfViewer })));
+
+function MedicalDocumentPreview({ doc, onClose }: { doc: Pick<PatientDoc, "name" | "objectPath" | "contentType">; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [preview, setPreview] = useState<{ url: string; blob: Blob; kind: "pdf" | "image" | "docx" } | null>(null);
+  const [error, setError] = useState("");
+  const [wordLoading, setWordLoading] = useState(true);
+
+  useEffect(() => {
+    dialogRef.current?.showModal();
+    const controller = new AbortController();
+    let objectUrl = "";
+    async function load() {
+      try {
+        const response = await fetch(BASE + "/api/storage" + doc.objectPath, { credentials: "include", signal: controller.signal });
+        if (!response.ok) throw new Error("Unable to load this document. Please try again.");
+        const blob = await response.blob();
+        const type = (doc.contentType || blob.type).toLowerCase();
+        const name = doc.name.toLowerCase();
+        const kind = type === "application/pdf" || name.endsWith(".pdf") ? "pdf" :
+          type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(name) ? "image" :
+          type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || name.endsWith(".docx") ? "docx" : null;
+        if (!kind) throw new Error("Preview is available for PDF, images, and DOCX documents. Please upload this document in one of these formats.");
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreview({ url: objectUrl, blob, kind });
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Unable to preview this document.");
+      }
+    }
+    void load();
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [doc]);
+
+  async function renderWord() {
+    const frameDocument = frameRef.current?.contentDocument;
+    if (!frameDocument || preview?.kind !== "docx") return;
+    try {
+      const { renderAsync } = await import("docx-preview");
+      if (!frameRef.current || frameRef.current.contentDocument !== frameDocument) return;
+      await renderAsync(preview.blob, frameDocument.body, frameDocument.head, {
+        ignoreWidth: true, ignoreHeight: true, useBase64URL: true, renderAltChunks: false,
+      });
+      frameDocument.addEventListener("click", event => event.preventDefault());
+      setWordLoading(false);
+    } catch {
+      setError("Unable to preview this Word document. The file may be damaged.");
+    }
+  }
+
+  return <dialog ref={dialogRef} onClose={onClose} aria-label={"Preview: " + doc.name} className="fixed inset-0 m-auto h-[85vh] w-[calc(100%-2rem)] max-w-5xl rounded-2xl bg-white p-0 shadow-xl backdrop:bg-black/50">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-100 px-5 py-4">
+        <h2 className="truncate text-base font-bold text-gray-900">{doc.name}</h2>
+        <button autoFocus type="button" onClick={() => dialogRef.current?.close()} aria-label="Close document preview" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
+      </div>
+      <div className="relative min-h-0 flex-1 overflow-auto bg-gray-50 p-3">
+        {error ? <p role="alert" className="p-6 text-center text-red-600">{error}</p> : !preview ? <div role="status" className="flex items-center justify-center gap-2 p-8 text-gray-500"><Loader2 size={20} className="animate-spin" /> Loading document...</div> : preview.kind === "pdf" ? (
+          <React.Suspense fallback={<p role="status" className="p-6 text-center">Loading document...</p>}><MedicalPdfPreview url={preview.url} title={doc.name} className="h-full" /></React.Suspense>
+        ) : preview.kind === "image" ? <img src={preview.url} alt={doc.name} onError={() => setError("Unable to preview this image.")} className="mx-auto max-h-full max-w-full object-contain" /> : <>
+          {wordLoading && <p role="status" className="p-4 text-center text-gray-500">Loading document...</p>}
+          <iframe ref={frameRef} title={doc.name} sandbox="allow-same-origin" srcDoc={'<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"></body></html>'} onLoad={() => void renderWord()} className="h-full w-full border-0 bg-white" />
+        </>}
+      </div>
+    </div>
+  </dialog>;
+}
 
 // ── Join Popup ──────────────────────────────────────────────────
 function JoinPopup({ apptId, onJoin, onClose }: {
@@ -371,6 +478,9 @@ export default function PatientDashboard() {
   };
   const [sidebarTab, setSidebarTab] = useState<"dashboard" | "appointments" | "prescriptions" | "docs" | "profile">("dashboard");
   const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<PatientDoc | null>(null);
+  const [previewPrescription, setPreviewPrescription] = useState<Pick<PatientDoc, "name" | "objectPath" | "contentType"> | null>(null);
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<PatientDoc | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -596,7 +706,14 @@ export default function PatientDashboard() {
     try {
       const res = await fetch(`${BASE}/api/patient/documents/${id}`, { method: "DELETE", credentials: "include" });
       if (res.ok) {
-        setPatientDocs(prev => prev.filter(d => d.id !== id));
+        const { objectPath } = await res.json();
+        setPatientDocs(prev => prev.filter(d => d.id !== id && d.objectPath !== objectPath));
+        setOnlineAppts(prev => prev.map(appt => ({
+          ...appt,
+          documents: appt.documents.filter(doc => doc.objectPath !== objectPath),
+        })));
+        setPreviewDoc(prev => prev?.objectPath === objectPath ? null : prev);
+        setPreviewPrescription(prev => prev?.objectPath === objectPath ? null : prev);
         setConfirmDeleteDoc(null);
       }
     } finally {
@@ -853,7 +970,7 @@ export default function PatientDashboard() {
       </aside>
 
       {/* ── MAIN CONTENT AREA ────────────────────────────────────── */}
-      <main className="flex-1 w-full min-w-0 p-5 md:p-8 xl:p-10 md:h-screen md:overflow-y-auto">
+      <main className={cn("flex-1 w-full min-w-0 md:h-screen md:overflow-y-auto", sidebarTab === "appointments" ? "bg-[#f8faf9] px-4 pb-8 pt-4 md:pl-[18px] md:pr-2" : sidebarTab === "docs" ? "p-[14px]" : "p-5 md:p-8 xl:p-10")}>
 
         {/* Direct Call Alert Banner */}
         {directCall && !videoCallDirectId && (
@@ -932,6 +1049,8 @@ export default function PatientDashboard() {
         )}
 
         {/* ── 1. DASHBOARD TAB ── */}
+        {(sidebarTab === "dashboard" || sidebarTab === "prescriptions") && previewPrescription && <MedicalDocumentPreview key={previewPrescription.objectPath} doc={previewPrescription} onClose={() => setPreviewPrescription(null)} />}
+
         {sidebarTab === "dashboard" && (
           <div className="space-y-8 animate-in fade-in duration-200 w-full">
             {/* Header Row */}
@@ -1090,7 +1209,7 @@ export default function PatientDashboard() {
                   prescriptions.map((appt, i) => {
                     const photoPath = appt.prescription?.photoObjectPath;
                     const firstDoc = photoPath
-                      ? { name: "Prescription Document", objectPath: photoPath }
+                      ? { name: "Prescription Document", objectPath: photoPath, contentType: "" }
                       : appt.documents?.[0] || null;
 
                     return (
@@ -1105,14 +1224,13 @@ export default function PatientDashboard() {
                         </div>
                         {firstDoc && (
                           <div className="flex items-center gap-2 shrink-0">
-                            <a
-                              href={`${BASE}/api/storage${firstDoc.objectPath}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => setPreviewPrescription(firstDoc)}
                               className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <Eye size={12} /> View
-                            </a>
+                            </button>
                             <a
                               href={`${BASE}/api/storage${firstDoc.objectPath}`}
                               download
@@ -1139,9 +1257,9 @@ export default function PatientDashboard() {
 
         {/* ── 2. APPOINTMENTS TAB ── */}
         {sidebarTab === "appointments" && (
-          <div className="space-y-8 animate-in fade-in duration-200 w-full">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <h1 className="text-3xl font-bold font-sans text-gray-900">My Appointments</h1>
+          <div className="w-full p-6 animate-in fade-in duration-200">
+            <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+              <h1 className="text-3xl font-bold leading-7 text-[#20392b]">My Appointments</h1>
               {patient?.emailVerified && (
                 <button
                   onClick={openBooking}
@@ -1150,75 +1268,39 @@ export default function PatientDashboard() {
                   Book Appointment
                 </button>
               )}
-            </div>
-
-            <div className="space-y-4">
-              {allAppointments.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-[#EDEFEB] p-12 text-center">
-                  <Calendar size={40} className="text-gray-300 mx-auto mb-3" />
-                  <p className="font-bold text-gray-600 font-sans">No appointments scheduled</p>
-                  <p className="text-xs font-sans text-gray-500 mt-1 mb-4">Book a consultation with Dr. P. Murali Krishna</p>
-                  
-                </div>
-              ) : (
-                allAppointments.map((item, i) => {
-                  const isOnline = item.type === "online";
-                  const date = item.date;
-                  const status = item.data.status;
-                  const onlineAppt = isOnline ? (item.data as OnlineAppt) : null;
-                  return (
-                    <div key={i} className="bg-white rounded-2xl border border-[#EDEFEB] p-5 shadow-sm space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-[#D95B2F]">
-                            <Calendar size={22} />
-                          </div>
-                          <div>
-                            <p className="font-bold text-base font-sans text-gray-900">{fmtDateShort(date)}</p>
-                            <p className="text-xs font-sans text-gray-500 mt-0.5">{isOnline ? "Online Consultation" : "In-Person Visit"}</p>
-                          </div>
-                        </div>
-                        {isOnline && onlineAppt?.joinEnabled ? (
-                          <button
-                            onClick={() => setVideoCallApptId(onlineAppt.id)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold font-sans transition-all shadow-md animate-pulse flex items-center gap-1.5"
-                          >
-                            <Video size={14} /> Join Video Call
-                          </button>
-                        ) : (
-                          <span className={cn(
-                            "text-xs font-bold font-sans px-3 py-1 rounded-full border capitalize",
-                            STATUS_CONFIG[status]?.cls || "bg-gray-100 text-gray-700 border-gray-200"
-                          )}>
-                            {STATUS_CONFIG[status]?.label || status}
-                          </span>
-                        )}
-                      </div>
-                      {isOnline && onlineAppt?.documents && onlineAppt.documents.length > 0 && (
-                        <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-gray-500 flex items-center gap-1">
-                            <FileText size={13} className="text-[#D95B2F]" />
-                            Attached Document{onlineAppt.documents.length > 1 ? "s" : ""} ({onlineAppt.documents.length}):
-                          </span>
-                          {onlineAppt.documents.map((d, di) => (
-                            <a
-                              key={di}
-                              href={`${BASE}/api/storage${d.objectPath}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-[#D95B2F]/10 border border-gray-200 hover:border-[#D95B2F]/30 rounded-xl text-xs font-medium text-gray-700 hover:text-[#D95B2F] transition-colors"
-                            >
-                              <FileText size={12} className="text-gray-400" />
-                              <span className="truncate max-w-[220px]">{d.name}</span>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                     </div>
+            <section aria-labelledby="upcoming-appointments-heading">
+              <h2 id="upcoming-appointments-heading" className="mb-[18px] flex items-center gap-3 text-[20px] font-bold leading-5 text-[#242424]"> Upcoming Appointments</h2>
+              <div className="space-y-3">
+                {allAppointments.filter(item => isUpcoming(item.date, item.data.status)).map(item => (
+                  <div key={item.type + item.data.id} className="flex min-h-16 flex-wrap items-center gap-4 rounded-[13px] border border-[#ffb29b] border-l-[3px] border-l-[#ed5a29] bg-white py-[11px] pl-[18px] pr-[17px]">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f6eae6] text-[#b9380d]">{item.type === "online" ? <Video size={17} fill="currentColor" strokeWidth={1.5} /> : <MapPin size={17} />}</div>
+                    <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:ml-[19px]"><p className="text-base font-bold text-black">{fmtDateShort(item.date)}</p><p className="text-sm text-black">{appointmentTime(item)} · {item.type === "online" ? "Online Consultation" : "Offline Consultation"}</p></div>
+                    <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} /></div>
+                  </div>
+                ))}
+                {upcomingCount === 0 && <p className="rounded-[13px] border border-[#eee8e3] p-5 text-sm text-gray-500">No upcoming appointments scheduled</p>}
+              </div>
+            </section>
+            <section aria-labelledby="past-appointments-heading" className="mt-[23px]">
+              <h2 id="past-appointments-heading" className="mb-3 flex items-center gap-1.5 text-[20px] font-bold leading-5 text-[#263248]"> Past Appointments</h2>
+              <div className="overflow-x-auto rounded-[13px] border border-[#eee8e3]">
+                <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-[14px] text-[#202420]">
+                  <colgroup><col className="w-[17%]" /><col className="w-[26%]" /><col className="w-[23.5%]" /><col className="w-[18%]" /><col className="w-[15.5%]" /></colgroup>
+                  <thead className="bg-[#FAF7F4] text-[16px]"><tr>{["Date", "Time", "Type", "Status", "Action"].map(label => <th key={label} scope="col" className="h-11 px-[18px] font-medium">{label}</th>)}</tr></thead>
+                  <tbody>
+                    {pastAppts.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
+                      <td className="px-[18px] py-3 font-medium">{fmtDateShort(item.date)}</td>
+                      <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
+                      <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
+                      <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
+                      <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} /></td>
+                    </tr>)}
+                    {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
 
@@ -1264,14 +1346,13 @@ export default function PatientDashboard() {
                               <span className="text-xs font-bold font-sans text-gray-800 truncate">Prescription Document</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <a
-                                href={`${BASE}/api/storage${photoPath}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
                                 className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
                               >
                                 <Eye size={13} /> View
-                              </a>
+                              </button>
                               <a
                                 href={`${BASE}/api/storage${photoPath}`}
                                 download
@@ -1292,14 +1373,13 @@ export default function PatientDashboard() {
                                 <span className="text-xs font-bold font-sans text-gray-800 truncate">{doc.name || `Medical Document #${di + 1}`}</span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <a
-                                  href={docUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPrescription(doc)}
                                   className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
                                 >
                                   <Eye size={13} /> View
-                                </a>
+                                </button>
                                 <a
                                   href={docUrl}
                                   download
@@ -1334,9 +1414,15 @@ export default function PatientDashboard() {
 
         {/* ── 4. MY DOCS TAB ── */}
         {sidebarTab === "docs" && (
-          <div className="space-y-8 animate-in fade-in duration-200 w-full">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <h1 className="text-3xl font-bold font-sans text-gray-900">Medical Documents</h1>
+          <div className="w-full p-7 animate-in fade-in duration-200">
+            {previewDoc && <MedicalDocumentPreview key={previewDoc.id} doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
+            <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+              <h1 className="text-[30px] font-bold leading-7 text-[#20392b]">Medical Documents</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex h-[44px] w-full items-center gap-4 rounded-xl border border-[#cfd5c9] bg-white px-3.5 sm:w-[298px]">
+                  <Search size={17} className="shrink-0 text-[#62685f]" />
+                  <input type="search" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)} aria-label="Search documents by file name or patient ID" placeholder="Search by file name, patient ID....." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
+                </label>
               <label className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95 cursor-pointer">
                 <Upload size={16} /> Upload Document
                 <input
@@ -1348,50 +1434,43 @@ export default function PatientDashboard() {
                   onChange={e => { if (e.target.files?.length) { uploadPatientDocs(e.target.files); e.target.value = ""; } }}
                 />
               </label>
-            </div>
-
-            {patientDocs.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-[#EDEFEB] p-12 text-center">
-                <FolderOpen size={40} className="text-gray-300 mx-auto mb-3" />
-                <p className="font-bold text-gray-600 font-sans">No documents uploaded yet</p>
-                <p className="text-xs font-sans text-gray-500 mt-1 mb-4">Upload your medical reports, test results, or scans</p>
-                
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {patientDocs.map(doc => {
-                  const url = `${BASE}/api/storage${doc.objectPath}`;
-                  return (
-                    <div key={doc.id} className="bg-white rounded-2xl border border-[#EDEFEB] overflow-hidden shadow-sm p-5 space-y-3 flex flex-col justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                          <FileText size={20} />
-                        </div>
-                        <p className="text-sm font-bold font-sans text-gray-900 truncate">{doc.name}</p>
+            </div>
+            <section aria-labelledby="recent-documents-heading">
+              <h2 id="recent-documents-heading" className="mb-3 text-[20px] font-bold text-[#172238]">Recent Documents</h2>
+              <div className="space-y-3">
+                {patientDocs.filter(doc => {
+                  const query = documentSearch.trim().toLowerCase();
+                  return !query || doc.name.toLowerCase().includes(query) || (patient?.patientCode || "").toLowerCase().includes(query);
+                }).map(doc => (
+                  <div key={doc.id} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e3eaf3] bg-[#f1f5f9] text-[#3d4e66]">
+                        {doc.contentType.startsWith("image/") ? <ImageIcon size={17} /> : <FileText size={17} />}
                       </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-100 gap-2">
-                        <a
-                          href={url}
-                          download
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-xl text-xs font-bold font-sans transition-colors inline-flex items-center gap-1.5"
-                        >
-                          <Download size={13} /> Download
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteDoc(doc)}
-                          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold font-sans transition-colors cursor-pointer"
-                        >
-                          Delete
-                        </button>
+                      <div className="min-w-0">
+                        <p title={doc.name} className="truncate text-[16px] font-bold leading-4 text-[#172238]">{doc.name}</p>
+                        <p className="mt-1 text-[12px] leading-3 text-[#7c8ca4]">Uploaded: <span className="text-[#27364c]">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" }) : "Date unavailable"}</span></p>
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                      <button type="button" onClick={() => setPreviewDoc(doc)} className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50"><Eye size={11} /> View</button>
+                      <a href={BASE + "/api/storage" + doc.objectPath} download={doc.name} className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50"><Download size={10} /> Download</a>
+                      <button type="button" onClick={() => setConfirmDeleteDoc(doc)} aria-label={"Delete " + doc.name} title="Delete document" className="rounded p-1 text-[#9d9894] transition-colors hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+                {patientDocs.length === 0 ? (
+                  <div className="rounded-[13px] border border-[#e3eaf3] bg-white p-8 text-center">
+                    <FolderOpen size={32} className="mx-auto mb-3 text-gray-300" />
+                    <p className="text-sm font-bold text-gray-600">No documents uploaded yet</p>
+                    <p className="mt-1 text-xs text-gray-500">Upload your medical reports, test results, or scans</p>
+                  </div>
+                ) : !patientDocs.some(doc => !documentSearch.trim() || doc.name.toLowerCase().includes(documentSearch.trim().toLowerCase()) || (patient?.patientCode || "").toLowerCase().includes(documentSearch.trim().toLowerCase())) && (
+                  <p className="rounded-[13px] border border-[#e3eaf3] bg-white p-6 text-center text-sm text-gray-500">No documents match your search.</p>
+                )}
               </div>
-            )}
+            </section>
           </div>
         )}
 
@@ -1432,12 +1511,12 @@ export default function PatientDashboard() {
           description={
             confirmDeleteDoc ? (
               <p>
-                Are you sure you want to remove <strong className="text-gray-900">"{confirmDeleteDoc.name}"</strong>? This document will be permanently removed from your medical records.
+                Are you sure you want to remove <strong className="text-gray-900">"{confirmDeleteDoc.name}"</strong>? This document will be permanently deleted from your medical records.
               </p>
             ) : null
           }
           warningText="This action cannot be undone."
-          confirmLabel="Remove"
+          confirmLabel="Delete"
           isLoading={deletingDocId !== null}
           onConfirm={() => {
             if (confirmDeleteDoc) deletePatientDoc(confirmDeleteDoc.id);

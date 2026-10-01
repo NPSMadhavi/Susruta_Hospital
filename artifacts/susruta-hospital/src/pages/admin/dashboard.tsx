@@ -126,7 +126,7 @@ export default function AdminDashboard() {
               <span className={`text-xs font-semibold ${liveOnline > 0 ? 'text-emerald-100' : 'text-muted-foreground'}`}>
                 {liveOnline > 0 ? `🟢 ${liveOnline} live now` : pendingOnline > 0 ? `${pendingOnline} pending` : 'Manage sessions'}
               </span>
-              <ArrowRight size={14} className={liveOnline > 0 ? 'text-white/60' : 'text-muted-foreground/40'} />
+              <ArrowRight size={20} className={liveOnline > 0 ? 'text-white/10' : 'text-muted-foreground/40'} />
             </div>
           </div>
         </Link>
