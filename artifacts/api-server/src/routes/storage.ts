@@ -10,9 +10,14 @@ const router = Router();
 const objectStorageService = new ObjectStorageService();
 
 // Local uploads directory for local development fallback
-const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const UPLOADS_DIR_1 = path.resolve(process.cwd(), "uploads");
+const UPLOADS_DIR_2 = path.resolve(import.meta.dirname, "../../uploads");
+const UPLOADS_DIRS = [UPLOADS_DIR_1, UPLOADS_DIR_2];
+
+for (const dir of UPLOADS_DIRS) {
+  if (!fs.existsSync(dir)) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  }
 }
 
 const RequestUploadUrlBody = z.object({
@@ -41,14 +46,11 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     const uploadURL = `/api/storage/local-upload/${id}`;
     const objectPath = `/objects/local-${id}`;
 
-    try {
-      fs.writeFileSync(
-        path.join(UPLOADS_DIR, `${id}.json`),
-        JSON.stringify({ name, size, contentType }),
-        "utf-8"
-      );
-    } catch (e) {
-      console.warn("Could not save upload metadata:", e);
+    const metaJson = JSON.stringify({ name, size, contentType });
+    for (const dir of UPLOADS_DIRS) {
+      try {
+        fs.writeFileSync(path.join(dir, `${id}.json`), metaJson, "utf-8");
+      } catch {}
     }
 
     res.json({ uploadURL, objectPath, metadata: { name, size, contentType } });
@@ -61,10 +63,14 @@ router.put(
   express.raw({ type: "*/*", limit: "50mb" }),
   (req: Request, res: Response) => {
     const id = String(req.params.id);
-    const filePath = path.join(UPLOADS_DIR, id);
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+
     try {
-      const data = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
-      fs.writeFileSync(filePath, data);
+      for (const dir of UPLOADS_DIRS) {
+        try {
+          fs.writeFileSync(path.join(dir, id), data);
+        } catch {}
+      }
       res.json({ success: true });
     } catch (err: any) {
       console.error("Local file write error:", err);
@@ -94,25 +100,52 @@ router.use("/storage/objects", async (req: Request, res: Response) => {
   const reqPath = req.path;
 
   // Serve local uploads fallback
-  if (reqPath.startsWith("/local-")) {
-    const id = reqPath.replace("/local-", "");
-    const filePath = path.join(UPLOADS_DIR, id);
-    const metaPath = path.join(UPLOADS_DIR, `${id}.json`);
+  if (reqPath.startsWith("/local-") || !reqPath.includes("gcs-")) {
+    const rawId = reqPath.replace(/^\/(objects\/|local-)?/, "").replace(/^\//, "");
+    const id = rawId.replace(/^local-/, "");
 
-    if (!fs.existsSync(filePath)) {
-      res.status(404).json({ error: "not_found" });
+    let filePath: string | null = null;
+    let metaPath: string | null = null;
+
+    for (const dir of UPLOADS_DIRS) {
+      const possiblePaths = [
+        path.join(dir, id),
+        path.join(dir, `local-${id}`),
+        path.join(dir, rawId),
+      ];
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          filePath = p;
+          break;
+        }
+      }
+      if (fs.existsSync(path.join(dir, `${id}.json`))) {
+        metaPath = path.join(dir, `${id}.json`);
+      }
+      if (filePath) break;
+    }
+
+    if (!filePath) {
+      res.status(404).json({ error: "file_not_found", message: "Document file not found on server disk." });
       return;
     }
 
     let contentType = "application/octet-stream";
-    if (fs.existsSync(metaPath)) {
+    let fileName = "document";
+    if (metaPath && fs.existsSync(metaPath)) {
       try {
         const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
         if (meta.contentType) contentType = meta.contentType;
+        if (meta.name) fileName = meta.name;
       } catch {}
+    } else {
+      if (filePath.endsWith(".png")) contentType = "image/png";
+      else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) contentType = "image/jpeg";
+      else if (filePath.endsWith(".pdf")) contentType = "application/pdf";
     }
 
     res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(fileName)}"`);
     res.setHeader("Cache-Control", "private, max-age=3600");
     fs.createReadStream(filePath).pipe(res);
     return;

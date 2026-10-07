@@ -327,7 +327,7 @@ export default function AdminAvailability() {
               resetCustomTimingForm();
               setIsCustomTimingModalOpen(true);
             }}
-            className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 active:scale-95 shrink-0"
+            className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
           >
             <Plus size={14} />
             Set Custom Timing

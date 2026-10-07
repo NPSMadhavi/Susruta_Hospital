@@ -601,8 +601,8 @@ export default function AdminOnlineAppointments() {
               </span>
             </p>
           </div>
-          <button onClick={() => load()} className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40 transition-colors" title="Refresh now">
-            <RefreshCw size={16} />
+          <button onClick={() => load(true)} disabled={loading} className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/40 transition-colors cursor-pointer disabled:opacity-50" title="Refresh now">
+            <RefreshCw size={16} className={loading ? "animate-spin text-primary" : ""} />
           </button>
         </div>
 

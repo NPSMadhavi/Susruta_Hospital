@@ -1,7 +1,16 @@
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 
-dotenv.config({ path: path.resolve(import.meta.dirname, "../../../.env") });
+const apiServerEnv = path.resolve(import.meta.dirname, "../../../artifacts/api-server/.env");
+const rootEnv = path.resolve(import.meta.dirname, "../../../.env");
+
+if (fs.existsSync(apiServerEnv)) {
+  dotenv.config({ path: apiServerEnv });
+}
+if (fs.existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+}
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";

@@ -551,8 +551,8 @@ export default function AdminSubscribers() {
               <Bell size={13} /> Notifications On
             </div>
           )}
-          <button onClick={fetchSubs} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted">
-            <RefreshCw size={15} />
+          <button onClick={fetchSubs} disabled={loading} className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50" title="Refresh">
+            <RefreshCw size={15} className={loading ? "animate-spin text-primary" : ""} />
           </button>
           {subs.length > 0 && (
             <>

@@ -38,8 +38,7 @@ export default function AdminDashboard() {
 
   const pending = appointments.filter(a => a.status === 'pending').length;
   const confirmed = appointments.filter(a => a.status === 'confirmed').length;
-  const liveOnline = onlineAppts.filter(a => a.joinEnabled).length;
-  const pendingOnline = onlineAppts.filter(a => a.status === 'pending').length;
+  const completedOnline = onlineAppts.filter(a => a.status === 'completed').length;
 
   const formatTime12h = (timeStr?: string) => {
     if (!timeStr) return "";
@@ -112,30 +111,19 @@ export default function AdminDashboard() {
           <p className="text-4xl font-bold font-sans text-green-600">{isLoading ? '-' : confirmed}</p>
         </div>
 
-        {/* Video Consultations quick link */}
-        <Link href="/admin/online-appointments">
-          <div className={`p-6 rounded-2xl border-2 shadow-sm cursor-pointer transition-all hover:shadow-md ${liveOnline > 0 ? 'bg-emerald-600 border-emerald-500' : 'bg-white border-border hover:border-blue-300'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`font-semibold text-sm ${liveOnline > 0 ? 'text-white/80' : 'text-muted-foreground'}`}>Online Consultations</h3>
-              <div className={`p-2 rounded-lg ${liveOnline > 0 ? 'bg-white/20' : 'bg-blue-500/10 text-blue-600'}`}>
-                <Video size={18} className={liveOnline > 0 ? 'text-white animate-pulse' : ''} />
-              </div>
-            </div>
-            <p className={`text-4xl font-bold font-sans ${liveOnline > 0 ? 'text-white' : 'text-blue-600'}`}>{onlineLoading ? '-' : onlineAppts.length}</p>
-            <div className="flex items-center justify-between mt-3">
-              <span className={`text-xs font-semibold ${liveOnline > 0 ? 'text-emerald-100' : 'text-muted-foreground'}`}>
-                {liveOnline > 0 ? `🟢 ${liveOnline} live now` : pendingOnline > 0 ? `${pendingOnline} pending` : 'Manage sessions'}
-              </span>
-              <ArrowRight size={20} className={liveOnline > 0 ? 'text-white/10' : 'text-muted-foreground/40'} />
-            </div>
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-muted-foreground text-sm">Completed Online<br></br> Consultations</h3>
+            <div className="p-2 bg-blue-500/10 text-blue-600 rounded-lg"><Video size={18}/></div>
           </div>
-        </Link>
+          <p className="text-4xl font-bold font-sans text-blue-600">{onlineLoading ? '-' : completedOnline}</p>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="font-bold text-lg">Recent Requests</h2>
-          <Link href="/admin/appointments" className="text-sm text-primary font-medium hover:underline">View All</Link>
+          <Link href="/admin/appointments" className="px-4 py-1.5 rounded-xl border border-[#EDEFEB] text-xs font-bold font-sans text-gray-600 bg-white hover:bg-gray-50 transition-colors">View All</Link>
         </div>
         <div className="p-0">
           {isLoading ? (

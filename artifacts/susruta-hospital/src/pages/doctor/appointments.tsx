@@ -341,6 +341,13 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
     }
   }, [url, doc.name, pdf]);
 
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [doc, retryKey]);
+
   return (
     <div
       className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150"
@@ -388,13 +395,37 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
         </div>
 
         <div className="flex-1 min-h-0 w-full overflow-hidden bg-[#f8fafc] relative flex flex-col">
-          {pdf ? (
-            <CleanPdfViewer url={url} title={doc.name} className="w-full h-full flex-1 min-h-0" />
+          {loadError ? (
+            <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-gray-200 max-w-sm mx-auto my-auto">
+              <AlertCircle size={44} className="text-amber-500 mx-auto mb-3" />
+              <p className="font-bold text-gray-800 text-base mb-1">Unable to load document</p>
+              <p className="text-xs text-gray-500 mb-4">The file could not be retrieved from the server.</p>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRetryKey(k => k + 1)}
+                  className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw size={13} /> Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  className="px-4 py-2 bg-[#D95B2F] hover:bg-[#c84e24] text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Download size={13} /> Download File
+                </button>
+              </div>
+            </div>
+          ) : pdf ? (
+            <CleanPdfViewer key={retryKey} url={url} title={doc.name} className="w-full h-full flex-1 min-h-0" />
           ) : image ? (
             <div className="flex-1 min-h-0 w-full p-4 sm:p-8 pb-28 flex items-center justify-center overflow-y-auto overflow-x-auto">
               <img
+                key={retryKey}
                 src={url}
                 alt={doc.name || "Preview"}
+                onError={() => setLoadError(true)}
                 className="max-w-full h-auto bg-white shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-200/90 rounded-xl select-none"
               />
             </div>
@@ -402,7 +433,7 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
             <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-gray-200 max-w-sm mx-auto my-auto">
               <FileText size={48} className="text-[#D95B2F] mx-auto mb-3" />
               <p className="font-bold text-gray-800 text-base mb-1 truncate">{doc.name}</p>
-              <p className="text-xs text-gray-500 mb-4">This file format cannot be previewed inline.</p>
+              <p className="text-xs text-gray-500 mb-4">Preview unavailable for this file type.</p>
               <button
                 type="button"
                 onClick={handleDownload}
@@ -1066,12 +1097,8 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
           age: patientAge,
           gender: patientGender,
           consultDate: consultDate,
-          medicines: medicines.length > 0 ? medicines : [
-            { id: "1", name: "Bilwadi Gutika", morningBefore: true, morningAfter: false, afternoonBefore: false, afternoonAfter: false, nightBefore: true, nightAfter: false, duration: "21 Days" },
-            { id: "2", name: "Dadimashtaka Churna", morningBefore: false, morningAfter: true, afternoonBefore: false, afternoonAfter: true, nightBefore: false, nightAfter: true, duration: "30 Days" },
-            { id: "3", name: "Takra Dhara Kwath", morningBefore: true, morningAfter: false, afternoonBefore: false, afternoonAfter: false, nightBefore: true, nightAfter: false, duration: "14 Days" },
-          ],
-          doctorNotes: doctorNotes || "• Excess spicy, pungent chillies, mustard, and deep-fried savory snacks.\n• Heavy fermented batters (sour curd, overnight dosa/idli, bakery yeast).\n• Raw refrigerated salads, iced beverages, and post-sunset heavy dining.",
+          medicines: medicines,
+          doctorNotes: doctorNotes || "",
         });
       } else {
         onClose();
@@ -1663,8 +1690,47 @@ export default function DoctorPortal() {
   const [offline, setOffline] = useState<OfflineAppt[]>([]);
   const [registeredPatients, setRegisteredPatients] = useState<RegisteredPatient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
   const [section, setSection] = useState<Section>("online");
+
+  const [patientSearch, setPatientSearch] = useState("");
+  const [lastSeenPatientCount, setLastSeenPatientCount] = useState<number>(() => {
+    const saved = localStorage.getItem("doctor_last_seen_patient_count");
+    return saved !== null ? parseInt(saved, 10) : -1;
+  });
+
+  useEffect(() => {
+    if (section === "patients" && registeredPatients.length >= 0) {
+      setLastSeenPatientCount(registeredPatients.length);
+      localStorage.setItem("doctor_last_seen_patient_count", registeredPatients.length.toString());
+    }
+  }, [section, registeredPatients.length]);
+
+  useEffect(() => {
+    if (lastSeenPatientCount === -1 && registeredPatients.length > 0) {
+      setLastSeenPatientCount(registeredPatients.length);
+      localStorage.setItem("doctor_last_seen_patient_count", registeredPatients.length.toString());
+    }
+  }, [lastSeenPatientCount, registeredPatients.length]);
+
+  const newPatientsCount = useMemo(() => {
+    if (lastSeenPatientCount < 0) return 0;
+    return Math.max(0, registeredPatients.length - lastSeenPatientCount);
+  }, [registeredPatients.length, lastSeenPatientCount]);
+
+  const filteredPatients = useMemo(() => {
+    if (!patientSearch.trim()) return registeredPatients;
+    const q = patientSearch.toLowerCase().trim();
+    return registeredPatients.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.patientCode?.toLowerCase().includes(q) ||
+      p.phone?.includes(q) ||
+      p.email?.toLowerCase().includes(q) ||
+      `p${String(p.id).padStart(3, "0")}`.includes(q) ||
+      `a00${p.id}`.includes(q)
+    );
+  }, [registeredPatients, patientSearch]);
 
   // Selection states
   const [selectedApptId, setSelectedApptId] = useState<number | null>(null);
@@ -1702,7 +1768,9 @@ export default function DoctorPortal() {
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    setRefreshing(true);
     setErr("");
+    const startTime = Date.now();
     try {
       const [apptData, patientsData] = await Promise.all([
         doctorFetch("/all-appointments"),
@@ -1740,7 +1808,12 @@ export default function DoctorPortal() {
         }
       }
     } catch { if (!silent) setErr("Failed to load data"); }
-    finally { if (!silent) setLoading(false); }
+    finally {
+      if (!silent) setLoading(false);
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(0, 450 - elapsed);
+      setTimeout(() => setRefreshing(false), delay);
+    }
   }, [selectedApptId]);
 
   const loadDonations = useCallback(async () => {
@@ -1917,7 +1990,7 @@ export default function DoctorPortal() {
   }, [donations, donationSearch]);
 
   const totalDonationAmount = useMemo(() => {
-    return filteredDonations.reduce((sum, d) => sum + parseFloat(d.amount || "0"), 0);
+    return filteredDonations.filter(d => d.status === "verified").reduce((sum, d) => sum + parseFloat(d.amount || "0"), 0);
   }, [filteredDonations]);
 
   const verifiedDonationCount = useMemo(() => {
@@ -1941,7 +2014,7 @@ export default function DoctorPortal() {
     { key: "online" as Section,    label: "Online Slots", shortLabel: "Online",   icon: <Video size={18} />,        count: upcomingOnline.length },
     { key: "offline" as Section,   label: "Offline Slots",    shortLabel: "Visits",   icon: <Building2 size={18} />,    count: upcomingOffline.length },
     { key: "rxneeded" as Section,  label: "Rx needed",    shortLabel: "Rx",       icon: <ClipboardList size={18} />,count: rxNeeded.length, amber: true },
-    { key: "patients" as Section,  label: "Patients",     shortLabel: "Patients", icon: <UserCheck size={18} />,    count: registeredPatients.length },
+    { key: "patients" as Section,  label: "Patients",     shortLabel: "Patients", icon: <UserCheck size={18} />,    count: newPatientsCount },
     { key: "donations" as Section, label: "Donations",    shortLabel: "Donate",   icon: <Heart size={18} />,        count: filteredDonations.length },
   ];
 
@@ -1962,7 +2035,9 @@ export default function DoctorPortal() {
       setSelectedApptId(first ? first.id : null);
       setSelectedPatientId(null);
     } else if (s === "patients") {
-      const first = registeredPatients[0];
+      setLastSeenPatientCount(registeredPatients.length);
+      localStorage.setItem("doctor_last_seen_patient_count", registeredPatients.length.toString());
+      const first = filteredPatients[0] || registeredPatients[0];
       setSelectedPatientId(first ? first.id : null);
       setSelectedApptId(null);
     } else if (s === "donations") {
@@ -2271,13 +2346,44 @@ export default function DoctorPortal() {
                     {section === "online" ? `${upcomingOnline.length} upcoming`
                       : section === "offline" ? `${upcomingOffline.length} upcoming`
                       : section === "rxneeded" ? `${rxNeeded.length} awaiting`
+                      : patientSearch.trim() ? `${filteredPatients.length} of ${registeredPatients.length} registered`
                       : `${registeredPatients.length} registered`}
                   </p>
                 </div>
-                <button onClick={() => load()} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer" title="Refresh">
-                  <RefreshCw size={14} />
+                <button
+                  onClick={() => load(true)}
+                  disabled={refreshing}
+                  className="p-1.5 text-gray-400 hover:text-[#D95B2F] hover:bg-orange-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} className={refreshing ? "animate-spin text-[#D95B2F]" : ""} />
                 </button>
               </div>
+
+              {/* Patient Search Bar below header */}
+              {section === "patients" && (
+                <div className="px-3.5 py-2.5 bg-white border-b border-[#EDEFEB] shrink-0">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={patientSearch}
+                      onChange={e => setPatientSearch(e.target.value)}
+                      placeholder="Search patient by name, code, phone..."
+                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-[#F8FAFC] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#D95B2F] focus:bg-white text-gray-800 placeholder:text-gray-400 font-medium"
+                    />
+                    {patientSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPatientSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic List Render */}
               <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -2405,10 +2511,12 @@ export default function DoctorPortal() {
                     })
                   )
                 ) : section === "patients" ? (
-                  registeredPatients.length === 0 ? (
-                    <div className="text-center py-12 text-gray-400 text-xs font-medium">No patients registered</div>
+                  filteredPatients.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 text-xs font-medium">
+                      {patientSearch.trim() ? "No matching patients found" : "No patients registered"}
+                    </div>
                   ) : (
-                    registeredPatients.map(patient => {
+                    filteredPatients.map(patient => {
                       const isSelected = selectedPatientId === patient.id;
                       const pCode = patient.patientCode || (patient.id ? `P${String(patient.id).padStart(3, "0")}` : `P001`);
                       return (
@@ -2420,16 +2528,21 @@ export default function DoctorPortal() {
                             isSelected && "ring-2 ring-[#D95B2F]/40 shadow-sm"
                           )}
                         >
-                          <div className="flex items-center gap-3.5">
-                            <div className="w-10 h-10 rounded-full bg-[#E2E8F0]/80 text-[#1E293B] font-mono font-extrabold flex items-center justify-center text-xs border border-slate-200 shrink-0">
+                          <div className="space-y-1.0">
+                            {/* Row 1 - Name */}
+                            <h3 className="font-bold text-[#1C3A27] text-base">
+                              {patient.name}
+                            </h3>
+
+                            {/* Row 2 - Patient ID */}
+                            <div className="text-sm font-black text-black font-mono tracking-wide rounded-lg inline-block">
                               {pCode}
                             </div>
-                            <div>
-                              <h3 className="font-bold text-[#1C3A27] text-base">{patient.name}</h3>
-                              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                                {patient.appointments.length} visits  •  📄 {patient.documents.length} docs
-                              </p>
-                            </div>
+
+                            {/* Row 3 - Visits & Documents */}
+                            <p className="text-xs text-gray-500 font-medium">
+                              {patient.appointments.length} visits&nbsp;&nbsp; • &nbsp;&nbsp;📄 {patient.documents.length} docs
+                            </p>
                           </div>
                           <ChevronRight size={18} className="text-[#D95B2F] shrink-0" />
                         </div>
@@ -2506,10 +2619,11 @@ export default function DoctorPortal() {
                 <div className="flex items-center gap-2 ml-auto">
                   <button
                     onClick={loadDonations}
-                    className="p-2 bg-gray-50 border border-gray-200 text-gray-500 hover:text-[#D95B2F] hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                    disabled={donationsLoading}
+                    className="p-2 bg-gray-50 border border-gray-200 text-gray-500 hover:text-[#D95B2F] hover:bg-gray-100 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
                     title="Refresh"
                   >
-                    <RefreshCw size={15} />
+                    <RefreshCw size={15} className={donationsLoading ? "animate-spin text-[#D95B2F]" : ""} />
                   </button>
 
                   <div className="relative w-48 sm:w-72">
@@ -2672,7 +2786,7 @@ export default function DoctorPortal() {
               {/* Header Bar */}
               <div className="flex items-center justify-between border-b border-gray-100 pb-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full border border-gray-300 bg-gray-50 text-gray-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  <div className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">
                     {selectedPatient.patientCode || `A00${selectedPatient.id}`}
                   </div>
                   <h1 className="text-xl font-extrabold text-gray-900">{selectedPatient.name}</h1>
@@ -2680,7 +2794,7 @@ export default function DoctorPortal() {
 
                 <button
                   onClick={() => setShowAddRxModal(true)}
-                  className="bg-[#D95B2F] hover:bg-[#c84e24] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
                 >
                   <Plus size={15} />
                   <span>Add Prescription</span>
@@ -2696,12 +2810,6 @@ export default function DoctorPortal() {
                       Medical Documents ({selectedPatient.documents.length})
                     </h2>
                   </div>
-                  <button
-                    onClick={() => setShowUploadDocModal(true)}
-                    className="text-xs font-bold text-[#D95B2F] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus size={14} /> Upload Document
-                  </button>
                 </div>
 
                 {selectedPatient.documents.length === 0 ? (
@@ -2763,7 +2871,7 @@ export default function DoctorPortal() {
               {/* 2. PRESCRIPTION HISTORY */}
               {(() => {
                 const rxAppointments = selectedPatient.appointments
-                  .filter(a => a.prescription?.photoObjectPath || cleanDoctorNotes(a.prescription?.notes) || (a.documents && a.documents.length > 0));
+                  .filter(a => a.prescription?.photoObjectPath || cleanDoctorNotes(a.prescription?.notes));
 
                 return (
                   <section>
@@ -2819,26 +2927,26 @@ export default function DoctorPortal() {
 
                               {/* Attached Documents Section (Uploaded & Generated) */}
                               <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                                {/* Generated Digital Prescription */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActivePrintData({
-                                      patientName: selectedPatient.name,
-                                      patientCode: selectedPatient.patientCode || `#A00${selectedPatient.id}`,
-                                      ageGender: `${(selectedPatient as any).age || 34} Y / ${(selectedPatient as any).gender || "Female"}`,
-                                      consultDate: `${fmtDate(a.date)} • ${a.timeLabel || "11:30 AM"}`,
-                                      medicines: parsedMeds.length > 0 ? parsedMeds : [
-                                        { id: "1", name: "Bilwadi Gutika", morningBefore: true, morningAfter: false, afternoonBefore: false, afternoonAfter: false, nightBefore: true, nightAfter: false, duration: "21 Days" }
-                                      ],
-                                      doctorNotes: cleanedNotes,
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF4EF] hover:bg-[#FDE8E0] border border-[#FDE8E0] rounded-xl text-xs font-bold text-[#D95B2F] transition-colors cursor-pointer"
-                                >
-                                  <Printer size={13} />
-                                  <span>Generated Digital Prescription</span>
-                                </button>
+                                {/* Generated Digital Prescription (only if notes or parsed medicines exist) */}
+                                {(cleanedNotes || parsedMeds.length > 0) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActivePrintData({
+                                        patientName: selectedPatient.name,
+                                        patientCode: selectedPatient.patientCode || `#A00${selectedPatient.id}`,
+                                        ageGender: `${(selectedPatient as any).age || 34} Y / ${(selectedPatient as any).gender || "Female"}`,
+                                        consultDate: `${fmtDate(a.date)} • ${a.timeLabel || "11:30 AM"}`,
+                                        medicines: parsedMeds,
+                                        doctorNotes: cleanedNotes,
+                                      });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF4EF] hover:bg-[#FDE8E0] border border-[#FDE8E0] rounded-xl text-xs font-bold text-[#D95B2F] transition-colors cursor-pointer"
+                                  >
+                                    <Printer size={13} />
+                                    <span>Generated Digital Prescription</span>
+                                  </button>
+                                )}
 
                                 {/* Uploaded Prescription Document (if any) */}
                                 {photoPath && (
@@ -2858,19 +2966,6 @@ export default function DoctorPortal() {
                                     <span>Uploaded Prescription Document</span>
                                   </button>
                                 )}
-
-                                {/* Other Medical Documents (if any) */}
-                                {apptDocs.map((doc, di) => (
-                                  <button
-                                    key={di}
-                                    type="button"
-                                    onClick={() => setPreviewDoc(doc)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-medium text-gray-700 transition-colors cursor-pointer"
-                                  >
-                                    <FileText size={13} className="text-gray-400" />
-                                    <span className="truncate max-w-[180px]">{doc.name || `Document #${di + 1}`}</span>
-                                  </button>
-                                ))}
                               </div>
                             </div>
                           );
@@ -2987,21 +3082,21 @@ export default function DoctorPortal() {
               {/* Workspace Header */}
               <div className="flex items-center justify-between border-b border-gray-100 pb-5">
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-full bg-[#e2e8f0] text-[#334155] font-mono font-bold flex items-center justify-center text-xs border border-slate-300/60 shrink-0">
+                  <div className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">
                     {selectedAppt.patient.patientCode || (selectedAppt.patient.id ? `P${String(selectedAppt.patient.id).padStart(3, "0")}` : `P${String(selectedAppt.id).padStart(3, "0")}`)}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <h1 className="text-xl font-bold text-[#1e293b] truncate">{selectedAppt.patient.name}</h1>
-                      <span className={cn(
+                      {/* <span className={cn(
                         "text-[10px] font-semibold px-2.5 py-0.5 rounded-md border",
                         selectedAppt.type === "online" ? "bg-[#dbeafe] text-[#1e40af] border-blue-200" : "bg-[#d1fae5] text-[#047857] border-emerald-200"
                       )}>
                         {selectedAppt.type === "online" ? "Online" : "Offline"}
-                      </span>
-                      <span className={cn("text-[10px] font-semibold px-2.5 py-0.5 rounded-md border", STATUS_PILL[selectedAppt.status] ?? STATUS_PILL.pending)}>
+                      </span> */}
+                      {/* <span className={cn("text-[10px] font-semibold px-2.5 py-0.5 rounded-md border", STATUS_PILL[selectedAppt.status] ?? STATUS_PILL.pending)}>
                         {STATUS_LABEL[selectedAppt.status] ?? selectedAppt.status}
-                      </span>
+                      </span> */}
                     </div>
                   </div>
                 </div>
@@ -3009,7 +3104,7 @@ export default function DoctorPortal() {
                 {selectedAppt.type === "online" ? (
                   <button
                     onClick={() => setShowAddRxModal(true)}
-                    className="bg-[#D95B2F] hover:bg-[#c84e24] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                    className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
                   >
                     <Plus size={15} />
                     <span>Add Prescription</span>
@@ -3130,14 +3225,6 @@ export default function DoctorPortal() {
                       Patient Documents ({patientDocsList.length})
                     </h2>
                   </div>
-                  {selectedAppt.type === "online" && (
-                    <button
-                      onClick={() => setShowUploadDocModal(true)}
-                      className="text-xs font-bold text-[#D95B2F] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus size={14} /> Upload Document
-                    </button>
-                  )}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm space-y-2.5">

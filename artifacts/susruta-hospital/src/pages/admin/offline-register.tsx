@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { ChevronLeft, CheckCircle2, Printer, X } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Printer, X, Search, Loader2, UserPlus } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import QRCode from "qrcode";
 import { isOfflineSessionExceeded } from "@/lib/ist";
@@ -9,35 +9,60 @@ import logoImg from "@assets/logo_1773840200056.png";
 
 const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
+interface PatientResult {
+  id: number;
+  patientCode: string | null;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  age?: number | null;
+  gender?: string | null;
+  address?: string | null;
+}
+
 interface BookingResult {
   id: number;
   token: string;
+  patientId?: number;
   patientCode?: string;
   patientName: string;
   patientPhone: string;
   patientEmail?: string;
+  age?: number | null;
+  gender?: string | null;
+  address?: string | null;
   date: string;
   timeSlot: string;
   amount: number;
   paymentStatus: string;
   paymentThrough?: string;
   notes?: string;
+  uploadToken?: string;
+  uploadUrl?: string;
   createdAt: string;
 }
 
 export default function AdminOfflineRegister() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  const todayDisplay = format(new Date(), "dd MMMM yyyy");
 
-  // Form states
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchState, setSearchState] = useState<"idle" | "found" | "multiple" | "not_found" | "error">("idle");
+  const [searchResults, setSearchResults] = useState<PatientResult[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<PatientResult | null>(null);
+
+  // Form patient details
   const [patientName, setPatientName] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("");
+  const [address, setAddress] = useState("");
+
+  // Appointment details
   const [appointmentDate, setAppointmentDate] = useState(todayStr);
 
-  // Time slot sessions (strictly 15 min duration each)
-  // 10 AM - 1 PM: 3 hours = 180 mins / 15 mins = 12 slots
-  // 6 PM - 10 PM: 4 hours = 240 mins / 15 mins = 16 slots
   const SESSIONS = [
     { id: "morning", label: "10 AM - 1 PM", slotCount: 12 },
     { id: "evening", label: "6 PM - 10 PM", slotCount: 16 },
@@ -45,13 +70,12 @@ export default function AdminOfflineRegister() {
 
   const [selectedSessionId, setSelectedSessionId] = useState<"morning" | "evening">("morning");
 
-  // Dynamic slot availability based on registrations
   const [slotStatus, setSlotStatus] = useState<{
-    morning: { total: number; booked: number; remaining: number; isAvailable: boolean };
-    evening: { total: number; booked: number; remaining: number; isAvailable: boolean };
+    morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
+    evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
   }>({
-    morning: { total: 12, booked: 0, remaining: 12, isAvailable: true },
-    evening: { total: 16, booked: 0, remaining: 16, isAvailable: true },
+    morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
+    evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
   });
 
   const [amount, setAmount] = useState("200");
@@ -61,22 +85,24 @@ export default function AdminOfflineRegister() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Booking result state (Image 3)
+  // Booking result & print modal state
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
-
-  // Print modal state (Image 4)
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
 
-  const currentSession = SESSIONS.find((s) => s.id === selectedSessionId) || SESSIONS[0];
+  const currentSessionLabel =
+    selectedSessionId === "morning"
+      ? (slotStatus.morning.label || "10 AM - 1 PM")
+      : (slotStatus.evening.label || "6 PM - 10 PM");
+
   const isMorningExceeded = isOfflineSessionExceeded(appointmentDate, "morning");
   const isEveningExceeded = isOfflineSessionExceeded(appointmentDate, "evening");
   const isCurrentSessionAvailable =
     selectedSessionId === "morning"
-      ? (slotStatus.morning.isAvailable && !isMorningExceeded && slotStatus.morning.remaining > 0)
-      : (slotStatus.evening.isAvailable && !isEveningExceeded && slotStatus.evening.remaining > 0);
+      ? (slotStatus.morning.isAvailable && !isMorningExceeded && slotStatus.morning.remaining > 0 && slotStatus.morning.label !== "Closed" && slotStatus.morning.label !== "Closed on Sunday")
+      : (slotStatus.evening.isAvailable && !isEveningExceeded && slotStatus.evening.remaining > 0 && slotStatus.evening.label !== "Closed" && slotStatus.evening.label !== "Closed on Sunday");
 
-  // Fetch slot status for the chosen date
+  // Fetch slot status for chosen date
   const fetchSlotStatus = async (date: string) => {
     try {
       let res = await fetch(`${API}/appointments/offline/slots-status?date=${date}`, {
@@ -85,14 +111,25 @@ export default function AdminOfflineRegister() {
 
       if (res.ok) {
         const data = await res.json();
+        const morningData = data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true };
+        const eveningData = data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true };
+
         setSlotStatus({
-          morning: data.morning,
-          evening: data.evening,
+          morning: morningData,
+          evening: eveningData,
+        });
+
+        const mAvail = morningData.isAvailable && !morningData.isExceeded && morningData.remaining > 0 && morningData.label !== "Closed" && morningData.label !== "Closed on Sunday";
+        const eAvail = eveningData.isAvailable && !eveningData.isExceeded && eveningData.remaining > 0 && eveningData.label !== "Closed" && eveningData.label !== "Closed on Sunday";
+
+        setSelectedSessionId((prev) => {
+          if (prev === "morning" && !mAvail && eAvail) return "evening";
+          if (prev === "evening" && !eAvail && mAvail) return "morning";
+          return prev;
         });
         return;
       }
 
-      // Fallback: calculate from /api/appointments?date=
       res = await fetch(`${API}/appointments?date=${date}`, { credentials: "include" });
       if (res.ok) {
         const list = await res.json();
@@ -120,12 +157,14 @@ export default function AdminOfflineRegister() {
 
         setSlotStatus({
           morning: {
+            label: "10 AM - 1 PM",
             total: 12,
             booked: mBooked,
             remaining: Math.max(0, 12 - mBooked),
             isAvailable: mBooked < 12,
           },
           evening: {
+            label: "6 PM - 10 PM",
             total: 16,
             booked: eBooked,
             remaining: Math.max(0, 16 - eBooked),
@@ -144,35 +183,18 @@ export default function AdminOfflineRegister() {
     }
   }, [appointmentDate]);
 
-  const handleSessionChange = (id: "morning" | "evening") => {
-    setSelectedSessionId(id);
-  };
+  const slotDisplayLabel = currentSessionLabel;
 
-  // Format slot label for display
-  const slotDisplayLabel = currentSession.label;
-
-  // Generate QR Code whenever bookingResult is ready
+  // Generate QR Code for booking result — Temporary Medical Document Upload ONLY
   useEffect(() => {
     if (!bookingResult) return;
-    const patientId = bookingResult.patientCode || "—";
-    const qrData = JSON.stringify({
-      hospital: "Susruta Hospital",
-      address: "119, Ramulavari North Mada Street, Tirupati - 517 507",
-      patientId,
-      token: bookingResult.token,
-      patient: bookingResult.patientName,
-      phone: bookingResult.patientPhone,
-      ...(bookingResult.patientEmail ? { email: bookingResult.patientEmail } : {}),
-      date: bookingResult.date,
-      slot: bookingResult.timeSlot,
-      amount: `₹${bookingResult.amount}`,
-      paymentMode: (bookingResult.paymentThrough || "UPI").toUpperCase(),
-      paymentThrough: (bookingResult.paymentThrough || "UPI").toUpperCase(),
-      status: "PAID",
-    });
+    const tokenStr = bookingResult.uploadToken || "";
+    const uploadFullUrl = tokenStr
+      ? `${window.location.origin}/patient/offline-upload/${tokenStr}`
+      : `${window.location.origin}/portal`;
 
-    QRCode.toDataURL(qrData, {
-      width: 140,
+    QRCode.toDataURL(uploadFullUrl, {
+      width: 160,
       margin: 1,
       color: {
         dark: "#1E293B",
@@ -183,10 +205,89 @@ export default function AdminOfflineRegister() {
       .catch((err) => console.error("QR Code error:", err));
   }, [bookingResult]);
 
-  const handleClear = () => {
+  // Search patient handler (server-side)
+  const handleSearchPatient = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    setIsSearching(true);
+    setErrorMsg("");
+
+    try {
+      const res = await fetch(`${API}/admin/patients/search?query=${encodeURIComponent(query)}`, {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to search patients (${res.status})`);
+      }
+
+      const data: PatientResult[] = await res.json();
+      setSearchResults(data);
+
+      if (data.length === 0) {
+        setSearchState("not_found");
+        setSelectedPatient(null);
+      } else if (data.length === 1) {
+        handleSelectPatient(data[0]);
+      } else {
+        setSearchState("multiple");
+        setSelectedPatient(null);
+      }
+    } catch (err: any) {
+      console.error("Patient search error:", err);
+      setSearchState("error");
+      setSearchResults([]);
+      setSelectedPatient(null);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Select patient handler
+  const handleSelectPatient = (patient: PatientResult) => {
+    setSelectedPatient(patient);
+    setSearchState("found");
+    setPatientName(patient.name || "");
+    const cleanP = patient.phone ? patient.phone.replace(/\D/g, "").slice(-10) : "";
+    setPatientPhone(cleanP);
+    setPatientEmail(patient.email || "");
+    setAge(patient.age !== undefined && patient.age !== null ? String(patient.age) : "");
+    setGender(patient.gender || "");
+    setAddress(patient.address || "");
+    setErrorMsg("");
+  };
+
+  // Register new patient action from search panel
+  const handlePrepareNewPatient = () => {
+    setSelectedPatient(null);
+    setSearchState("idle");
+    setSearchQuery("");
+    setSearchResults([]);
     setPatientName("");
     setPatientPhone("");
     setPatientEmail("");
+    setAge("");
+    setGender("");
+    setAddress("");
+    setErrorMsg("");
+  };
+
+  // Form clear handler (resets frontend state ONLY)
+  const handleClear = () => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchState("idle");
+    setSelectedPatient(null);
+
+    setPatientName("");
+    setPatientPhone("");
+    setPatientEmail("");
+    setAge("");
+    setGender("");
+    setAddress("");
+
     setAppointmentDate(todayStr);
     setSelectedSessionId("morning");
     setAmount("200");
@@ -194,6 +295,7 @@ export default function AdminOfflineRegister() {
     setPaymentThrough("UPI");
     setNotes("");
     setErrorMsg("");
+
     fetchSlotStatus(todayStr);
   };
 
@@ -202,29 +304,36 @@ export default function AdminOfflineRegister() {
     handleClear();
   };
 
+  // Generate Token Form submit
   const handleGenerateToken = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
 
     if (!isCurrentSessionAvailable) {
-      setErrorMsg(`No slots are available for ${currentSession.label} on this date.`);
+      setErrorMsg(`No slots are available for ${currentSessionLabel} on this date.`);
       return;
     }
     if (!patientName.trim()) {
       setErrorMsg("Please enter patient name.");
       return;
     }
-    const cleanPhone = patientPhone.replace(/\D/g, "");
+    const rawDigits = patientPhone.replace(/\D/g, "");
+    const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
     if (!cleanPhone) {
       setErrorMsg("Please enter patient phone number.");
       return;
     }
-    if (cleanPhone.length !== 10) {
-      setErrorMsg("Phone number must be exactly 10 digits for India.");
+    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setErrorMsg("Please enter a valid 10-digit Indian phone number (starting with 6, 7, 8, or 9).");
       return;
     }
-    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
-      setErrorMsg("Please enter a valid 10-digit Indian phone number (starting with 6, 7, 8, or 9).");
+    const parsedAge = age.trim() === "" ? null : Number(age.trim());
+    if (parsedAge === null || isNaN(parsedAge) || parsedAge < 0 || parsedAge > 150) {
+      setErrorMsg("Please enter a valid patient age between 0 and 150.");
+      return;
+    }
+    if (!gender.trim()) {
+      setErrorMsg("Please select gender.");
       return;
     }
     const trimmedEmail = patientEmail.trim();
@@ -244,15 +353,18 @@ export default function AdminOfflineRegister() {
     try {
       const phoneWithCountry = `+91${cleanPhone}`;
       const emailPayload = trimmedEmail || undefined;
-      // Attempt to call /api/appointments/offline
-      let res = await fetch(`${API}/appointments/offline`, {
+      const res = await fetch(`${API}/appointments/offline`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
+          selectedPatientId: selectedPatient ? selectedPatient.id : undefined,
           patientName: patientName.trim(),
           patientPhone: phoneWithCountry,
           patientEmail: emailPayload,
+          age: parsedAge,
+          gender: gender.trim(),
+          address: address.trim() || undefined,
           date: appointmentDate,
           timeSlot: slotDisplayLabel,
           amount: Number(amount) || 200,
@@ -262,44 +374,31 @@ export default function AdminOfflineRegister() {
         }),
       });
 
-      // Fallback if backend server has not been restarted yet (404)
-      if (res.status === 404) {
-        res = await fetch(`${API}/appointments`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            patientName: patientName.trim(),
-            patientPhone: phoneWithCountry,
-            patientEmail: emailPayload,
-            date: appointmentDate,
-            timeSlot: slotDisplayLabel,
-            reason: "Offline Walk-in Registration",
-          }),
-        });
-      }
-
-      let data: any = {};
       const text = await res.text();
+      let data: any = {};
       try {
         data = JSON.parse(text);
       } catch {
         if (!res.ok) {
-          throw new Error(`Server responded with ${res.status}. Please ensure backend is running.`);
+          throw new Error(`Server responded with ${res.status}. Please try again.`);
         }
       }
 
-      if (!res.ok && res.status !== 409) {
+      if (!res.ok) {
         throw new Error(data?.message || `Failed to generate token (${res.status})`);
       }
 
       setBookingResult({
         id: data.id || Date.now(),
         token: data.token || tokenComputed,
-        patientCode: data.patientCode || "",
+        patientId: data.patientId || selectedPatient?.id,
+        patientCode: data.patientCode || selectedPatient?.patientCode || "",
         patientName: patientName.trim(),
         patientPhone: cleanPhone,
         patientEmail: data.patientEmail || emailPayload || "",
+        age: data.age !== undefined ? data.age : parsedAge,
+        gender: data.gender || gender,
+        address: data.address || address.trim(),
         date: appointmentDate,
         timeSlot: slotDisplayLabel,
         amount: Number(amount) || 200,
@@ -309,7 +408,6 @@ export default function AdminOfflineRegister() {
         createdAt: data.createdAt || new Date().toISOString(),
       });
 
-      // Refresh slot counts for this date immediately
       fetchSlotStatus(appointmentDate);
     } catch (err: any) {
       setErrorMsg(err.message || "Something went wrong while generating token.");
@@ -349,7 +447,6 @@ export default function AdminOfflineRegister() {
 
   return (
     <AdminLayout>
-      {/* Centered Page Wrapper */}
       <div className="w-full flex flex-col items-center justify-center py-2">
         <div className="w-full max-w-2xl">
           {/* Top Header */}
@@ -367,365 +464,586 @@ export default function AdminOfflineRegister() {
                 Enter patient details to create an offline appointment and generate a token.
               </p>
             </div>
-
           </div>
 
-          {/* Main Content Area (Form or Token Confirmation) */}
           {!bookingResult ? (
-            /* =================== FORM STATE (Image 2 - In the middle) =================== */
+            /* =================== FORM STATE =================== */
             <div className="bg-white rounded-2xl border border-[#EDEFEB] p-6 sm:p-8 w-full shadow-sm">
-              {/* <h2 className="text-xs font-bold text-[#1E293B] tracking-wider mb-6">
-                Patient Details
-              </h2> */}
+              {/* FIND EXISTING PATIENT SECTION */}
+              <div className="bg-[#F8FAFC] border border-[#CBD5E1]/70 rounded-2xl p-5 mb-6">
+                <h2 className="text-md font-extrabold text-[#1E293B] tracking-wider mb-1">
+                  Find Existing Patient
+                </h2>
+                <p className="text-xs text-[#64748B] mb-3">
+                  Search Patient ID, Full Name or Phone Number
+                </p>
 
-              {errorMsg && (
-                <div className="mb-6 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-medium text-red-600">
-                  {errorMsg}
-                </div>
-              )}
-
-              <form onSubmit={handleGenerateToken} className="space-y-6">
-                {/* Row 1: Patient Name & Phone Number */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Patient Name <span className="text-red-500">*</span>
-                    </label>
+                <form onSubmit={handleSearchPatient} className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={16} />
                     <input
                       type="text"
-                      required
-                      placeholder="Enter patient full name"
-                      value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
+                      placeholder="Search Patient ID (e.g. P0234), Full Name, or Phone Number"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] bg-white transition-all"
                     />
                   </div>
+                  <button
+                    type="submit"
+                    disabled={isSearching || !searchQuery.trim()}
+                    className="px-6 py-2.5 rounded-xl bg-[#1E293B] hover:bg-[#0F172A] text-white text-xs font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 shrink-0"
+                  >
+                    {isSearching ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      "Search"
+                    )}
+                  </button>
+                </form>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-[#475569] tracking-wider">
-                        Phone Number <span className="text-red-500">*</span>
-                      </label>
-                      {patientPhone.length > 0 && (
-                        <span
-                          className={`text-[11px] font-semibold ${
-                            patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
-                              ? "text-emerald-600"
-                              : "text-[#94A3B8]"
-                          }`}
-                        >
-                          {patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
-                            ? "✓ Valid 10-digit number"
-                            : `${patientPhone.length}/10 digits`}
-                        </span>
-                      )}
+                {/* Search Results & Statuses */}
+                {searchState === "found" && selectedPatient && (
+                  <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      <span>Existing Patient Found ✓ ({selectedPatient.patientCode || `ID #${selectedPatient.id}`}) — {selectedPatient.name}</span>
                     </div>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#64748B] select-none">
-                        +91
-                      </span>
+                    <button
+                      type="button"
+                      onClick={handlePrepareNewPatient}
+                      className="text-emerald-700 hover:text-emerald-900 underline text-[11px] font-semibold cursor-pointer"
+                    >
+                      Change Patient / Register New
+                    </button>
+                  </div>
+                )}
+
+                {searchState === "multiple" && searchResults.length > 1 && (
+                  <div className="mt-4 space-y-2.5">
+                    <p className="text-xs font-bold text-[#D95B2F]">
+                      Multiple patients found. Please select the correct patient:
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                      {searchResults.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectPatient(p)}
+                          className="p-3 bg-white rounded-xl border border-[#CBD5E1] hover:border-[#D95B2F] flex items-center justify-between text-xs transition-all cursor-pointer shadow-2xs"
+                        >
+                          <div>
+                            <div className="font-bold text-[#1E293B] flex items-center gap-2">
+                              <span>{p.name}</span>
+                              <span className="font-mono text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                                {p.patientCode || `ID #${p.id}`}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[#64748B] mt-0.5 flex flex-wrap items-center gap-3">
+                              <span>Phone: {p.phone || "—"}</span>
+                              <span>Age: {p.age !== null && p.age !== undefined ? `${p.age} yrs` : "—"}</span>
+                              <span>Gender: {p.gender || "—"}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectPatient(p);
+                            }}
+                            className="px-3.5 py-1.5 rounded-lg bg-[#D95B2F] hover:bg-[#c04e26] text-white font-bold text-[11px] cursor-pointer"
+                          >
+                            Select
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {searchState === "not_found" && (
+                  <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="font-bold">Patient not found.</span> Please verify the Patient ID or register a new patient.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePrepareNewPatient}
+                      className="px-3.5 py-1.5 rounded-lg bg-[#D95B2F] hover:bg-[#c04e26] text-white font-bold text-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <UserPlus size={14} />
+                      Register New Patient
+                    </button>
+                  </div>
+                )}
+
+                {searchState === "error" && (
+                  <div className="mt-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+                    Unable to search patients. Please try again.
+                  </div>
+                )}
+              </div>
+
+              {/* PATIENT INFORMATION SECTION */}
+              <div className="border-t border-[#EDEFEB] pt-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-md font-bold text-[#1E293B] tracking-wider">
+                    Patient Information
+                  </h2>
+                  {selectedPatient ? (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
+                      Existing Patient ({selectedPatient.patientCode || `ID #${selectedPatient.id}`})
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-md">
+                      New Patient
+                    </span>
+                  )}
+                </div>
+
+                {errorMsg && (
+                  <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-medium text-red-600">
+                    {errorMsg}
+                  </div>
+                )}
+
+                <form onSubmit={handleGenerateToken} className="space-y-5">
+                  {/* Row 1: Patient ID & Patient Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Patient ID
+                      </label>
                       <input
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={10}
-                        pattern="[6-9][0-9]{9}"
+                        type="text"
+                        readOnly
+                        disabled
+                        value={selectedPatient?.patientCode || (selectedPatient ? `ID #${selectedPatient.id}` : "Auto-generated on registration")}
+                        className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-bold font-mono text-[#475569] bg-slate-100 cursor-not-allowed select-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Patient Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
                         required
-                        placeholder="Enter 10-digit phone number"
-                        value={patientPhone}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                          setPatientPhone(val);
-                          if (errorMsg) setErrorMsg("");
-                        }}
-                        className={`w-full pl-12 pr-4 py-2.5 rounded-xl border text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 transition-all ${
-                          patientPhone.length > 0 && !/^[6-9]/.test(patientPhone)
-                            ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
-                            : patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
-                            ? "border-emerald-400 focus:ring-emerald-500/20 focus:border-emerald-500"
-                            : "border-[#CBD5E1] focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                        readOnly={Boolean(selectedPatient)}
+                        disabled={Boolean(selectedPatient)}
+                        placeholder="Enter full name"
+                        value={patientName}
+                        onChange={(e) => setPatientName(e.target.value)}
+                        className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all ${
+                          selectedPatient ? "bg-slate-100 font-semibold cursor-not-allowed text-[#475569]" : ""
                         }`}
                       />
                     </div>
-                    {patientPhone.length > 0 && !/^[6-9]/.test(patientPhone) && (
-                      <p className="text-[11px] text-red-500 font-medium mt-1">
-                        Indian mobile numbers must start with 6, 7, 8, or 9
-                      </p>
-                    )}
                   </div>
-                </div>
 
-                {/* Row 2: Email (Optional) & Appointment Date */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  {/* Row 2: Phone Number & Email */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-[#475569] tracking-wider">
+                          Phone Number <span className="text-red-500">*</span>
+                        </label>
+                        {patientPhone.length > 0 && (
+                          <span
+                            className={`text-[11px] font-semibold ${
+                              patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
+                                ? "text-emerald-600"
+                                : "text-[#94A3B8]"
+                            }`}
+                          >
+                            {patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
+                              ? "✓ Valid 10-digit number"
+                              : `${patientPhone.length}/10 digits`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#64748B] select-none">
+                          +91
+                        </span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          pattern="[6-9][0-9]{9}"
+                          required
+                          readOnly={Boolean(selectedPatient)}
+                          disabled={Boolean(selectedPatient)}
+                          placeholder="Enter 10-digit phone number"
+                          value={patientPhone}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                            setPatientPhone(val);
+                            if (errorMsg) setErrorMsg("");
+                          }}
+                          className={`w-full pl-12 pr-4 py-2.5 rounded-xl border text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 transition-all ${
+                            selectedPatient
+                              ? "bg-slate-100 font-semibold cursor-not-allowed border-[#CBD5E1] text-[#475569]"
+                              : patientPhone.length > 0 && !/^[6-9]/.test(patientPhone)
+                              ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
+                              : patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
+                              ? "border-emerald-400 focus:ring-emerald-500/20 focus:border-emerald-500"
+                              : "border-[#CBD5E1] focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                          }`}
+                        />
+                      </div>
+                      {patientPhone.length > 0 && !/^[6-9]/.test(patientPhone) && !selectedPatient && (
+                        <p className="text-[11px] text-red-500 font-medium mt-1">
+                          Indian mobile numbers must start with 6, 7, 8, or 9
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        readOnly={Boolean(selectedPatient)}
+                        disabled={Boolean(selectedPatient)}
+                        placeholder="Enter email address"
+                        value={patientEmail}
+                        onChange={(e) => {
+                          setPatientEmail(e.target.value);
+                          if (errorMsg) setErrorMsg("");
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all ${
+                          selectedPatient ? "bg-slate-100 font-semibold cursor-not-allowed text-[#475569]" : ""
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Age & Gender */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Age <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={150}
+                        required
+                        readOnly={Boolean(selectedPatient)}
+                        disabled={Boolean(selectedPatient)}
+                        placeholder="Enter age"
+                        value={age}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 3);
+                          setAge(val);
+                        }}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-semibold text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+                          selectedPatient ? "bg-slate-100 cursor-not-allowed text-[#475569]" : ""
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Gender <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        disabled={Boolean(selectedPatient)}
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-semibold text-[#1E293B] bg-white focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all ${
+                          selectedPatient ? "bg-slate-100 cursor-not-allowed text-[#475569]" : "cursor-pointer"
+                        }`}
+                      >
+                        <option value="" disabled>Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 4: Address */}
                   <div>
                     <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Email <span className="text-xs font-normal text-[#94A3B8]">(Optional)</span>
+                      Address <span className="text-xs font-normal text-[#94A3B8]">(Optional)</span>
                     </label>
-                    <input
-                      type="email"
-                      placeholder="Enter patient email address"
-                      value={patientEmail}
-                      onChange={(e) => {
-                        setPatientEmail(e.target.value);
-                        if (errorMsg) setErrorMsg("");
-                      }}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
+                    <textarea
+                      rows={2}
+                      readOnly={Boolean(selectedPatient)}
+                      disabled={Boolean(selectedPatient)}
+                      placeholder="Enter address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all ${
+                        selectedPatient ? "bg-slate-100 cursor-not-allowed text-[#475569]" : ""
+                      }`}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Appointment Date <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
+                  {/* APPOINTMENT DETAILS SECTION */}
+                  <div className="border-t border-[#EDEFEB] pt-6 space-y-5">
+                    <h2 className="text-md font-bold text-[#1E293B] tracking-wider mb-4">
+                      Appointment Details
+                    </h2>
+
+                    {/* Appointment Date */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Appointment Date <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="date"
                         required
                         min={todayStr}
                         value={appointmentDate}
                         onChange={(e) => setAppointmentDate(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
+                        className="w-full sm:w-1/2 px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
                       />
                     </div>
-                  </div>
-                </div>
 
-                {/* Row 3: Time Slot Sessions & Number of Slots (15-min divisions) */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider">
-                      Time Slots <span className="text-red-500">*</span>
-                    </label>
-                    <span className="text-[11px] text-[#64748B] font-medium">
-                      15 mins duration / slot
-                    </span>
-                  </div>
+                    {/* Time Slots */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-[#475569] tracking-wider">
+                          Time Slots <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[11px] text-[#64748B] font-medium">
+                          15 mins duration / slot
+                        </span>
+                      </div>
 
-                  {/* Range selector showing number of slots */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {SESSIONS.map((s) => {
-                      const isSelected = selectedSessionId === s.id;
-                      const status = s.id === "morning" ? slotStatus.morning : slotStatus.evening;
-                      const isExceeded = isOfflineSessionExceeded(appointmentDate, s.id as "morning" | "evening");
-                      const remaining = isExceeded ? 0 : status.remaining;
-                      const isAvailable = !isExceeded && (status.isAvailable ?? true) && remaining > 0;
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {SESSIONS.map((s) => {
+                          const isSelected = selectedSessionId === s.id;
+                          const status = s.id === "morning" ? slotStatus.morning : slotStatus.evening;
+                          const dynamicLabel = status.label || s.label;
+                          const isClosed = dynamicLabel === "Closed" || dynamicLabel === "Closed on Sunday";
+                          const isExceeded = isOfflineSessionExceeded(appointmentDate, s.id as "morning" | "evening");
+                          const remaining = isClosed || isExceeded ? 0 : status.remaining;
+                          const isAvailable = !isClosed && !isExceeded && (status.isAvailable ?? true) && remaining > 0;
 
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          disabled={!isAvailable}
-                          onClick={() => {
-                            if (isAvailable) handleSessionChange(s.id as "morning" | "evening");
-                          }}
-                          className={`px-4 py-3 rounded-xl text-xs font-bold tracking-wide transition-all text-left flex items-center justify-between ${
-                            !isAvailable
-                              ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
-                              : isSelected
-                              ? "bg-[#D95B2F] text-white shadow-sm border border-[#D95B2F] cursor-pointer"
-                              : "bg-slate-50 text-[#475569] border border-[#CBD5E1] hover:border-[#94A3B8] hover:bg-slate-100 cursor-pointer"
-                          }`}
-                        >
-                          <span>{s.label}</span>
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold ${
-                              !isAvailable
-                                ? "bg-red-100 text-red-600"
-                                : isSelected
-                                ? "bg-white/20 text-white"
-                                : "bg-[#CBD5E1]/40 text-[#475569]"
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              disabled={!isAvailable}
+                              onClick={() => {
+                                if (isAvailable) setSelectedSessionId(s.id as "morning" | "evening");
+                              }}
+                              className={`px-4 py-3 rounded-xl text-xs font-bold tracking-wide transition-all text-left flex items-center justify-between ${
+                                !isAvailable
+                                  ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
+                                  : isSelected
+                                  ? "bg-[#D95B2F] text-white shadow-xs border border-[#D95B2F] cursor-pointer"
+                                  : "bg-slate-50 text-[#475569] border border-[#CBD5E1] hover:border-[#94A3B8] hover:bg-slate-100 cursor-pointer"
+                              }`}
+                            >
+                              <span>{dynamicLabel}</span>
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold ${
+                                  !isAvailable
+                                    ? "bg-red-100 text-red-600"
+                                    : isSelected
+                                    ? "bg-white/20 text-white"
+                                    : "bg-[#CBD5E1]/40 text-[#475569]"
+                                }`}
+                              >
+                                {isClosed
+                                  ? "Closed"
+                                  : isAvailable
+                                  ? `${remaining} Slots Available`
+                                  : "No slots available"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {!isCurrentSessionAvailable && (
+                        <div className="mt-2.5 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                          <span>
+                            No slots are available for {currentSessionLabel} on this date.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Consultation Amount, Payment Status & Payment Through */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                          Consultation Amount <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B] font-semibold text-sm">
+                            ₹
+                          </span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            required
+                            placeholder="Enter amount"
+                            value={amount}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "");
+                              setAmount(val);
+                            }}
+                            className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-semibold text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                          Payment through <span className="text-red-500">*</span>
+                        </label>
+
+                        <div className="h-[42px] rounded-xl border border-[#CBD5E1] flex items-center bg-white overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentThrough("UPI")}
+                            className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
+                              paymentThrough === "UPI"
+                                ? "bg-[#D95B2F] text-white font-extrabold"
+                                : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
                             }`}
                           >
-                            {isAvailable ? `${remaining} Slots Available` : "No slots available"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                            UPI
+                          </button>
 
-                  {!isCurrentSessionAvailable && (
-                    <div className="mt-2.5 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
-                      <span>
-                        No slots are available for {currentSession.label} on this date (
-                        {isOfflineSessionExceeded(appointmentDate, selectedSessionId as "morning" | "evening")
-                          ? "session timing has passed"
-                          : "all slots have been booked"}
-                        ).
-                      </span>
+                          <div className="w-[1px] h-6 bg-[#CBD5E1]" />
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentThrough("Cash")}
+                            className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
+                              paymentThrough === "Cash"
+                                ? "bg-[#D95B2F] text-white font-extrabold"
+                                : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
+                            }`}
+                          >
+                            Cash
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                          Payment Status <span className="text-red-500">*</span>
+                        </label>
+
+                        <div className="h-[42px] rounded-xl border border-[#CBD5E1] flex items-center bg-white overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentStatus("unpaid")}
+                            className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
+                              paymentStatus === "unpaid"
+                                ? "bg-slate-300 text-[#334155] font-extrabold"
+                                : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
+                            }`}
+                          >
+                            Unpaid
+                          </button>
+
+                          <div className="w-[1px] h-6 bg-[#CBD5E1]" />
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentStatus("paid")}
+                            className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
+                              paymentStatus === "paid"
+                                ? "bg-green-900 text-white font-extrabold"
+                                : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
+                            }`}
+                          >
+                            Paid
+                          </button>
+                        </div>
+                      </div>
+
                     </div>
-                  )}
-                </div>
 
-                {/* Row 4: Consultation Amount, Payment Status & Payment through */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Consultation Amount <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B] font-semibold text-sm">
-                        ₹
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        required
-                        placeholder="Enter amount"
-                        value={amount}
-                        onWheel={(e) => e.currentTarget.blur()}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "");
-                          setAmount(val);
-                        }}
-                        className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-semibold text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    {/* Notes */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Notes <span className="text-xs font-normal text-[#94A3B8]">(Optional)</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="Add any additional information..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Payment Status <span className="text-red-500">*</span>
-                    </label>
+                  {/* Buttons */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#EDEFEB]">
+                    <div className="text-[11px] order-2 sm:order-1">
+                      {!isCurrentSessionAvailable ? (
+                        <span className="text-red-500 font-semibold">
+                          * All slots booked for this session
+                        </span>
+                      ) : paymentStatus !== "paid" ? (
+                        <span className="text-[#94A3B8] italic">
+                          * Select PAID to enable token generation
+                        </span>
+                      ) : patientPhone.length > 0 && (patientPhone.replace(/\D/g, "").length !== 10 || !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, ""))) ? (
+                        <span className="text-red-500 font-semibold">
+                          * Enter valid 10-digit Indian mobile number
+                        </span>
+                      ) : null}
+                    </div>
 
-                    {/* Segmented button with vertical divider line between PAID and UNPAID */}
-                    <div className="h-[42px] rounded-xl border border-[#CBD5E1] flex items-center bg-white overflow-hidden">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto justify-end order-1 sm:order-2">
                       <button
                         type="button"
-                        onClick={() => setPaymentStatus("unpaid")}
-                        className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
-                          paymentStatus === "unpaid"
-                            ? "bg-slate-300 text-[#334155] font-extrabold"
-                            : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
-                        }`}
+                        onClick={handleClear}
+                        className="w-full sm:w-auto px-6 py-3 rounded-xl border border-[#CBD5E1] hover:bg-slate-50 text-[#475569] text-xs font-bold tracking-wide transition-all cursor-pointer"
                       >
-                        Unpaid
+                        Clear
                       </button>
-
-                      {/* Vertical divider line */}
-                      <div className="w-[1px] h-6 bg-[#CBD5E1]" />
-
                       <button
-                        type="button"
-                        onClick={() => setPaymentStatus("paid")}
-                        className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
-                          paymentStatus === "paid"
-                            ? "bg-green-900 text-white font-extrabold"
-                            : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
-                        }`}
+                        type="submit"
+                        disabled={
+                          !isCurrentSessionAvailable ||
+                          paymentStatus !== "paid" ||
+                          !patientName.trim() ||
+                          patientPhone.replace(/\D/g, "").length !== 10 ||
+                          !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, "")) ||
+                          !age.trim() ||
+                          !gender.trim() ||
+                          isSubmitting
+                        }
+                        className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-xs transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-[#D95B2F] cursor-pointer"
                       >
-                        Paid
+                        {isSubmitting ? "Generating..." : "Generate Token"}
                       </button>
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Payment through <span className="text-red-500">*</span>
-                    </label>
-
-                    {/* Segmented button with vertical divider line between UPI and CASH */}
-                    <div className="h-[42px] rounded-xl border border-[#CBD5E1] flex items-center bg-white overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentThrough("UPI")}
-                        className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
-                          paymentThrough === "UPI"
-                            ? "bg-[#D95B2F] text-white font-extrabold"
-                            : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
-                        }`}
-                      >
-                        UPI
-                      </button>
-
-                      {/* Vertical divider line */}
-                      <div className="w-[1px] h-6 bg-[#CBD5E1]" />
-
-                      <button
-                        type="button"
-                        onClick={() => setPaymentThrough("Cash")}
-                        className={`flex-1 h-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ${
-                          paymentThrough === "Cash"
-                            ? "bg-[#D95B2F] text-white font-extrabold"
-                            : "text-[#94A3B8] hover:text-[#475569] hover:bg-slate-50"
-                        }`}
-                      >
-                        Cash
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Row 5: Notes */}
-                <div>
-                  <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Add any additional information..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all"
-                  />
-                </div>
-
-                {/* Row 6: Submit & Clear Buttons */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                  <div className="text-[11px] order-2 sm:order-1">
-                    {!isCurrentSessionAvailable ? (
-                      <span className="text-red-500 font-semibold">
-                        * All slots booked for this session
-                      </span>
-                    ) : paymentStatus !== "paid" ? (
-                      <span className="text-[#94A3B8] italic">
-                        * Select PAID to enable token generation
-                      </span>
-                    ) : patientPhone.length > 0 && (patientPhone.replace(/\D/g, "").length !== 10 || !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, ""))) ? (
-                      <span className="text-red-500 font-semibold">
-                        * Enter valid 10-digit Indian mobile number
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto justify-end order-1 sm:order-2">
-                    <button
-                      type="button"
-                      onClick={handleClear}
-                      className="w-full sm:w-auto px-6 py-3 rounded-xl border border-[#CBD5E1] hover:bg-slate-50 text-[#475569] text-xs font-bold tracking-wide transition-all"
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={
-                        !isCurrentSessionAvailable ||
-                        paymentStatus !== "paid" ||
-                        !patientName.trim() ||
-                        patientPhone.replace(/\D/g, "").length !== 10 ||
-                        !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, "")) ||
-                        isSubmitting
-                      }
-                      className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-sm transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-[#D95B2F]"
-                    >
-                      {isSubmitting ? "Generating..." : "Generate Token"}
-                    </button>
-
-                  
-                  </div>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
           ) : (
-            /* ================= TOKEN CONFIRMATION (Image 3 - In the middle) ================= */
+            /* ================= TOKEN CONFIRMATION ================= */
             <div className="bg-white rounded-2xl border border-[#EDEFEB] p-6 sm:p-8 w-full shadow-sm animate-in fade-in zoom-in-95 duration-200">
-              {/* Green banner */}
               <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs tracking-wider mb-6">
                 <CheckCircle2 size={18} className="text-emerald-600" />
                 Offline Booking Created
               </div>
 
-              {/* Bordered Token Box */}
               <div className="border border-[#EDEFEB] rounded-2xl p-6 sm:p-8 bg-[#F8FAFC]/50 text-center mb-8">
                 <p className="text-[13px] font-bold tracking-widest text-[#94A3B8] mb-1">
                   Token
@@ -734,14 +1052,40 @@ export default function AdminOfflineRegister() {
                   {bookingResult.token}
                 </h2>
 
-                {/* Key Information Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
                   <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5">
                     <p className="text-[10px] font-bold text-[#94A3B8] tracking-wider mb-0.5">
-                      Patient
+                      Patient ID
+                    </p>
+                    <p className="text-sm font-bold font-mono text-[#1E293B]">
+                      {bookingResult.patientCode || "—"}
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5">
+                    <p className="text-[10px] font-bold text-[#94A3B8] tracking-wider mb-0.5">
+                      Patient Name
                     </p>
                     <p className="text-sm font-bold text-[#1E293B] truncate">
                       {bookingResult.patientName}
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5">
+                    <p className="text-[10px] font-bold text-[#94A3B8] tracking-wider mb-0.5">
+                      Phone Number
+                    </p>
+                    <p className="text-sm font-bold font-mono text-[#1E293B]">
+                      {bookingResult.patientPhone}
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5">
+                    <p className="text-[10px] font-bold text-[#94A3B8] tracking-wider mb-0.5">
+                      Age / Gender
+                    </p>
+                    <p className="text-sm font-bold text-[#1E293B]">
+                      {bookingResult.age !== undefined && bookingResult.age !== null ? `${bookingResult.age} yrs / ${bookingResult.gender || "—"}` : "—"}
                     </p>
                   </div>
 
@@ -790,25 +1134,24 @@ export default function AdminOfflineRegister() {
                     </span>
                   </div>
 
-                  {bookingResult.patientEmail && (
-                    <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5">
+                  {bookingResult.address && (
+                    <div className="bg-white border border-[#EDEFEB] rounded-xl p-3.5 sm:col-span-2 md:col-span-3">
                       <p className="text-[10px] font-bold text-[#94A3B8] tracking-wider mb-0.5">
-                        Email
+                        Address
                       </p>
-                      <p className="text-sm font-bold text-[#1E293B] truncate">
-                        {bookingResult.patientEmail}
+                      <p className="text-xs font-semibold text-[#1E293B]">
+                        {bookingResult.address}
                       </p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setIsPrintModalOpen(true)}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-sm transition-all active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-xs transition-all cursor-pointer"
                 >
                   <Printer size={16} />
                   Print Receipt
@@ -825,14 +1168,13 @@ export default function AdminOfflineRegister() {
             </div>
           )}
 
-          {/* ================= PRINT RECEIPT MODAL (Image 4) ================= */}
+          {/* PRINT RECEIPT MODAL */}
           {isPrintModalOpen && bookingResult && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4">
               <div className="bg-white rounded-2xl border border-[#EDEFEB] shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                {/* Modal Header (Fixed at top) */}
                 <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#EDEFEB] shrink-0 bg-white">
-                  <h3 className="font-bold text-sm text-[#1E293B] tracking-wide uppercase">
-                    PRINT RECEIPT
+                  <h3 className="font-bold text-sm text-[#1E293B] tracking-wide">
+                    Print Receipt
                   </h3>
                   <button
                     type="button"
@@ -843,10 +1185,8 @@ export default function AdminOfflineRegister() {
                   </button>
                 </div>
 
-                {/* Receipt Body with Scrolling */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-5">
                   <div id="printable-receipt" className="border border-[#EDEFEB] rounded-2xl p-5 sm:p-6 bg-white shadow-xs text-center">
-                    {/* Logo only (not text) */}
                     <div className="flex justify-center mb-2.5">
                       <img
                         src={logoImg}
@@ -858,23 +1198,20 @@ export default function AdminOfflineRegister() {
                       119, Ramulavari North Mada Street, Tirupati – 517 507
                     </p>
 
-                    {/* Dashed divider */}
                     <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
-                    <p className="text-[11px] font-bold text-[#475569] uppercase tracking-wider text-center">
+                    <p className="text-[11px] font-bold text-[#475569] tracking-wider text-center">
                       OFFLINE APPOINTMENT RECEIPT
                     </p>
                     <p className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-widest mt-1 text-center">
-                      TOKEN NUMBER
+                      Token Number
                     </p>
                     <h1 className="text-4xl font-extrabold text-[#D95B2F] tracking-tight mt-1 mb-1 text-center">
                       {bookingResult.token}
                     </h1>
 
-                    {/* Dashed divider */}
                     <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
-                    {/* Key-Value Details */}
                     <div className="receipt-info-table space-y-2.5 my-4 text-xs">
                       <div className="receipt-row flex items-center justify-between">
                         <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
@@ -903,6 +1240,7 @@ export default function AdminOfflineRegister() {
                         </span>
                       </div>
 
+                      
                       {bookingResult.patientEmail && (
                         <div className="receipt-row flex items-center justify-between">
                           <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
@@ -960,10 +1298,8 @@ export default function AdminOfflineRegister() {
                       </div>
                     </div>
 
-                    {/* Dashed divider */}
                     <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
-                    {/* QR Code */}
                     <div className="py-1 text-center">
                       {qrCodeUrl ? (
                         <img
@@ -980,12 +1316,14 @@ export default function AdminOfflineRegister() {
                       <p className="font-bold text-xs text-[#1E293B] tracking-wider uppercase mt-2 text-center">
                         TOKEN: {bookingResult.token}
                       </p>
-                      <p className="text-[11px] text-[#64748B] mt-1 max-w-[240px] mx-auto leading-tight text-center">
-                        Please keep this receipt and wait for your token to be called.
+                      <p className="text-[11px] font-semibold text-[#D95B2F] mt-1.5 max-w-[260px] mx-auto leading-tight text-center">
+                        Scan this QR code to upload medical documents for your offline consultation.
+                      </p>
+                      <p className="text-[10px] text-[#64748B] mt-0.5 text-center">
+                        QR access expires after 24 hours.
                       </p>
                     </div>
 
-                    {/* Dashed divider */}
                     <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
                     <p className="text-xs text-[#94A3B8] italic text-center">
@@ -994,12 +1332,11 @@ export default function AdminOfflineRegister() {
                   </div>
                 </div>
 
-                {/* Modal Actions (Fixed at bottom) */}
                 <div className="flex items-center justify-end gap-3 px-6 py-3.5 border-t border-[#EDEFEB] bg-slate-50/70 shrink-0">
                   <button
                     type="button"
                     onClick={handlePrint}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-sm transition-all cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-xs transition-all cursor-pointer"
                   >
                     <Printer size={15} />
                     Print Receipt

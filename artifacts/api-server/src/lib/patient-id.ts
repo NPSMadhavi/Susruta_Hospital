@@ -1,5 +1,5 @@
 import { db, siteSettingsTable, patientsTable, type Patient } from "@workspace/db";
-import { eq, sql, or } from "drizzle-orm";
+import { eq, sql, or, desc } from "drizzle-orm";
 
 export function getNextPrefix(prefix: string): string | null {
   const chars = (prefix || "A").toUpperCase().trim().split("");
@@ -175,36 +175,84 @@ export async function findExistingPatientByPhoneOrEmail(
 }
 
 /**
+ * Server-side patient search by Patient ID (patientCode), Phone Number, or Full Name.
+ */
+export async function searchPatients(query: string): Promise<Patient[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const cleanDigits = trimmed.replace(/\D/g, "");
+  const conditions = [];
+
+  // Match Patient Code (e.g. P0234, A001 - case insensitive)
+  conditions.push(sql`lower(${patientsTable.patientCode}) = ${trimmed.toLowerCase()}`);
+
+  // Match Phone number if numbers are entered (at least 4 digits)
+  if (cleanDigits.length >= 4) {
+    conditions.push(
+      sql`regexp_replace(${patientsTable.phone}, '\\D', '', 'g') LIKE '%' || ${cleanDigits} || '%'`
+    );
+  }
+
+  // Match Full Name (case insensitive, partial match)
+  conditions.push(sql`lower(${patientsTable.name}) LIKE '%' || ${trimmed.toLowerCase()} || '%'`);
+
+  const results = await db
+    .select()
+    .from(patientsTable)
+    .where(or(...conditions))
+    .orderBy(desc(patientsTable.createdAt))
+    .limit(25);
+
+  return results;
+}
+
+/**
  * Finds an existing patient or registers a new patient.
- * If the patient already exists: returns existing patient without touching the counter.
- * If brand-new: allocates the next Patient ID and updates the counter in the same transaction.
+ * If the patient already exists: updates any changed details and returns existing patient without touching counter.
+ * If brand-new: allocates next Patient ID and updates counter in the same transaction.
  */
 export async function findOrRegisterPatient({
   name,
   phone,
   email,
+  age,
+  gender,
+  address,
 }: {
   name: string;
   phone: string;
   email?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  address?: string | null;
 }): Promise<{ patient: Patient; isNew: boolean }> {
   const existing = await findExistingPatientByPhoneOrEmail(phone, email);
   if (existing) {
-    if (phone && phone.startsWith("+91") && (!existing.phone || !existing.phone.startsWith("+"))) {
-      await db.update(patientsTable).set({ phone }).where(eq(patientsTable.id, existing.id));
-      existing.phone = phone;
+    const updates: Record<string, any> = {};
+    if (name && name.trim() !== existing.name) updates.name = name.trim();
+    if (phone && phone.startsWith("+91") && (!existing.phone || !existing.phone.startsWith("+"))) updates.phone = phone;
+    if (email && email.trim() && !existing.email) updates.email = email.trim().toLowerCase();
+    if (age !== undefined && age !== existing.age) updates.age = age;
+    if (gender !== undefined && gender !== existing.gender) updates.gender = gender ? gender.trim() : null;
+    if (address !== undefined && address !== null && address.trim() !== "" && address.trim() !== existing.address) {
+      updates.address = address.trim();
     }
-    if (email && email.trim() && !existing.email) {
-      const cleanEmail = email.trim().toLowerCase();
-      await db.update(patientsTable).set({ email: cleanEmail }).where(eq(patientsTable.id, existing.id));
-      existing.email = cleanEmail;
+
+    if (Object.keys(updates).length > 0) {
+      await db.update(patientsTable).set(updates).where(eq(patientsTable.id, existing.id));
+      Object.assign(existing, updates);
     }
+
     if (!existing.patientCode) {
       // Legacy record missing patient code: assign one atomically
       const allocated = await registerNewPatientWithNextId({
         name: existing.name,
         phone: existing.phone,
         email: existing.email,
+        age: existing.age,
+        gender: existing.gender,
+        address: existing.address,
         emailVerified: existing.emailVerified,
       });
       return { patient: allocated, isNew: false };
@@ -217,6 +265,9 @@ export async function findOrRegisterPatient({
     name,
     phone,
     email: email ?? null,
+    age: age ?? null,
+    gender: gender ?? null,
+    address: address ?? null,
     emailVerified: false,
   });
 

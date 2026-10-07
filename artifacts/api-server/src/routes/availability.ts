@@ -66,7 +66,7 @@ export function generateTimeSlots(startStr: string, endStr: string, intervalMins
   if (endMins <= startMins) return [];
   const slots: string[] = [];
   const step = intervalMins > 0 ? intervalMins : 30;
-  for (let current = startMins; current <= endMins; current += step) {
+  for (let current = startMins; current + step <= endMins; current += step) {
     slots.push(formatMinutesToTimeString(current));
   }
   return slots;

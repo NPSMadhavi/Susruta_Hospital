@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
-import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable } from "@workspace/db";
-import { eq, and, desc, ne } from "drizzle-orm";
+import { randomBytes } from "crypto";
+import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable } from "@workspace/db";
+import { eq, and, desc, ne, sql } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
@@ -10,6 +11,25 @@ import { findOrRegisterPatient, findExistingPatientByPhoneOrEmail } from "../lib
 import { notifyPatientAppointmentUpdated } from "./patient";
 
 const router = Router();
+
+// Ensure offline_qr_tokens table exists in PostgreSQL database
+async function ensureOfflineQrTokensTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS public.offline_qr_tokens (
+        id SERIAL PRIMARY KEY,
+        token VARCHAR(128) NOT NULL UNIQUE,
+        patient_id INTEGER NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
+        appointment_id INTEGER NOT NULL REFERENCES public.appointments(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+  } catch (err: any) {
+    console.error("⚠️ Failed to ensure offline_qr_tokens table:", err.message);
+  }
+}
+ensureOfflineQrTokensTable();
 
 // ── SSE Notification Clients ──────────────────────────────────
 const sseClients = new Set<Response>();
@@ -363,14 +383,30 @@ async function getNextDailyToken(date: string): Promise<string> {
 
 // ── Admin: Offline Register Patient & Generate Token ─────────
 router.post("/offline", requireAdmin, async (req, res) => {
-  const { patientName, patientPhone, patientEmail, date, timeSlot, amount, notes, paymentStatus, paymentThrough } = req.body;
+  const {
+    patientName,
+    patientPhone,
+    patientEmail,
+    date,
+    timeSlot,
+    amount,
+    notes,
+    paymentStatus,
+    paymentThrough,
+    age,
+    gender,
+    address,
+    selectedPatientId,
+  } = req.body;
+
   if (!patientName || !patientPhone || !date || !timeSlot) {
     res.status(400).json({ error: "missing_fields", message: "Patient name, phone, date, and time slot are required." });
     return;
   }
 
-  // Strictly validate 10-digit Indian mobile number
-  const cleanPhone = String(patientPhone || "").replace(/\D/g, "");
+  // Strictly validate 10-digit Indian mobile number (handling optional +91 prefix)
+  const rawDigits = String(patientPhone || "").replace(/\D/g, "");
+  const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
   if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
     res.status(400).json({
       error: "invalid_phone",
@@ -379,28 +415,110 @@ router.post("/offline", requireAdmin, async (req, res) => {
     return;
   }
 
-  const formattedPhone = `+91${cleanPhone}`;
-  const resolvedPaymentThrough = paymentThrough === "Cash" || paymentThrough === "cash" ? "Cash" : "UPI";
-
-  // Optional email validation
-  const rawEmail = patientEmail ? String(patientEmail).trim() : "";
-  if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+  // Age validation: numeric, reasonable human age (0 to 150)
+  const parsedAge = age !== undefined && age !== null && String(age).trim() !== "" ? Number(age) : null;
+  if (parsedAge === null || isNaN(parsedAge) || parsedAge < 0 || parsedAge > 150) {
     res.status(400).json({
-      error: "invalid_email",
-      message: "Please enter a valid email address or leave it blank."
+      error: "invalid_age",
+      message: "Please enter a valid age between 0 and 150."
     });
     return;
   }
-  const cleanEmail = rawEmail ? rawEmail.toLowerCase() : null;
 
-  // 1. Find existing patient or register brand-new patient
-  // - If patient ALREADY exists: reuses existing patient.id & patientCode; DOES NOT touch the counter!
-  // - If brand-new: allocates the next Patient ID & inserts patient in the SAME database transaction.
-  const { patient } = await findOrRegisterPatient({
-    name: patientName.trim(),
-    phone: formattedPhone,
-    email: cleanEmail,
-  });
+  // Gender validation: Male, Female, Other
+  const rawGender = gender ? String(gender).trim() : "";
+  if (!rawGender) {
+    res.status(400).json({
+      error: "invalid_gender",
+      message: "Please select gender."
+    });
+    return;
+  }
+
+  const formattedPhone = `+91${cleanPhone}`;
+  const resolvedPaymentThrough = paymentThrough === "Cash" || paymentThrough === "cash" ? "Cash" : "UPI";
+
+  // Mandatory email validation
+  const rawEmail = patientEmail ? String(patientEmail).trim() : "";
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    res.status(400).json({
+      error: "invalid_email",
+      message: "A valid email address is required for offline patient registration."
+    });
+    return;
+  }
+  const cleanEmail = rawEmail.toLowerCase();
+  const cleanAddress = address ? String(address).trim() : null;
+
+  let patient: typeof patientsTable.$inferSelect | null = null;
+
+  // 1. Existing Patient Reuse vs New Patient Creation
+  if (selectedPatientId) {
+    // Admin explicitly selected an existing patient
+    const [existing] = await db
+      .select()
+      .from(patientsTable)
+      .where(
+        typeof selectedPatientId === "number"
+          ? eq(patientsTable.id, selectedPatientId)
+          : eq(patientsTable.patientCode, String(selectedPatientId).trim())
+      );
+
+    if (existing) {
+      // Update existing patient details (Name, Phone, Email, Age, Gender, Address)
+      // Patient ID (patientCode) MUST NEVER CHANGE
+      const updates: Record<string, any> = {
+        name: patientName.trim(),
+        phone: formattedPhone,
+        email: cleanEmail,
+        age: parsedAge,
+        gender: rawGender,
+      };
+      if (cleanAddress) {
+        updates.address = cleanAddress;
+      }
+
+      await db.update(patientsTable).set(updates).where(eq(patientsTable.id, existing.id));
+      patient = { ...existing, ...updates };
+    } else {
+      res.status(404).json({ error: "patient_not_found", message: "Selected patient was not found." });
+      return;
+    }
+  } else {
+    // No selected patient ID passed — check if phone number already exists
+    const existingByPhone = await findExistingPatientByPhoneOrEmail(formattedPhone, cleanEmail);
+    if (existingByPhone) {
+      // Phone number already belongs to a patient — reuse existing patient ID & update details
+      const updates: Record<string, any> = {
+        name: patientName.trim(),
+        phone: formattedPhone,
+        email: cleanEmail,
+        age: parsedAge,
+        gender: rawGender,
+      };
+      if (cleanAddress) {
+        updates.address = cleanAddress;
+      }
+      await db.update(patientsTable).set(updates).where(eq(patientsTable.id, existingByPhone.id));
+      patient = { ...existingByPhone, ...updates };
+    } else {
+      // Brand-new patient: allocate next unique Patient ID
+      const result = await findOrRegisterPatient({
+        name: patientName.trim(),
+        phone: formattedPhone,
+        email: cleanEmail,
+        age: parsedAge,
+        gender: rawGender,
+        address: cleanAddress,
+      });
+      patient = result.patient;
+    }
+  }
+
+  if (!patient) {
+    res.status(500).json({ error: "patient_error", message: "Failed to process patient record." });
+    return;
+  }
 
   // 2. Daily token for appointment queue
   let token: string;
@@ -414,6 +532,9 @@ router.post("/offline", requireAdmin, async (req, res) => {
     return;
   }
 
+  // 3. Generate 24-hour secure QR token for temporary document upload access ONLY
+  const uploadToken = randomBytes(32).toString("hex");
+
   const notesObj = {
     token,
     amount: amount ? Number(amount) : 200,
@@ -421,6 +542,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
     patientCode: patient.patientCode,
     notes: notes || "",
     isOfflineRegister: true,
+    uploadToken,
   };
 
   const [appointment] = await db
@@ -442,13 +564,31 @@ router.post("/offline", requireAdmin, async (req, res) => {
     })
     .returning();
 
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  await db.insert(offlineQrTokensTable).values({
+    token: uploadToken,
+    patientId: patient.id,
+    appointmentId: appointment.id,
+    expiresAt,
+  });
+
+  const uploadUrl = `/patient/offline-upload/${uploadToken}`;
+
   const serialized = {
     ...serializeAppt(appointment),
     patientId: patient.id,
     patientCode: patient.patientCode,
+    patientName: patient.name,
+    patientPhone: cleanPhone,
+    patientEmail: patient.email || "",
+    age: patient.age,
+    gender: patient.gender,
+    address: patient.address || "",
     token,
     amount: amount ? Number(amount) : 200,
     paymentThrough: resolvedPaymentThrough,
+    uploadToken,
+    uploadUrl,
   };
 
   notifyNewAppointment(serialized);
@@ -869,6 +1009,121 @@ router.delete("/:id", requireAdmin, async (req, res) => {
     notifyPatientAppointmentUpdated(appt.patientId);
   }
   res.status(204).send();
+});
+
+// ── Temporary QR Code Medical Document Upload Verification ─────
+router.get("/patient/offline-upload/:token", async (req, res) => {
+  const { token } = req.params;
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ valid: false, error: "invalid_token", message: "Upload token is required." });
+    return;
+  }
+
+  const [qrRecord] = await db
+    .select()
+    .from(offlineQrTokensTable)
+    .where(eq(offlineQrTokensTable.token, token));
+
+  if (!qrRecord) {
+    res.status(404).json({ valid: false, error: "not_found", message: "Invalid or non-existent QR upload token." });
+    return;
+  }
+
+  if (qrRecord.expiresAt < new Date()) {
+    res.status(410).json({
+      valid: false,
+      error: "expired",
+      message: "QR Code Expired. This upload link has expired. Please contact Susruta Hospital for assistance."
+    });
+    return;
+  }
+
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, qrRecord.patientId));
+  const [appointment] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, qrRecord.appointmentId));
+
+  if (!patient || !appointment) {
+    res.status(404).json({ valid: false, error: "not_found", message: "Associated patient or appointment record not found." });
+    return;
+  }
+
+  let tokenStr = "A-101";
+  try {
+    const parsed = JSON.parse(appointment.notes || "{}");
+    if (parsed.token) tokenStr = parsed.token;
+  } catch {}
+
+  res.json({
+    valid: true,
+    patientName: patient.name,
+    patientCode: patient.patientCode || `ID #${patient.id}`,
+    appointmentDate: appointment.date,
+    timeSlot: appointment.timeSlot,
+    token: tokenStr,
+    expiresAt: qrRecord.expiresAt,
+  });
+});
+
+// ── Temporary QR Code Medical Document Upload Submission ────────
+router.post("/patient/offline-upload/:token/documents", async (req, res) => {
+  const { token } = req.params;
+  const { name, objectPath, contentType, size } = req.body;
+
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ error: "invalid_token", message: "Upload token is required." });
+    return;
+  }
+
+  if (!name || !objectPath) {
+    res.status(400).json({ error: "missing_fields", message: "Document name and objectPath are required." });
+    return;
+  }
+
+  const [qrRecord] = await db
+    .select()
+    .from(offlineQrTokensTable)
+    .where(eq(offlineQrTokensTable.token, token));
+
+  if (!qrRecord) {
+    res.status(404).json({ error: "not_found", message: "Invalid or non-existent QR upload token." });
+    return;
+  }
+
+  if (qrRecord.expiresAt < new Date()) {
+    res.status(410).json({
+      error: "expired",
+      message: "QR Code Expired. This upload link has expired. Please contact Susruta Hospital for assistance."
+    });
+    return;
+  }
+
+  const [doc] = await db.insert(patientDocumentsTable).values({
+    patientId: qrRecord.patientId,
+    name: String(name).trim(),
+    objectPath: String(objectPath).trim(),
+    contentType: String(contentType || "application/octet-stream").trim(),
+    size: Number(size) || 0,
+  }).returning();
+
+  // Also record metadata in appointment.notes
+  const [appointment] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, qrRecord.appointmentId));
+  if (appointment) {
+    let parsedNotes: any = {};
+    try {
+      parsedNotes = JSON.parse(appointment.notes || "{}");
+    } catch {}
+    const existingDocs = Array.isArray(parsedNotes.documents) ? parsedNotes.documents : [];
+    existingDocs.push({
+      id: doc.id,
+      name: doc.name,
+      objectPath: doc.objectPath,
+      contentType: doc.contentType,
+      size: doc.size,
+    });
+    parsedNotes.documents = existingDocs;
+    await db.update(appointmentsTable).set({ notes: JSON.stringify(parsedNotes) }).where(eq(appointmentsTable.id, appointment.id));
+  }
+
+  res.json({ success: true, message: "Document uploaded successfully", document: doc });
 });
 
 export default router;

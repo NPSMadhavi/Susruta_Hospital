@@ -221,7 +221,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold leading-tight">{toast.title}</p>
               <p className="text-xs text-white/70 mt-0.5 leading-snug">{toast.body}</p>
-              <Link href="/admin/online-appointments" className="text-[11px] text-[#D95B2F] hover:text-[#e76d43] font-semibold mt-1 block">
+              <Link href="/admin/appointments" className="text-[11px] text-[#D95B2F] hover:text-[#e76d43] font-semibold mt-1 block">
                 View appointment →
               </Link>
             </div>

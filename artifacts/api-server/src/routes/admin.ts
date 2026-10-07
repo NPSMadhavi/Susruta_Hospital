@@ -14,6 +14,7 @@ import {
 import {
   computeNextPatientId,
   validateManualCounterSetting,
+  searchPatients,
 } from "../lib/patient-id";
 
 const router = Router();
@@ -247,6 +248,22 @@ router.post("/smtp-test", requireAdmin, async (req, res) => {
   }
 });
 
+// ── GET /admin/patients/search — search patients by Patient ID, Phone, or Name ──
+router.get("/patients/search", requireAdmin, async (req, res) => {
+  const query = req.query.query ? String(req.query.query).trim() : "";
+  if (!query) {
+    res.json([]);
+    return;
+  }
+  try {
+    const results = await searchPatients(query);
+    res.json(results);
+  } catch (err: any) {
+    console.error("Admin patient search error:", err);
+    res.status(500).json({ error: "search_error", message: "Failed to search patients." });
+  }
+});
+
 // ── GET /admin/patients — list all registered patients ────────
 router.get("/patients", requireAdmin, async (_req, res) => {
   try {
@@ -277,6 +294,8 @@ const UpdatePatientBody = z.object({
   email: z.string().trim().email().max(255).or(z.literal("")).nullable().optional(),
   phone: z.string().trim().max(20).nullable().optional(),
   address: z.string().trim().nullable().optional(),
+  age: z.number().int().min(0).max(150).nullable().optional(),
+  gender: z.string().trim().max(20).nullable().optional(),
 });
 
 // ── PATCH /admin/patients/:id — edit patient contact details ───
@@ -297,6 +316,9 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
   const rawEmail = parsed.data.email ? parsed.data.email.trim().toLowerCase() : null;
   const email = rawEmail || null;
   const phone = parsed.data.phone?.trim() || null;
+  const address = parsed.data.address !== undefined ? (parsed.data.address?.trim() || null) : undefined;
+  const age = parsed.data.age !== undefined ? parsed.data.age : undefined;
+  const gender = parsed.data.gender !== undefined ? (parsed.data.gender?.trim() || null) : undefined;
 
   try {
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
@@ -337,6 +359,9 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
           name,
           email,
           phone,
+          ...(address !== undefined ? { address } : {}),
+          ...(age !== undefined ? { age } : {}),
+          ...(gender !== undefined ? { gender } : {}),
           ...(emailChanged ? {
             emailVerified: false,
             verificationReminderClaimedAt: null,
@@ -396,8 +421,11 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
       id: updatedPatient.id,
       patientCode: updatedPatient.patientCode,
       name: updatedPatient.name,
+      age: updatedPatient.age,
+      gender: updatedPatient.gender,
       email: updatedPatient.email,
       phone: updatedPatient.phone,
+      address: updatedPatient.address,
       emailVerified: updatedPatient.emailVerified,
       createdAt: updatedPatient.createdAt,
     };

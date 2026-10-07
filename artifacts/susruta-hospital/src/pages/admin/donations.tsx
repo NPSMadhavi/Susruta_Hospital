@@ -103,7 +103,9 @@ export default function AdminDonations() {
     );
   });
 
-  const totalAmount = filtered.reduce((sum, d) => sum + parseFloat(d.amount || "0"), 0);
+  const totalAmount = filtered
+    .filter(d => d.status === "verified")
+    .reduce((sum, d) => sum + parseFloat(d.amount || "0"), 0);
   const verifiedCount = filtered.filter(d => d.status === "verified").length;
   const pendingCount = filtered.filter(d => d.status === "pending").length;
   const donorCount = new Set(filtered.map(d => d.patientCode || d.patientEmail || d.patientName).filter(Boolean)).size;
@@ -159,8 +161,8 @@ export default function AdminDonations() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={load} className="p-2 bg-white border border-gray-200 text-gray-500 hover:text-[#1a3d2b] hover:bg-gray-50 rounded-xl transition-colors" title="Refresh">
-            <RefreshCw size={15} />
+          <button onClick={load} disabled={loading} className="p-2 bg-white border border-gray-200 text-gray-500 hover:text-[#1a3d2b] hover:bg-gray-50 rounded-xl transition-colors cursor-pointer disabled:opacity-50" title="Refresh">
+            <RefreshCw size={15} className={loading ? "animate-spin text-[#1a3d2b]" : ""} />
           </button>
           <div className="relative w-64 sm:w-80">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

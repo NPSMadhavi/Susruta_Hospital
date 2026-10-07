@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import logoImg from "@assets/logo_1773840200056.png";
+import { format, parseISO } from "date-fns";
 
 import { AdminVideoRoom } from "@/components/VideoCall";
 import { cn } from "@/lib/utils";
@@ -149,26 +150,32 @@ const ONLINE_STATUS_COLORS: Record<string, string> = {
 // ── Modals (In-Person) ───────────────────────────────────────────
 function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => void }) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
-  const token = (appt as any).token || `T${String(appt.id).padStart(3, "0")}`;
-  const patientId = (appt as any).patientCode || "—";
-  const amount = (appt as any).amount || 200;
+
+  let notesObj: any = {};
+  if (appt.notes) {
+    try {
+      notesObj = JSON.parse(appt.notes);
+    } catch {
+      notesObj = {};
+    }
+  }
+
+  const token = (appt as any).token || notesObj.token || `T${String(appt.id).padStart(3, "0")}`;
+  const patientCode = (appt as any).patientCode || notesObj.patientCode || "—";
+  const amount = (appt as any).amount || notesObj.amount || 200;
+  const paymentThrough = ((appt as any).paymentThrough || notesObj.paymentThrough || appt.paymentMode || "UPI").toUpperCase();
+  const age = (appt as any).age !== undefined ? (appt as any).age : notesObj.age;
+  const gender = (appt as any).gender || notesObj.gender;
+  const address = (appt as any).address || notesObj.address;
+
+  const uploadToken = (appt as any).uploadToken || notesObj.uploadToken;
 
   useEffect(() => {
-    const qrData = JSON.stringify({
-      hospital: "Susruta Hospital",
-      address: "119, Ramulavari North Mada Street, Tirupati - 517 507",
-      patientId,
-      token,
-      patient: appt.patientName,
-      phone: appt.patientPhone,
-      date: appt.date,
-      slot: appt.timeSlot,
-      amount: `₹${amount}`,
-      paymentMode: appt.paymentMode?.toUpperCase() || "CASH",
-      status: "PAID",
-    });
+    const uploadFullUrl = uploadToken
+      ? `${window.location.origin}/patient/offline-upload/${uploadToken}`
+      : `${window.location.origin}/portal`;
 
-    QRCode.toDataURL(qrData, {
+    QRCode.toDataURL(uploadFullUrl, {
       width: 140,
       margin: 1,
       color: {
@@ -178,13 +185,14 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
     })
       .then((url) => setQrCodeUrl(url))
       .catch((err) => console.error("QR Code error:", err));
-  }, [appt, token, amount]);
+  }, [uploadToken]);
 
   function maskPhone(p?: string) {
     if (!p) return "N/A";
     const clean = p.replace(/\D/g, "");
-    if (clean.length === 10) {
-      return `${clean.slice(0, 2)}******${clean.slice(8)}`;
+    if (clean.length >= 10) {
+      const start = clean.slice(-10, -5);
+      return `${start} XXXXX`;
     }
     return p;
   }
@@ -192,12 +200,7 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
   function formatShortDate(d?: string) {
     if (!d) return "";
     try {
-      return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+      return format(parseISO(d), "dd MMM yyyy").toUpperCase();
     } catch {
       return d;
     }
@@ -212,8 +215,8 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
       <div className="bg-white rounded-2xl border border-[#EDEFEB] shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#EDEFEB] shrink-0 bg-white">
-          <h3 className="font-bold text-sm text-[#1E293B] tracking-wide uppercase">
-            PRINT RECEIPT
+          <h3 className="font-bold text-sm text-[#1E293B] tracking-wide">
+            Print Receipt
           </h3>
           <button
             type="button"
@@ -242,11 +245,11 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
             {/* Dashed divider */}
             <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
-            <p className="text-[11px] font-bold text-[#475569] tracking-wider text-center">
-              Offline Appointment Receipt
+            <p className="text-[11px] font-bold text-[#475569] uppercase tracking-wider text-center">
+              OFFLINE APPOINTMENT RECEIPT
             </p>
-            <p className="text-[10px] font-bold text-[#94A3B8] tracking-widest mt-1 text-center">
-              Token Number
+            <p className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-widest mt-1 text-center">
+              TOKEN NUMBER
             </p>
             <h1 className="text-4xl font-extrabold text-[#D95B2F] tracking-tight mt-1 mb-1 text-center">
               {token}
@@ -258,17 +261,17 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
             {/* Key-Value Details */}
             <div className="receipt-info-table space-y-2.5 my-4 text-xs">
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Patient ID
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  PATIENT ID
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] font-mono text-right text-xs break-all pl-2">
-                  {patientId}
+                  {patientCode}
                 </span>
               </div>
 
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Patient Name
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  PATIENT NAME
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2">
                   {appt.patientName}
@@ -276,17 +279,50 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
               </div>
 
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Phone Number
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  PHONE NUMBER
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2 font-mono">
                   {maskPhone(appt.patientPhone)}
                 </span>
               </div>
 
+              {age !== undefined && age !== null && (
+                <div className="receipt-row flex items-center justify-between">
+                  <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                    AGE / GENDER
+                  </span>
+                  <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2">
+                    {age} yrs {gender ? `/ ${gender}` : ""}
+                  </span>
+                </div>
+              )}
+
+              {address && (
+                <div className="receipt-row flex items-center justify-between">
+                  <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                    ADDRESS
+                  </span>
+                  <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2">
+                    {address}
+                  </span>
+                </div>
+              )}
+
+              {appt.patientEmail && (
+                <div className="receipt-row flex items-center justify-between">
+                  <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                    EMAIL
+                  </span>
+                  <span className="receipt-value font-bold text-[#1E293B] text-right text-xs break-words pl-2">
+                    {appt.patientEmail}
+                  </span>
+                </div>
+              )}
+
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Date
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  DATE
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
                   {formatShortDate(appt.date)}
@@ -294,8 +330,8 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
               </div>
 
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Slot
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  SLOT
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
                   {appt.timeSlot}
@@ -303,8 +339,8 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
               </div>
 
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Amount
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  AMOUNT
                 </span>
                 <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2">
                   ₹{amount}
@@ -312,11 +348,20 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
               </div>
 
               <div className="receipt-row flex items-center justify-between">
-                <span className="receipt-label font-bold text-[#64748B] tracking-wider text-[11px] text-left shrink-0">
-                  Payment
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  PAYMENT
                 </span>
                 <span className="receipt-value font-bold text-emerald-700 text-right text-xs pl-2">
-                  Paid ({appt.paymentMode ? appt.paymentMode.toUpperCase() : "CASH"})
+                  PAID
+                </span>
+              </div>
+
+              <div className="receipt-row flex items-center justify-between">
+                <span className="receipt-label font-bold text-[#64748B] uppercase tracking-wider text-[11px] text-left shrink-0">
+                  PAYMENT THROUGH
+                </span>
+                <span className="receipt-value font-bold text-[#1E293B] text-right text-xs pl-2 uppercase">
+                  {paymentThrough}
                 </span>
               </div>
             </div>
@@ -338,18 +383,21 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
                 </div>
               )}
 
-              <p className="font-bold text-xs text-[#1E293B] tracking-wider mt-2 text-center">
+              <p className="font-bold text-xs text-[#1E293B] tracking-wider uppercase mt-2 text-center">
                 TOKEN: {token}
               </p>
-              <p className="text-[11px] text-[#64748B] mt-1 max-w-[240px] mx-auto leading-tight text-center">
-                Please keep this receipt and wait for your token to be called.
+              <p className="text-[11px] font-semibold text-[#D95B2F] mt-1.5 max-w-[260px] mx-auto leading-tight text-center">
+                Scan this QR code to upload medical documents for your offline consultation.
+              </p>
+              <p className="text-[10px] text-[#64748B] mt-0.5 text-center">
+                QR access expires after 24 hours.
               </p>
             </div>
 
             {/* Dashed divider */}
             <div className="border-t border-dashed border-[#CBD5E1] my-4" />
 
-            <p className="text-xs text-[#94A3B8] text-center">
+            <p className="text-xs text-[#94A3B8] italic text-center">
               Thank you for choosing Susruta Hospital.
             </p>
           </div>

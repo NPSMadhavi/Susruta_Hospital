@@ -35,7 +35,7 @@ type PhysicalAppt = {
   id: number; date: string; timeSlot: string; status: string;
   reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
 };
-type Patient = { id: number; patientCode: string | null; name: string; age?: number | null; gender?: string | null; email: string; phone?: string; emailVerified: boolean };
+type Patient = { id: number; patientCode: string | null; name: string; age?: number | null; gender?: string | null; address?: string | null; email: string; phone?: string; emailVerified: boolean };
 type DirectCall = {
   id: number;
   status: string;
@@ -1321,7 +1321,7 @@ export default function PatientDashboard() {
             {prescriptions.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[#EDEFEB] p-12 text-center">
                 <FileText size={40} className="text-gray-300 mx-auto mb-3" />
-                <p className="font-bold text-gray-600 font-sans">No digital prescriptions available</p>
+                <p className="font-bold text-gray-600 font-sans">No prescriptions available</p>
                 <p className="text-xs font-sans text-gray-500 mt-1 mb-4">Prescriptions will appear here after your consultations.</p>
                 
               </div>
@@ -1364,35 +1364,7 @@ export default function PatientDashboard() {
                           </div>
                         )}
 
-                        {attachedDocs.map((doc, di) => {
-                          const docUrl = `${BASE}/api/storage${doc.objectPath}`;
-                          return (
-                            <div key={di} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-[#EDEFEB]">
-                              <div className="flex items-center gap-2 min-w-0 mr-2">
-                                <FileText size={18} className="text-gray-500 shrink-0" />
-                                <span className="text-xs font-bold font-sans text-gray-800 truncate">{doc.name || `Medical Document #${di + 1}`}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewPrescription(doc)}
-                                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Eye size={13} /> View
-                                </button>
-                                <a
-                                  href={docUrl}
-                                  download
-                                  className="px-3 py-1.5 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Download size={13} /> Download
-                                </a>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {!photoPath && attachedDocs.length === 0 && (
+                         {!photoPath && (
                           <div className="flex items-center justify-between bg-emerald-50/60 p-3 rounded-xl border border-emerald-100">
                             <div className="flex items-center gap-2 min-w-0 mr-2">
                               <FileText size={18} className="text-emerald-600 shrink-0" />
@@ -1483,6 +1455,7 @@ export default function PatientDashboard() {
               name: patient.name,
               age: patient.age ?? null,
               gender: patient.gender ?? null,
+              address: patient.address ?? null,
               email: patient.email,
               phone: patient.phone ?? null,
               emailVerified: patient.emailVerified,
@@ -1495,6 +1468,7 @@ export default function PatientDashboard() {
                   name: updated.name,
                   age: updated.age,
                   gender: updated.gender,
+                  address: updated.address ?? null,
                   email: updated.email,
                   phone: updated.phone || undefined,
                   patientCode: updated.patientCode,

@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,6 +27,7 @@ import PortalLogin from "./pages/portal/login";
 import PatientDashboard from "./pages/portal/dashboard";
 import PortalBook from "./pages/portal/book";
 import OnlineBook from "./pages/portal/online-book";
+import OfflineUploadPage from "./pages/portal/offline-upload";
 
 // Legal Pages
 import MedicalDisclaimer from "./pages/medical-disclaimer";
@@ -71,6 +72,8 @@ function Router() {
       <Route path="/portal/dashboard" component={PatientDashboard} />
       <Route path="/portal/book" component={PortalBook} />
       <Route path="/portal/online-book" component={OnlineBook} />
+      <Route path="/patient/offline-upload/:token" component={OfflineUploadPage} />
+      <Route path="/portal/offline-upload/:token" component={OfflineUploadPage} />
 
       {/* Guest Video Call — public, no auth required */}
       <Route path="/guest-call/:apptId" component={GuestCall} />
@@ -92,7 +95,7 @@ function Router() {
       <Route path="/admin/testimonials" component={AdminTestimonials} />
       <Route path="/admin/subscribers" component={AdminSubscribers} />
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />
-      <Route path="/admin/online-appointments" component={AdminOnlineAppointments} />
+      <Route path="/admin/online-appointments">{() => <Redirect to="/admin/appointments" />}</Route>
       <Route path="/admin/patients" component={AdminPatients} />
       <Route path="/admin/donations" component={AdminDonations} />
       <Route path="/admin/settings" component={AdminSettings} />

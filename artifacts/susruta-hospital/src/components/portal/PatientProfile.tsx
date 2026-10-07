@@ -552,7 +552,11 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
               </div>
               {!editingAddress ? (
                 <p className="font-semibold text-base text-gray-900 mt-1 whitespace-pre-line font-sans">
-                  {patient.address || <span className="text-gray-400 italic">Not provided</span>}
+                  {patient.address && patient.address.trim() ? (
+                    patient.address.trim()
+                  ) : (
+                    <span className="text-gray-400 italic">Not provided</span>
+                  )}
                 </p>
               ) : (
                 <div className="mt-2 space-y-3 max-w-md">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw, Video, PhoneOff, Monitor, Pencil, Save, AlertTriangle } from "lucide-react";
+import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw, Video, PhoneOff, Monitor, Pencil, Save, AlertTriangle, MapPin } from "lucide-react";
 import { AdminVideoRoom } from "@/components/VideoCall";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -46,6 +46,93 @@ function formatDisplayPhone(phone: string | null | undefined): string {
   return trimmed;
 }
 
+function ViewPatientDialog({
+  patient,
+  onClose,
+  onEdit,
+}: {
+  patient: Patient;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl font-sans">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 pb-4 pt-6 pr-14 sm:px-7 sm:pr-14 font-sans">
+          <div>
+            <p className="text-xs font-bold tracking-widest text-primary mb-1 font-sans">Patient profile</p>
+            <DialogTitle className="text-xl font-bold text-gray-900 font-sans tracking-normal wrap-break-words">{patient.name}</DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-gray-700 font-sans">
+              {patient.patientCode ? `ID: ${patient.patientCode}` : "No patient ID assigned"}
+            </DialogDescription>
+          </div>
+        </div>
+
+        <div className="px-5 sm:px-7 py-5 space-y-4 font-sans text-sm">
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 font-sans">
+            <div>
+              <p className="text-xs font-medium text-gray-400 font-sans">Age</p>
+              <p className="text-sm font-semibold text-gray-800 font-sans">{patient.age !== undefined && patient.age !== null ? `${patient.age} yrs` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-400 font-sans">Gender</p>
+              <p className="text-sm font-semibold text-gray-800 font-sans">{patient.gender || "—"}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 font-sans">
+            <div className="flex items-start gap-3 text-gray-700 font-sans">
+              <Mail size={16} className="shrink-0 mt-0.5 text-gray-400" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-400 font-sans">Email address</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="font-medium text-gray-900 font-sans break-all">{patient.email || "Not provided"}</p>
+                  {patient.email && (
+                    patient.emailVerified ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 shrink-0">
+                        <BadgeCheck size={11} /> Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
+                        <Clock size={11} /> Unverified
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 text-gray-700 font-sans">
+              <Phone size={16} className="shrink-0 mt-0.5 text-gray-400" />
+              <div>
+                <p className="text-xs font-medium text-gray-400 font-sans">Phone number</p>
+                <p className="font-medium text-gray-900 font-mono text-sm mt-0.5">{formatDisplayPhone(patient.phone) || "Not provided"}</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 text-gray-700 font-sans">
+              <MapPin size={16} className="shrink-0 mt-0.5 text-gray-400" />
+              <div>
+                <p className="text-xs font-medium text-gray-400 font-sans">Address</p>
+                <p className="font-medium text-gray-900 font-sans mt-0.5 leading-relaxed break-words">{patient.address || "Not provided"}</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 text-gray-700 font-sans">
+              <Clock size={16} className="shrink-0 mt-0.5 text-gray-400" />
+              <div>
+                <p className="text-xs font-medium text-gray-400 font-sans">Registered on</p>
+                <p className="font-medium text-gray-900 font-sans mt-0.5">{fmtDate(patient.createdAt)}</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EditPatientDialog({
   patient,
   onClose,
@@ -56,8 +143,11 @@ function EditPatientDialog({
   onSaved: (patient: Patient, message: string, ok: boolean) => void;
 }) {
   const [name, setName] = useState(patient.name);
+  const [age, setAge] = useState<string>(patient.age !== undefined && patient.age !== null ? String(patient.age) : "");
+  const [gender, setGender] = useState<string>(patient.gender ?? "");
   const [email, setEmail] = useState(patient.email ?? "");
   const [phone, setPhone] = useState(formatDisplayPhone(patient.phone));
+  const [address, setAddress] = useState(patient.address ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -75,6 +165,13 @@ function EditPatientDialog({
       setError("Name must be at least 2 characters.");
       return;
     }
+
+    const parsedAge = age.trim() === "" ? null : parseInt(age.trim(), 10);
+    if (parsedAge !== null && (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 150)) {
+      setError("Please enter a valid age between 0 and 150.");
+      return;
+    }
+
     if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError("Please enter a valid email address.");
       return;
@@ -96,8 +193,11 @@ function EditPatientDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: trimmedName,
+          age: parsedAge,
+          gender: gender.trim() || null,
           email: trimmedEmail || null,
           phone: phoneToSave,
+          address: address.trim() || null,
         }),
       });
       const data = await response.json();
@@ -123,7 +223,7 @@ function EditPatientDialog({
       if (!open && !saving) onClose();
     }}>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl font-sans"
         onEscapeKeyDown={event => {
           if (saving) event.preventDefault();
         }}
@@ -131,24 +231,24 @@ function EditPatientDialog({
           if (saving) event.preventDefault();
         }}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 pb-4 pt-6 pr-14 sm:px-7 sm:pr-14">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 pb-4 pt-6 pr-14 sm:px-7 sm:pr-14 font-sans">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-primary mb-1">Patient details</p>
-            <DialogTitle className="text-xl font-bold text-gray-900">Edit {patient.name}</DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-gray-500">{patient.patientCode || "No patient ID assigned"}</DialogDescription>
+            <p className="text-xs font-bold tracking-widest text-primary mb-1 font-sans">Patient details</p>
+            <DialogTitle className="text-xl font-bold text-gray-900 font-sans tracking-normal break-words">Edit {patient.name}</DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-gray-500 font-sans font-mono">{patient.patientCode || "No patient ID assigned"}</DialogDescription>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 sm:px-7 py-5 space-y-5">
+        <form onSubmit={handleSubmit} className="px-5 sm:px-7 py-5 space-y-4 font-sans">
           {error && (
-            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700 font-sans">
               <AlertTriangle size={16} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label htmlFor="edit-patient-name" className="text-sm font-semibold text-gray-800">Full name</label>
+          <div className="space-y-1.5 font-sans">
+            <label htmlFor="edit-patient-name" className="text-sm font-semibold text-gray-800 font-sans">Full Name</label>
             <input
               id="edit-patient-name"
               value={name}
@@ -157,13 +257,43 @@ function EditPatientDialog({
               maxLength={100}
               required
               autoFocus
-              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="edit-patient-email" className="text-sm font-semibold text-gray-800">
-              Email address <span className="font-normal text-gray-400">({patient.email ? "for portal login" : "optional for offline patients"})</span>
+          <div className="grid grid-cols-2 gap-4 font-sans">
+            <div className="space-y-1.5 font-sans">
+              <label htmlFor="edit-patient-age" className="text-sm font-semibold text-gray-800 font-sans">Age</label>
+              <input
+                id="edit-patient-age"
+                type="number"
+                min={1}
+                max={150}
+                value={age}
+                onChange={event => setAge(event.target.value)}
+                placeholder="e.g. 35"
+                className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
+            <div className="space-y-1.5 font-sans">
+              <label htmlFor="edit-patient-gender" className="text-sm font-semibold text-gray-800 font-sans">Gender</label>
+              <select
+                id="edit-patient-gender"
+                value={gender}
+                onChange={event => setGender(event.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans"
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 font-sans">
+            <label htmlFor="edit-patient-email" className="text-sm font-semibold text-gray-800 font-sans">
+              Email Address <span className="font-normal text-gray-400 font-sans">({patient.email ? "for portal login" : "optional for offline patients"})</span>
             </label>
             <input
               id="edit-patient-email"
@@ -172,22 +302,22 @@ function EditPatientDialog({
               onChange={event => setEmail(event.target.value)}
               maxLength={255}
               placeholder="e.g. patient@example.com (optional)"
-              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans"
             />
           </div>
 
           {emailChanged && (
-            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 font-sans">
               <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
-              <p>
+              <p className="font-sans">
                 <strong>New email requires verification.</strong> Saving this address will mark the patient unverified and send a fresh verification link.
               </p>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label htmlFor="edit-patient-phone" className="text-sm font-semibold text-gray-800">
-              Phone number <span className="font-normal text-gray-400">(optional)</span>
+          <div className="space-y-1.5 font-sans">
+            <label htmlFor="edit-patient-phone" className="text-sm font-semibold text-gray-800 font-sans">
+              Phone Number
             </label>
             <input
               id="edit-patient-phone"
@@ -196,26 +326,41 @@ function EditPatientDialog({
               onChange={event => setPhone(event.target.value)}
               maxLength={20}
               placeholder="Phone number"
-              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans"
             />
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
+          <div className="space-y-1.5 font-sans">
+            <label htmlFor="edit-patient-address" className="text-sm font-semibold text-gray-800 font-sans">
+              Address
+            </label>
+            <textarea
+              id="edit-patient-address"
+              value={address}
+              onChange={event => setAddress(event.target.value)}
+              maxLength={300}
+              rows={2}
+              placeholder="e.g. Sushila Nilayam, Tirupati"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 font-sans resize-none"
+            />
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1 font-sans">
             <button
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 font-sans"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors disabled:opacity-60"
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#D95B2F] px-4 py-3 text-sm font-bold text-white hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 font-sans"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </form>
@@ -237,27 +382,12 @@ export default function AdminPatients() {
   const [monitoring, setMonitoring] = useState<MonitorCredentials | null>(null);
   const [monitoringCallId, setMonitoringCallId] = useState<number | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [viewingPatient, setViewingPatient] = useState<Patient | null>(null);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
   }
-
-  const fetchPatients = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    if (silent) setRefreshing(true);
-    try {
-      const r = await apiFetch("/patients");
-      const data = await r.json();
-      setPatients(Array.isArray(data) ? data : []);
-      setLastUpdated(new Date());
-    } catch {
-      if (!silent) setPatients([]);
-    } finally {
-      if (!silent) setLoading(false);
-      if (silent) setRefreshing(false);
-    }
-  }, []);
 
   const fetchActiveCalls = useCallback(async () => {
     try {
@@ -276,6 +406,28 @@ export default function AdminPatients() {
       setActiveCalls([]);
     }
   }, []);
+
+  const fetchPatients = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setRefreshing(true);
+    const startTime = Date.now();
+    try {
+      const [r] = await Promise.all([
+        apiFetch("/patients"),
+        fetchActiveCalls(),
+      ]);
+      const data = await r.json();
+      setPatients(Array.isArray(data) ? data : []);
+      setLastUpdated(new Date());
+    } catch {
+      if (!silent) setPatients([]);
+    } finally {
+      if (!silent) setLoading(false);
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(0, 450 - elapsed);
+      setTimeout(() => setRefreshing(false), delay);
+    }
+  }, [fetchActiveCalls]);
 
   useEffect(() => {
     fetchPatients(false);
@@ -363,7 +515,7 @@ export default function AdminPatients() {
   }
 
   function handlePatientSaved(updatedPatient: Patient, message: string, ok: boolean) {
-    setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+    setPatients(prev => prev.map(p => p.id === updatedPatient.id ? { ...p, ...updatedPatient } : p));
     setEditingPatient(null);
     showToast(message, ok);
   }
@@ -468,6 +620,18 @@ export default function AdminPatients() {
         </div>
       )}
 
+      {viewingPatient && (
+        <ViewPatientDialog
+          patient={viewingPatient}
+          onClose={() => setViewingPatient(null)}
+          onEdit={() => {
+            const target = viewingPatient;
+            setViewingPatient(null);
+            setEditingPatient(target);
+          }}
+        />
+      )}
+
       {editingPatient && (
         <EditPatientDialog
           patient={editingPatient}
@@ -560,17 +724,22 @@ export default function AdminPatients() {
           <table className="w-full text-sm min-w-[1050px]">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap">Patient ID</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap">Name</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell whitespace-nowrap">Contact</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell whitespace-nowrap">Registered</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap min-w-[140px]">Status</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap min-w-[340px]">Actions</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Patient ID</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Name</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Age/Gender</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden md:table-cell whitespace-nowrap">Contact</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden lg:table-cell whitespace-nowrap">Registered</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[140px]">Status</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[340px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filtered.map(p => (
-                <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                <tr
+                  key={p.id}
+                  onClick={() => setViewingPatient(p)}
+                  className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                >
                   <td className="px-5 py-4 whitespace-nowrap">
                     {p.patientCode
                       ? <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">{p.patientCode}</span>
@@ -578,7 +747,10 @@ export default function AdminPatients() {
                     }
                   </td>
                   <td className="px-5 py-4">
-                    <p className="font-semibold text-foreground truncate max-w-[200px]">{p.name}</p>
+                    <p className="font-semibold text-foreground break-words whitespace-normal max-w-[220px] leading-snug group-hover:text-primary transition-colors">{p.name}</p>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold text-gray-700">
+                    {p.age || p.gender ? `${p.age ?? "--"}/${p.gender ?? "--"}` : "—"}
                   </td>
                   <td className="px-5 py-4 hidden md:table-cell">
                     <div className="space-y-0.5 min-w-0 max-w-[240px]">
@@ -622,10 +794,10 @@ export default function AdminPatients() {
                       <span className="text-muted-foreground text-sm font-semibold px-2">—</span>
                     )}
                   </td>
-                  <td className="px-5 py-4 whitespace-nowrap min-w-[340px]">
+                  <td className="px-5 py-4 whitespace-nowrap min-w-[340px]" onClick={e => e.stopPropagation()}>
                      <div className="flex items-center gap-2 whitespace-nowrap">
                        <button
-                         onClick={() => setEditingPatient(p)}
+                         onClick={(e) => { e.stopPropagation(); setEditingPatient(p); }}
                          disabled={!!actionLoading[p.id]}
                          title={`Edit ${p.name}`}
                          aria-label={`Edit ${p.name}`}
@@ -636,7 +808,7 @@ export default function AdminPatients() {
                        </button>
                       {p.email && !p.emailVerified && (
                         <button
-                          onClick={() => resendVerification(p)}
+                          onClick={(e) => { e.stopPropagation(); resendVerification(p); }}
                           disabled={!!actionLoading[p.id]}
                           title="Resend verification email"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
@@ -650,7 +822,7 @@ export default function AdminPatients() {
                       )}
                       {p.email && (
                         <button
-                          onClick={() => startDirectCall(p)}
+                          onClick={(e) => { e.stopPropagation(); startDirectCall(p); }}
                           disabled={!!actionLoading[p.id] || activeCalls.length > 0}
                           title={activeCalls.length > 0 ? "End the active direct call before starting another" : `Start a direct video call with ${p.name}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
@@ -663,7 +835,7 @@ export default function AdminPatients() {
                         </button>
                       )}
                       <button
-                        onClick={() => setConfirmDelete(p)}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
                         disabled={!!actionLoading[p.id]}
                         title="Delete patient"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"

@@ -1,8 +1,16 @@
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 
-// Load root workspace .env file
-dotenv.config({ path: path.resolve(import.meta.dirname, "../../../.env") });
+const apiServerEnv = path.resolve(import.meta.dirname, "../.env");
+const rootEnv = path.resolve(import.meta.dirname, "../../../.env");
+
+if (fs.existsSync(apiServerEnv)) {
+  dotenv.config({ path: apiServerEnv });
+}
+if (fs.existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+}
 
 import app from "./app";
 import { startVerificationReminderWorker } from "./lib/verification-reminders";
