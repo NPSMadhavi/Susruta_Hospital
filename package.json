@@ -14,6 +14,7 @@
     "db:push": "npm run push --workspace=@workspace/db",
     "db:push-force": "npm run push-force --workspace=@workspace/db",
     "build": "npm run typecheck && npm run build --workspaces --if-present",
+    "debug:backend": "node artifacts/api-server/dist/index.js",
     "typecheck:libs": "tsc --build",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present"
   },
