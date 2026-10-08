@@ -709,6 +709,11 @@ export default function AdminOfflineRegister() {
                           Indian mobile numbers must start with 6, 7, 8, or 9
                         </p>
                       )}
+                      {errorMsg && errorMsg.toLowerCase().includes("phone") && (
+                        <p className="text-[11px] text-red-600 font-semibold mt-1">
+                          {errorMsg}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -726,10 +731,19 @@ export default function AdminOfflineRegister() {
                           setPatientEmail(e.target.value);
                           if (errorMsg) setErrorMsg("");
                         }}
-                        className={`w-full px-4 py-2.5 rounded-xl border border-[#CBD5E1] text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all ${
-                          selectedPatient ? "bg-slate-100 font-semibold cursor-not-allowed text-[#475569]" : ""
+                        className={`w-full px-4 py-2.5 rounded-xl border text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 transition-all ${
+                          selectedPatient
+                            ? "bg-slate-100 font-semibold cursor-not-allowed border-[#CBD5E1] text-[#475569]"
+                            : errorMsg && errorMsg.toLowerCase().includes("email")
+                            ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
+                            : "border-[#CBD5E1] focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
                         }`}
                       />
+                      {errorMsg && errorMsg.toLowerCase().includes("email") && (
+                        <p className="text-[11px] text-red-600 font-semibold mt-1">
+                          {errorMsg}
+                        </p>
+                      )}
                     </div>
                   </div>
 

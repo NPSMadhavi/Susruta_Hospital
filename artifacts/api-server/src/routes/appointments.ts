@@ -7,7 +7,7 @@ import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod
 import { requireAdmin } from "../lib/auth";
 import { verifyPatientSession } from "../lib/patient-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
-import { findOrRegisterPatient, findExistingPatientByPhoneOrEmail } from "../lib/patient-id";
+import { findOrRegisterPatient, findExistingPatientByPhoneOrEmail, registerNewPatientWithNextId } from "../lib/patient-id";
 import { notifyPatientAppointmentUpdated, getFrontendUrl } from "./patient";
 
 const router = Router();
@@ -465,6 +465,48 @@ router.post("/offline", requireAdmin, async (req, res) => {
       );
 
     if (existing) {
+      // Check if email belongs to ANOTHER patient
+      if (cleanEmail) {
+        const [emailConflict] = await db
+          .select({ id: patientsTable.id })
+          .from(patientsTable)
+          .where(and(sql`lower(${patientsTable.email}) = ${cleanEmail}`, ne(patientsTable.id, existing.id)))
+          .limit(1);
+
+        if (emailConflict) {
+          res.status(409).json({
+            error: "email_taken",
+            message: "This email address is already registered to another patient. Please use a different email address or search for the existing patient.",
+          });
+          return;
+        }
+      }
+
+      // Check if phone belongs to ANOTHER patient
+      if (formattedPhone) {
+        const cleanDigits = formattedPhone.replace(/\D/g, "").slice(-10);
+        if (cleanDigits.length === 10) {
+          const [phoneConflict] = await db
+            .select({ id: patientsTable.id })
+            .from(patientsTable)
+            .where(
+              and(
+                sql`regexp_replace(${patientsTable.phone}, '\\D', '', 'g') LIKE '%' || ${cleanDigits}`,
+                ne(patientsTable.id, existing.id)
+              )
+            )
+            .limit(1);
+
+          if (phoneConflict) {
+            res.status(409).json({
+              error: "phone_taken",
+              message: "This phone number is already registered to another patient. Please use a different phone number or search for the existing patient.",
+            });
+            return;
+          }
+        }
+      }
+
       // Update existing patient details (Name, Phone, Email, Age, Gender, Address)
       // Patient ID (patientCode) MUST NEVER CHANGE
       const updates: Record<string, any> = {
@@ -485,34 +527,54 @@ router.post("/offline", requireAdmin, async (req, res) => {
       return;
     }
   } else {
-    // No selected patient ID passed — check if phone number already exists
-    const existingByPhone = await findExistingPatientByPhoneOrEmail(formattedPhone, cleanEmail);
-    if (existingByPhone) {
-      // Phone number already belongs to a patient — reuse existing patient ID & update details
-      const updates: Record<string, any> = {
-        name: patientName.trim(),
-        phone: formattedPhone,
-        email: cleanEmail,
-        age: parsedAge,
-        gender: rawGender,
-      };
-      if (cleanAddress) {
-        updates.address = cleanAddress;
+    // Admin selected "New Patient" (selectedPatientId is NOT passed)
+
+    // 1. Check if the provided email already belongs to an existing patient
+    if (cleanEmail) {
+      const [existingByEmail] = await db
+        .select({ id: patientsTable.id })
+        .from(patientsTable)
+        .where(sql`lower(${patientsTable.email}) = ${cleanEmail}`)
+        .limit(1);
+
+      if (existingByEmail) {
+        res.status(409).json({
+          error: "email_taken",
+          message: "This email address is already registered to another patient. Please use a different email address or search for the existing patient.",
+        });
+        return;
       }
-      await db.update(patientsTable).set(updates).where(eq(patientsTable.id, existingByPhone.id));
-      patient = { ...existingByPhone, ...updates };
-    } else {
-      // Brand-new patient: allocate next unique Patient ID
-      const result = await findOrRegisterPatient({
-        name: patientName.trim(),
-        phone: formattedPhone,
-        email: cleanEmail,
-        age: parsedAge,
-        gender: rawGender,
-        address: cleanAddress,
-      });
-      patient = result.patient;
     }
+
+    // 2. Check if the provided phone number already belongs to an existing patient
+    if (formattedPhone) {
+      const cleanDigits = formattedPhone.replace(/\D/g, "").slice(-10);
+      if (cleanDigits.length === 10) {
+        const [existingByPhone] = await db
+          .select({ id: patientsTable.id })
+          .from(patientsTable)
+          .where(sql`regexp_replace(${patientsTable.phone}, '\\D', '', 'g') LIKE '%' || ${cleanDigits}`)
+          .limit(1);
+
+        if (existingByPhone) {
+          res.status(409).json({
+            error: "phone_taken",
+            message: "This phone number is already registered to another patient. Please use a different phone number or search for the existing patient.",
+          });
+          return;
+        }
+      }
+    }
+
+    // 3. Brand-new patient: allocate next unique Patient ID and insert atomically
+    patient = await registerNewPatientWithNextId({
+      name: patientName.trim(),
+      phone: formattedPhone,
+      email: cleanEmail,
+      age: parsedAge,
+      gender: rawGender,
+      address: cleanAddress,
+    });
   }
 
   if (!patient) {
