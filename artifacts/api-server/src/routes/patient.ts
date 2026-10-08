@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable } from "@workspace/db";
 import { eq, and, desc, ne, isNotNull, sql, or } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
@@ -994,6 +994,17 @@ router.post("/appointments", requirePatient, async (req, res) => {
     return;
   }
 
+  // Generate daily queue token (T001, T002, etc.) and 24-hour secure upload token
+  const existingCount = existingOffline.length;
+  const tokenStr = `T${String(existingCount + 1).padStart(3, "0")}`;
+  const uploadToken = randomBytes(32).toString("hex");
+
+  const notesObj = {
+    token: tokenStr,
+    patientCode: patient.patientCode,
+    uploadToken,
+  };
+
   const [appt] = await db.insert(appointmentsTable).values({
     patientId: patient.id,
     patientName,
@@ -1002,10 +1013,31 @@ router.post("/appointments", requirePatient, async (req, res) => {
     date,
     timeSlot,
     reason: reason ?? null,
+    notes: JSON.stringify(notesObj),
     status: "pending",
   }).returning();
 
-  const serialized = { ...appt, patientCode: patient.patientCode, createdAt: appt.createdAt?.toISOString() ?? null, arrivedAt: null };
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  await db.insert(offlineQrTokensTable).values({
+    token: uploadToken,
+    patientId: patient.id,
+    appointmentId: appt.id,
+    expiresAt,
+  });
+
+  const frontendUrl = getFrontendUrl(req);
+  const uploadUrl = `${frontendUrl}/portal/document-upload?token=${uploadToken}`;
+
+  const serialized = {
+    ...appt,
+    patientId: patient.id,
+    patientCode: patient.patientCode,
+    token: tokenStr,
+    uploadToken,
+    uploadUrl,
+    createdAt: appt.createdAt?.toISOString() ?? null,
+    arrivedAt: null
+  };
   notifyNewAppointment(serialized);
 
   const emailToUse = patient.email || appt.patientEmail;

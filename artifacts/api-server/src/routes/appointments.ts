@@ -766,14 +766,25 @@ router.post("/", async (req, res) => {
     if (existingPatient) {
       patientId = existingPatient.id;
       linkedPatientCode = existingPatient.patientCode ?? null;
+    } else {
+      const allocated = await registerNewPatientWithNextId({
+        name: data.patientName,
+        phone: data.patientPhone,
+        email: data.patientEmail,
+      });
+      patientId = allocated.id;
+      linkedPatientCode = allocated.patientCode ?? null;
     }
   }
+
+  const uploadToken = randomBytes(32).toString("hex");
 
   const notesObj: any = {
     ...(generatedToken ? { token: generatedToken, isOfflineRegister: true } : {}),
     ...(linkedPatientCode ? { patientCode: linkedPatientCode } : {}),
+    uploadToken,
   };
-  const notesPayload = Object.keys(notesObj).length > 0 ? JSON.stringify(notesObj) : null;
+  const notesPayload = JSON.stringify(notesObj);
 
   const [appointment] = await db
     .insert(appointmentsTable)
@@ -790,9 +801,22 @@ router.post("/", async (req, res) => {
     })
     .returning();
 
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  await db.insert(offlineQrTokensTable).values({
+    token: uploadToken,
+    patientId,
+    appointmentId: appointment.id,
+    expiresAt,
+  });
+
+  const frontendUrl = getFrontendUrl(req);
+  const uploadUrl = `${frontendUrl}/portal/document-upload?token=${uploadToken}`;
+
   const serialized = {
     ...serializeAppt(appointment),
     ...(linkedPatientCode ? { patientCode: linkedPatientCode } : {}),
+    uploadToken,
+    uploadUrl,
   };
   notifyNewAppointment(serialized);
 
@@ -1066,6 +1090,46 @@ router.delete("/:id", requireAdmin, async (req, res) => {
   res.status(204).send();
 });
 
+async function resolveQrRecord(rawToken: string) {
+  if (!rawToken || typeof rawToken !== "string") return null;
+  const tokenStr = rawToken.trim();
+
+  // 1. Direct lookup in offlineQrTokensTable
+  let [qrRecord] = await db
+    .select()
+    .from(offlineQrTokensTable)
+    .where(eq(offlineQrTokensTable.token, tokenStr));
+
+  if (qrRecord) return qrRecord;
+
+  // 2. Fallback lookup by appointment ID or notes payload
+  let candidateAppt: any = null;
+  const numId = parseInt(tokenStr, 10);
+  if (!isNaN(numId) && numId > 0) {
+    [candidateAppt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, numId));
+  }
+  if (!candidateAppt) {
+    const [byNotes] = await db.select().from(appointmentsTable).where(sql`notes LIKE '%' || ${tokenStr} || '%'`);
+    candidateAppt = byNotes;
+  }
+
+  if (candidateAppt && candidateAppt.patientId) {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const [inserted] = await db
+      .insert(offlineQrTokensTable)
+      .values({
+        token: tokenStr,
+        patientId: candidateAppt.patientId,
+        appointmentId: candidateAppt.id,
+        expiresAt,
+      })
+      .returning();
+    return inserted;
+  }
+
+  return null;
+}
+
 // ── Temporary QR Code Medical Document Upload Verification ─────
 router.get([
   "/upload-documents",
@@ -1081,10 +1145,7 @@ router.get([
     return;
   }
 
-  const [qrRecord] = await db
-    .select()
-    .from(offlineQrTokensTable)
-    .where(eq(offlineQrTokensTable.token, token));
+  const qrRecord = await resolveQrRecord(token);
 
   if (!qrRecord) {
     res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
@@ -1147,10 +1208,7 @@ router.post([
     return;
   }
 
-  const [qrRecord] = await db
-    .select()
-    .from(offlineQrTokensTable)
-    .where(eq(offlineQrTokensTable.token, token));
+  const qrRecord = await resolveQrRecord(token);
 
   if (!qrRecord) {
     res.status(404).json({ error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });

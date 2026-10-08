@@ -176,6 +176,44 @@ describe("Offline Patient Registration & Existing Patient Reuse Logic", () => {
     await db.delete(offlineQrTokensTable).where(eq(offlineQrTokensTable.id, inserted.id));
     await db.delete(appointmentsTable).where(eq(appointmentsTable.id, testAppt.id));
   });
+
+  test("11. Patient Portal booking generates a valid QR token linked to existing permanent Patient ID", async () => {
+    const { offlineQrTokensTable } = await import("@workspace/db");
+    const { randomBytes } = await import("crypto");
+
+    const uploadToken = randomBytes(32).toString("hex");
+    const notesObj = { token: "T005", uploadToken };
+
+    const [appt] = await db.insert(appointmentsTable).values({
+      patientId: testPatientId1,
+      patientName: "Ramesh Kumar Test",
+      patientPhone: testPhone1,
+      date: "2026-10-08",
+      timeSlot: "10 AM - 1 PM",
+      notes: JSON.stringify(notesObj),
+      status: "pending",
+    }).returning();
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const [tokenRecord] = await db.insert(offlineQrTokensTable).values({
+      token: uploadToken,
+      patientId: testPatientId1,
+      appointmentId: appt.id,
+      expiresAt,
+    }).returning();
+
+    assert.equal(tokenRecord.token, uploadToken);
+    assert.equal(tokenRecord.patientId, testPatientId1);
+    assert.equal(tokenRecord.appointmentId, appt.id);
+
+    // Verify lookup by token in database
+    const [found] = await db.select().from(offlineQrTokensTable).where(eq(offlineQrTokensTable.token, uploadToken));
+    assert.ok(found);
+    assert.equal(found.patientId, testPatientId1);
+
+    await db.delete(offlineQrTokensTable).where(eq(offlineQrTokensTable.id, tokenRecord.id));
+    await db.delete(appointmentsTable).where(eq(appointmentsTable.id, appt.id));
+  });
 });
 
 
