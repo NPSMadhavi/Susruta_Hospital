@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, useSearch } from "wouter";
 import {
   Upload,
   Camera,
@@ -35,10 +35,16 @@ interface UploadedDocItem {
 }
 
 export default function OfflineUploadPage() {
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const tokenFromQuery = searchParams.get("token") || "";
+
   const [, paramsMain] = useRoute("/upload-documents/:token");
   const [, paramsAlt1] = useRoute("/patient/offline-upload/:token");
   const [, paramsAlt2] = useRoute("/portal/offline-upload/:token");
-  const token = paramsMain?.token || paramsAlt1?.token || paramsAlt2?.token || "";
+  const [, paramsDocUpload] = useRoute("/portal/document-upload/:token");
+  const token = paramsDocUpload?.token || paramsMain?.token || paramsAlt1?.token || paramsAlt2?.token || tokenFromQuery || "";
+
   const [, navigate] = useLocation();
 
   const [loading, setLoading] = useState(true);
@@ -55,7 +61,7 @@ export default function OfflineUploadPage() {
 
   useEffect(() => {
     if (!token) {
-      setErrorMsg("This medical document upload link is invalid. Please contact the hospital for assistance.");
+      setErrorMsg("Please scan the QR code provided by Susruta Hospital.");
       setLoading(false);
       return;
     }
@@ -91,6 +97,21 @@ export default function OfflineUploadPage() {
     try {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
+
+        if (file.size === 0) {
+          throw new Error(`File "${file.name}" is empty (0 bytes). Please select a valid document.`);
+        }
+
+        if (file.size > 25 * 1024 * 1024) {
+          throw new Error(`File "${file.name}" exceeds the maximum allowed limit of 25MB.`);
+        }
+
+        const allowedMime = [
+          "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"
+        ];
+        if (file.type && !allowedMime.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|webp|heic|pdf)$/i)) {
+          throw new Error(`File "${file.name}" has an unsupported format. Please upload PDF or image files (JPEG, PNG, WEBP).`);
+        }
 
         // 1. Request upload URL from storage endpoint
         const reqRes = await fetch(`${API_BASE}/storage/uploads/request-url`, {
@@ -239,13 +260,15 @@ export default function OfflineUploadPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                {isExpired ? "Upload Link Expired" : "Invalid Upload Link"}
+                {!token ? "Invalid or Missing Upload Link" : isExpired ? "Upload Link Expired" : "Invalid Upload Link"}
               </h2>
               <p className="text-sm text-slate-600 mt-1 max-w-md mx-auto">
-                {errorMsg ||
-                  (isExpired
-                    ? "This medical document upload link has expired. Please contact the hospital or request a new QR code."
-                    : "This medical document upload link is invalid. Please contact the hospital for assistance.")}
+                {!token
+                  ? "Please scan the QR code provided by Susruta Hospital."
+                  : errorMsg ||
+                    (isExpired
+                      ? "This medical document upload link has expired. Please contact the hospital or request a new QR code."
+                      : "This medical document upload link is invalid. Please contact the hospital for assistance.")}
               </p>
             </div>
             <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-500 font-medium">
@@ -253,7 +276,7 @@ export default function OfflineUploadPage() {
             </div>
             <button
               type="button"
-              onClick={() => (window.location.href = "/portal/login")}
+              onClick={() => navigate("/portal/login")}
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all cursor-pointer mx-auto"
             >
               <span>Continue to Patient Login</span>
@@ -334,7 +357,7 @@ export default function OfflineUploadPage() {
                   </div>
                   <div className="text-center">
                     <span className="block text-sm font-bold text-slate-900 group-hover:text-[#D95B2F] transition-colors">
-                      📷 Take a Picture
+                      📷 Take Photo
                     </span>
                     <span className="block text-[11px] text-slate-500 mt-0.5">
                       Use camera to photograph document
@@ -353,7 +376,7 @@ export default function OfflineUploadPage() {
                   </div>
                   <div className="text-center">
                     <span className="block text-sm font-bold text-slate-900 transition-colors">
-                      📁 Upload from Device
+                      📁 Upload Document
                     </span>
                     <span className="block text-[11px] text-slate-500 mt-0.5">
                       Select photos or PDF files from device
@@ -374,7 +397,7 @@ export default function OfflineUploadPage() {
               {uploadedFiles.length > 0 && (
                 <div className="space-y-2.5 pt-2 border-t border-slate-100">
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Uploaded Documents ({uploadedFiles.length})
+                    Selected / Uploaded Documents ({uploadedFiles.length})
                   </h3>
                   <div className="space-y-2">
                     {uploadedFiles.map((doc, idx) => (
@@ -401,13 +424,21 @@ export default function OfflineUploadPage() {
 
               {/* Upload Success Banner */}
               {uploadSuccess && (
-                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-emerald-800 text-sm">
-                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-                    <span>✓ Documents Uploaded Successfully</span>
+                <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center gap-2.5 font-bold text-emerald-800 text-sm sm:text-base">
+                    <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+                    <span>Documents Uploaded Successfully</span>
                   </div>
-                  <p className="text-emerald-700">
-                    Your medical documents have been securely associated with your patient record.
+                  <p className="text-emerald-700 text-xs leading-relaxed">
+                    Your medical documents have been uploaded successfully.
+                  </p>
+                  {tokenInfo?.patientCode && (
+                    <div className="bg-white/80 border border-emerald-200 rounded-xl px-3 py-1.5 inline-block font-mono text-xs font-bold text-emerald-950">
+                      Patient ID: <span className="text-[#D95B2F]">{tokenInfo.patientCode}</span>
+                    </div>
+                  )}
+                  <p className="text-emerald-700 text-xs font-medium">
+                    You can now sign in to the Patient Portal to view your records.
                   </p>
                 </div>
               )}
@@ -421,7 +452,7 @@ export default function OfflineUploadPage() {
 
                 <button
                   type="button"
-                  onClick={() => (window.location.href = "/portal/login")}
+                  onClick={() => navigate("/portal/login")}
                   className="w-full sm:w-auto px-6 py-2.5 bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Continue to Patient Login</span>
@@ -435,3 +466,4 @@ export default function OfflineUploadPage() {
     </div>
   );
 }
+

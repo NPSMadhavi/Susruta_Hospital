@@ -1004,8 +1004,15 @@ router.delete("/:id", requireAdmin, async (req, res) => {
 });
 
 // ── Temporary QR Code Medical Document Upload Verification ─────
-router.get(["/upload-documents/:token", "/patient/offline-upload/:token"], async (req, res) => {
-  const { token } = req.params;
+router.get([
+  "/upload-documents",
+  "/upload-documents/:token",
+  "/patient/offline-upload/:token",
+  "/portal/offline-upload/:token",
+  "/portal/document-upload",
+  "/portal/document-upload/:token"
+], async (req, res) => {
+  const token = (req.params.token || req.query.token) as string;
   if (!token || typeof token !== "string") {
     res.status(400).json({ valid: false, error: "invalid_token", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
@@ -1056,8 +1063,15 @@ router.get(["/upload-documents/:token", "/patient/offline-upload/:token"], async
 });
 
 // ── Temporary QR Code Medical Document Upload Submission ────────
-router.post(["/upload-documents/:token/documents", "/patient/offline-upload/:token/documents"], async (req, res) => {
-  const { token } = req.params;
+router.post([
+  "/upload-documents/documents",
+  "/upload-documents/:token/documents",
+  "/patient/offline-upload/:token/documents",
+  "/portal/offline-upload/:token/documents",
+  "/portal/document-upload/documents",
+  "/portal/document-upload/:token/documents"
+], async (req, res) => {
+  const token = (req.params.token || req.query.token || req.body.token) as string;
   const { name, objectPath, contentType, size } = req.body;
 
   if (!token || typeof token !== "string") {
