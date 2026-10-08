@@ -612,7 +612,7 @@ export default function AdminOfflineRegister() {
                   )}
                 </div>
 
-                {errorMsg && (
+                {errorMsg && !errorMsg.toLowerCase().includes("phone") && !errorMsg.toLowerCase().includes("email") && (
                   <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-medium text-red-600">
                     {errorMsg}
                   </div>
@@ -1048,7 +1048,8 @@ export default function AdminOfflineRegister() {
                           !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, "")) ||
                           !age.trim() ||
                           !gender.trim() ||
-                          isSubmitting
+                          isSubmitting ||
+                          Boolean(errorMsg)
                         }
                         className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold tracking-wide shadow-xs transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-[#D95B2F] cursor-pointer"
                       >
