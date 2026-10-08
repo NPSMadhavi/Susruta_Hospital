@@ -572,7 +572,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
     expiresAt,
   });
 
-  const uploadUrl = `/patient/offline-upload/${uploadToken}`;
+  const uploadUrl = `/upload-documents/${uploadToken}`;
 
   const serialized = {
     ...serializeAppt(appointment),
@@ -593,16 +593,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
 
   notifyNewAppointment(serialized);
 
-  if (cleanEmail) {
-    sendAppointmentAckEmail({
-      to: cleanEmail,
-      patientName: patientName.trim(),
-      type: "offline",
-      date,
-      timeSlot,
-      reason: "Offline Walk-in Registration",
-    }).catch((err) => console.error("[email] offline ack failed:", err));
-  }
+  console.log(`[appointment-email] source: admin_offline_registration type: offline email: skipped`);
 
   res.status(201).json(serialized);
 });
@@ -744,6 +735,7 @@ router.post("/", async (req, res) => {
 
   // Send acknowledgement email if patient provided email (fire and forget)
   if (data.patientEmail) {
+    console.log(`[appointment-email] source: patient_request type: offline email: sending to ${data.patientEmail}`);
     sendAppointmentAckEmail({
       to: data.patientEmail,
       patientName: data.patientName,
@@ -1012,10 +1004,10 @@ router.delete("/:id", requireAdmin, async (req, res) => {
 });
 
 // ── Temporary QR Code Medical Document Upload Verification ─────
-router.get("/patient/offline-upload/:token", async (req, res) => {
+router.get(["/upload-documents/:token", "/patient/offline-upload/:token"], async (req, res) => {
   const { token } = req.params;
   if (!token || typeof token !== "string") {
-    res.status(400).json({ valid: false, error: "invalid_token", message: "Upload token is required." });
+    res.status(400).json({ valid: false, error: "invalid_token", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
   }
 
@@ -1025,7 +1017,7 @@ router.get("/patient/offline-upload/:token", async (req, res) => {
     .where(eq(offlineQrTokensTable.token, token));
 
   if (!qrRecord) {
-    res.status(404).json({ valid: false, error: "not_found", message: "Invalid or non-existent QR upload token." });
+    res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
   }
 
@@ -1033,7 +1025,7 @@ router.get("/patient/offline-upload/:token", async (req, res) => {
     res.status(410).json({
       valid: false,
       error: "expired",
-      message: "QR Code Expired. This upload link has expired. Please contact Susruta Hospital for assistance."
+      message: "This medical document upload link has expired. Please contact the hospital or request a new QR code."
     });
     return;
   }
@@ -1042,7 +1034,7 @@ router.get("/patient/offline-upload/:token", async (req, res) => {
   const [appointment] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, qrRecord.appointmentId));
 
   if (!patient || !appointment) {
-    res.status(404).json({ valid: false, error: "not_found", message: "Associated patient or appointment record not found." });
+    res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
   }
 
@@ -1064,12 +1056,12 @@ router.get("/patient/offline-upload/:token", async (req, res) => {
 });
 
 // ── Temporary QR Code Medical Document Upload Submission ────────
-router.post("/patient/offline-upload/:token/documents", async (req, res) => {
+router.post(["/upload-documents/:token/documents", "/patient/offline-upload/:token/documents"], async (req, res) => {
   const { token } = req.params;
   const { name, objectPath, contentType, size } = req.body;
 
   if (!token || typeof token !== "string") {
-    res.status(400).json({ error: "invalid_token", message: "Upload token is required." });
+    res.status(400).json({ error: "invalid_token", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
   }
 
@@ -1084,14 +1076,14 @@ router.post("/patient/offline-upload/:token/documents", async (req, res) => {
     .where(eq(offlineQrTokensTable.token, token));
 
   if (!qrRecord) {
-    res.status(404).json({ error: "not_found", message: "Invalid or non-existent QR upload token." });
+    res.status(404).json({ error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
     return;
   }
 
   if (qrRecord.expiresAt < new Date()) {
     res.status(410).json({
       error: "expired",
-      message: "QR Code Expired. This upload link has expired. Please contact Susruta Hospital for assistance."
+      message: "This medical document upload link has expired. Please contact the hospital or request a new QR code."
     });
     return;
   }

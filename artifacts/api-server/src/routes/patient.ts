@@ -5,7 +5,7 @@ import {
   createPatientSession, deletePatientSession, requirePatient,
   verifyPatientSession, hashPassword, verifyPassword,
 } from "../lib/patient-auth";
-import { sendMagicLink, sendPasswordResetEmail, sendProfileEmailOtp, sendEmailChangeNotification } from "../lib/email";
+import { sendMagicLink, sendPasswordResetEmail, sendProfileEmailOtp, sendEmailChangeNotification, sendAppointmentAckEmail } from "../lib/email";
 import { sendMobileOtp } from "../lib/sms";
 import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes, randomInt, createHash, timingSafeEqual } from "crypto";
@@ -127,27 +127,36 @@ function serializePatient(p: any) {
 }
 
 function getFrontendUrl(req: any) {
-  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.replace(/\/$/, "");
+  if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "null") return process.env.FRONTEND_URL.replace(/\/$/, "");
 
   const referer = req.get("referer") || req.get("origin");
-  if (referer) {
+  if (referer && referer !== "null") {
     try {
       const u = new URL(referer);
-      return u.origin;
+      if (u.origin && u.origin !== "null") return u.origin;
     } catch {}
   }
 
   if (process.env.REPLIT_DEPLOYMENT === "1") {
-    return process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    return (process.env.APP_URL && process.env.APP_URL !== "null")
+      ? process.env.APP_URL.replace(/\/$/, "")
+      : `${req.protocol}://${req.get("host")}`;
   }
   const domain = process.env.REPLIT_DEV_DOMAIN;
-  if (domain) return `https://${domain}`;
+  if (domain && domain !== "null") return `https://${domain}`;
+
+  if (process.env.APP_URL && process.env.APP_URL !== "null") {
+    return process.env.APP_URL.replace(/\/$/, "");
+  }
 
   const host = req.get("host") || "";
-  if (host.includes(":5000")) {
+  if (host && host.includes(":5000")) {
     return `${req.protocol}://${host.replace(":5000", ":5173")}`;
   }
-  return `${req.protocol}://${host}`;
+  if (host) {
+    return `${req.protocol}://${host}`;
+  }
+  return "https://demo.susrutahospital.com";
 }
 
 // ── Register ───────────────────────────────────────────────────
@@ -218,7 +227,7 @@ router.post("/auth/register", async (req, res) => {
   await db.insert(loginTokensTable).values({
     token,
     patientId: patient.id,
-    nextUrl: "/portal/dashboard",
+    nextUrl: "/portal/dashboard?verified=true",
     verificationEmail: normalizeVerificationEmail(email),
     expiresAt,
     used: false,
@@ -316,7 +325,11 @@ router.get("/auth/verify", async (req, res) => {
 
   const sessionToken = await createPatientSession(row.patientId);
   res.cookie("patient_session", sessionToken, cookieOpts());
-  res.redirect(`${frontendUrl}${row.nextUrl ?? "/portal/dashboard"}`);
+  const targetPath = row.nextUrl || "/portal/dashboard?verified=true";
+  const redirectUrl = targetPath.startsWith("http")
+    ? targetPath
+    : `${frontendUrl}${targetPath.startsWith("/") ? "" : "/"}${targetPath}`;
+  res.redirect(redirectUrl);
 });
 
 // ── Resend Verification Email ─────────────────────────────────
@@ -994,6 +1007,19 @@ router.post("/appointments", requirePatient, async (req, res) => {
 
   const serialized = { ...appt, patientCode: patient.patientCode, createdAt: appt.createdAt?.toISOString() ?? null, arrivedAt: null };
   notifyNewAppointment(serialized);
+
+  const emailToUse = patient.email || appt.patientEmail;
+  if (emailToUse) {
+    console.log(`[appointment-email] source: patient_request type: offline email: sending to ${emailToUse}`);
+    sendAppointmentAckEmail({
+      to: emailToUse,
+      patientName,
+      type: "offline",
+      date,
+      timeSlot,
+      reason: reason ?? undefined,
+    }).catch((err) => console.error("[email] offline ack failed:", err));
+  }
 
   res.status(201).json(serialized);
 });

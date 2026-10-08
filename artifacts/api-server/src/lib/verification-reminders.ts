@@ -117,7 +117,7 @@ export async function sendVerificationReminders(now = new Date()): Promise<void>
         const [verificationToken] = await db.insert(loginTokensTable).values({
           token,
           patientId: candidate.id,
-          nextUrl: "/portal/dashboard",
+          nextUrl: "/portal/dashboard?verified=true",
           verificationEmail: normalizeVerificationEmail(candidateEmail),
           expiresAt,
           used: false,
@@ -357,12 +357,15 @@ async function finalizeStalePendingDispatches(claimCutoff: Date) {
 }
 
 function getVerificationFrontendUrl(): string {
+  if (process.env.APP_URL && process.env.APP_URL.trim() && process.env.APP_URL !== "null") {
+    return process.env.APP_URL.trim().replace(/\/+$/, "");
+  }
   if (process.env.REPLIT_DEPLOYMENT === "1") {
-    return process.env.APP_URL || "https://susrutahospital.com";
+    return "https://demo.susrutahospital.com";
   }
   const domain = process.env.REPLIT_DEV_DOMAIN;
-  if (domain) return `https://${domain}`;
-  return process.env.APP_URL || "https://susrutahospital.com";
+  if (domain && domain !== "null") return `https://${domain}`;
+  return "https://demo.susrutahospital.com";
 }
 
 export function startVerificationReminderWorker(): () => void {

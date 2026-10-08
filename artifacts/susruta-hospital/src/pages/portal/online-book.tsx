@@ -10,6 +10,7 @@ import { isSlotExceeded } from "@/lib/ist";
 import logoImg from "@assets/logo_1773840200056.png";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
 import { MathCaptcha } from "@/components/MathCaptcha";
+import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -72,7 +73,7 @@ export default function OnlineBook() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function uploadFiles(files: FileList) {
+  async function uploadFiles(files: FileList | File[]) {
     setUploading(true);
     setError("");
     const newDocs: UploadedDoc[] = [];
@@ -353,17 +354,12 @@ export default function OnlineBook() {
                   <p className="leading-relaxed">Dr. Murali Krishna reviews your medical history, reports, and current prescriptions before the consultation to provide the best Ayurvedic guidance.</p>
                 </div>
 
-                {/* Drop zone */}
-                <div
-                  className="border-2 border-dashed border-border rounded-2xl p-8 text-center bg-white hover:border-primary/50 hover:bg-primary/5 transition-colors cursor-pointer"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload size={36} className="mx-auto mb-3 text-muted-foreground/40" />
-                  <p className="font-semibold text-foreground mb-1">Click to upload files</p>
-                  <p className="text-sm text-muted-foreground">PDF, JPG, PNG, DOCX accepted · Max 10 MB each</p>
-                  <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                    className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                </div>
+                {/* Unified Medical Document Uploader */}
+                <MedicalDocumentUploader
+                  mode="cards"
+                  isUploading={uploading}
+                  onUploadFiles={uploadFiles}
+                />
 
                 {uploading && (
                   <div className="flex items-center gap-2 text-primary text-sm">

@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "path";
+import fs from "fs";
 import router from "./routes";
 
 const app: Express = express();
@@ -35,10 +36,46 @@ app.use("/api", router);
 // etc.
 // ------------------------------------------------------------
 
-const frontendDistPath = path.resolve(
-  process.cwd(),
-  "artifacts/susruta-hospital/dist/public",
-);
+const frontendDistPath = (() => {
+  const candidates = [
+    path.resolve(import.meta.dirname, "../susruta-hospital/dist/public"),
+    path.resolve(import.meta.dirname, "../../susruta-hospital/dist/public"),
+    path.resolve(process.cwd(), "Susruta_Hospital/artifacts/susruta-hospital/dist/public"),
+    path.resolve(process.cwd(), "artifacts/susruta-hospital/dist/public"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return path.resolve(process.cwd(), "artifacts/susruta-hospital/dist/public");
+})();
+
+// ------------------------------------------------------------
+// PUBLIC LOGO ROUTE
+// ------------------------------------------------------------
+app.get(["/logo.png", "/assets/logo.png"], (_req, res) => {
+  const candidatePaths = [
+    path.resolve(frontendDistPath, "logo.png"),
+    path.resolve(import.meta.dirname, "../susruta-hospital/dist/public/logo.png"),
+    path.resolve(import.meta.dirname, "../../susruta-hospital/dist/public/logo.png"),
+    path.resolve(import.meta.dirname, "../susruta-hospital/public/logo.png"),
+    path.resolve(import.meta.dirname, "../../susruta-hospital/public/logo.png"),
+    path.resolve(import.meta.dirname, "lib/assets/logo.png"),
+    path.resolve(import.meta.dirname, "../src/lib/assets/logo.png"),
+    path.resolve(process.cwd(), "Susruta_Hospital/artifacts/susruta-hospital/dist/public/logo.png"),
+    path.resolve(process.cwd(), "Susruta_Hospital/artifacts/susruta-hospital/public/logo.png"),
+    path.resolve(process.cwd(), "Susruta_Hospital/artifacts/api-server/src/lib/assets/logo.png"),
+    path.resolve(process.cwd(), "artifacts/susruta-hospital/dist/public/logo.png"),
+    path.resolve(process.cwd(), "artifacts/susruta-hospital/public/logo.png"),
+    path.resolve(process.cwd(), "artifacts/api-server/src/lib/assets/logo.png"),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      res.setHeader("Content-Type", "image/png");
+      return res.sendFile(p);
+    }
+  }
+  return res.status(404).send("Logo not found");
+});
 
 // Serve frontend static files
 app.use(express.static(frontendDistPath));

@@ -173,9 +173,9 @@ export default function PortalLogin() {
   const selectCls = "w-full pl-9 pr-4 py-3 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none";
 
   return (
-    <div className="min-h-screen flex font-sans font-['DM_Sans',sans-serif]">
+    <div className="min-h-screen flex flex-col lg:flex-row lg:h-screen lg:overflow-hidden font-sans font-['DM_Sans',sans-serif]">
       {/* Left panel — desktop only */}
-      <div className="hidden lg:flex lg:w-[48%] relative overflow-hidden flex-col items-center justify-center p-14 text-white"
+      <div className="hidden lg:flex lg:w-1/2 lg:h-screen shrink-0 relative overflow-hidden flex-col items-center justify-center p-14 text-white"
         style={{
           backgroundImage: "url('/portal_login.png')",
           backgroundSize: "cover",
@@ -247,14 +247,14 @@ export default function PortalLogin() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex flex-col min-h-screen bg-gradient-to-br from-white via-green-50/20 to-white">
+      <div className="flex-1 lg:w-1/2 flex flex-col min-h-screen lg:min-h-0 lg:h-screen lg:overflow-y-auto lg:overflow-x-hidden bg-gradient-to-br from-white via-green-50/20 to-white">
         <div className="lg:hidden bg-[#D95B2F] py-4 px-5 flex items-center gap-2.5">
           <Leaf size={18} className="text-white" />
           <span className="text-white font-semibold text-sm">Patient Portal</span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-[440px]">
+        <div className="flex-1 flex flex-col items-center min-h-full p-6 py-8 lg:py-10">
+          <div className="w-full max-w-[440px] my-auto">
             <div className="text-center mb-7">
               <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto object-contain mx-auto mb-4" />
               <p className="text-muted-foreground text-sm mb-10">Patient Portal</p>

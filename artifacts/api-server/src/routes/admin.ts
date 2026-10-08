@@ -385,7 +385,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
         await tx.insert(loginTokensTable).values({
           token: verificationToken,
           patientId: id,
-          nextUrl: "/portal/dashboard",
+          nextUrl: "/portal/dashboard?verified=true",
           verificationEmail: normalizeVerificationEmail(email),
           expiresAt: verificationExpiresAt,
           used: false,
@@ -482,7 +482,7 @@ router.post("/patients/:id/resend-verification", requireAdmin, async (req, res) 
   await db.insert(loginTokensTable).values({
     token,
     patientId: id,
-    nextUrl: "/portal/dashboard",
+    nextUrl: "/portal/dashboard?verified=true",
     verificationEmail: normalizeVerificationEmail(patient.email),
     expiresAt,
     used: false,

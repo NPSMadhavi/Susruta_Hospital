@@ -17,6 +17,7 @@ import { BookingWizard } from "./BookingWizard";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
 import PatientProfile from "@/components/portal/PatientProfile";
+import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -701,6 +702,12 @@ export default function PatientDashboard() {
     }
   }
 
+  async function uploadPatientDocs(files: FileList | File[]) {
+    for (let i = 0; i < files.length; i++) {
+      await uploadPatientDoc(files[i]);
+    }
+  }
+
   async function deletePatientDoc(id: number) {
     setDeletingDocId(id);
     try {
@@ -718,23 +725,6 @@ export default function PatientDashboard() {
       }
     } finally {
       setDeletingDocId(null);
-    }
-  }
-
-  if (loading && !patient) {
-    return (
-      <div className="min-h-screen bg-[#f8faf9] flex items-center justify-center">
-        <div className="text-center">
-          <img src={logoImg} alt="Logo" className="h-10 mx-auto mb-4 opacity-60" />
-          <div className="w-6 h-6 border-2 border-[#D95B2F] border-t-transparent rounded-full animate-spin mx-auto" />
-        </div>
-      </div>
-    );
-  }
-
-  async function uploadPatientDocs(files: FileList) {
-    for (let i = 0; i < files.length; i++) {
-      await uploadPatientDoc(files[i]);
     }
   }
 
@@ -1395,17 +1385,11 @@ export default function PatientDashboard() {
                   <Search size={17} className="shrink-0 text-[#62685f]" />
                   <input type="search" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)} aria-label="Search documents by file name or patient ID" placeholder="Search by file name, patient ID....." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
                 </label>
-              <label className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95 cursor-pointer">
-                <Upload size={16} /> Upload Document
-                <input
-                  ref={docFileRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={e => { if (e.target.files?.length) { uploadPatientDocs(e.target.files); e.target.value = ""; } }}
-                />
-              </label>
+              <MedicalDocumentUploader
+                mode="popover"
+                isUploading={uploadingCount > 0}
+                onUploadFiles={uploadPatientDocs}
+              />
               </div>
             </div>
             <section aria-labelledby="recent-documents-heading">

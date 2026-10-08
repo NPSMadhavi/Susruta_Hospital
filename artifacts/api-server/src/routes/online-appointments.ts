@@ -102,6 +102,7 @@ router.post("/", requirePatient, async (req: any, res) => {
 
   // Send acknowledgement email (fire and forget)
   if (patient.email) {
+    console.log(`[appointment-email] source: patient_request type: online email: sending to ${patient.email}`);
     sendAppointmentAckEmail({
       to: patient.email,
       patientName: patient.name,

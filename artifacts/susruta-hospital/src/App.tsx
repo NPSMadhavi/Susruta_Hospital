@@ -72,6 +72,7 @@ function Router() {
       <Route path="/portal/dashboard" component={PatientDashboard} />
       <Route path="/portal/book" component={PortalBook} />
       <Route path="/portal/online-book" component={OnlineBook} />
+      <Route path="/upload-documents/:token" component={OfflineUploadPage} />
       <Route path="/patient/offline-upload/:token" component={OfflineUploadPage} />
       <Route path="/portal/offline-upload/:token" component={OfflineUploadPage} />
 

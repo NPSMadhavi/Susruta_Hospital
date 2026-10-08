@@ -4,27 +4,17 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { db, siteSettingsTable, patientsTable } from "@workspace/db";
 
-// ── Inline logo for emails (CID attachment — works in Gmail, Outlook, Apple Mail) ──
-const LOGO_CID = "logo@susrutahospital.com";
-const LOGO_PATH = (() => {
-  try {
-    const p = join(process.cwd(), "src", "lib", "assets", "logo.png");
-    readFileSync(p); // verify it exists at startup
-    return p;
-  } catch (e) {
-    console.warn("[email] Logo asset not found:", (e as Error).message);
-    return null;
+// ── Public Logo URL for emails ──────────────────────────────
+export function getLogoUrl(): string {
+  let base = getBaseUrl();
+  if (base.includes("localhost") || base.includes("127.0.0.1")) {
+    base = "https://demo.susrutahospital.com";
   }
-})();
+  return `${base}/logo.png`;
+}
 
 function logoAttachments(): import("nodemailer/lib/mailer").Attachment[] {
-  if (!LOGO_PATH) return [];
-  return [{
-    filename: "logo.png",
-    path: LOGO_PATH,
-    cid: LOGO_CID,
-    contentDisposition: "inline",
-  }];
+  return [];
 }
 
 // ── Load SMTP config from DB (env vars as fallback) ───────────
@@ -97,15 +87,17 @@ function senderStr(name: string, email: string) {
   return `${name} <${email}>`;
 }
 
-// ── Base URL (for unsubscribe links) ─────────────────────────
+// ── Base URL (for email links and logo asset) ────────────────
 function getBaseUrl(): string {
-  // In a deployed environment, never use the dev preview URL
+  if (process.env.APP_URL && process.env.APP_URL.trim() && process.env.APP_URL !== "null") {
+    return process.env.APP_URL.trim().replace(/\/+$/, "");
+  }
   if (process.env.REPLIT_DEPLOYMENT === "1") {
-    return process.env.APP_URL || "https://susrutahospital.com";
+    return "https://demo.susrutahospital.com";
   }
   const domain = process.env.REPLIT_DEV_DOMAIN;
-  if (domain) return `https://${domain}`;
-  return process.env.APP_URL || "https://susrutahospital.com";
+  if (domain && domain !== "null") return `https://${domain}`;
+  return "https://demo.susrutahospital.com";
 }
 
 // ── Unsubscribe token (HMAC-SHA256, no DB needed) ─────────────
@@ -183,18 +175,12 @@ const EMAIL_FOOTER_HTML = `
   </tr>`;
 
 function emailWrapper(content: string) {
-  const logoHeader = LOGO_PATH
-    ? `<tr>
+  const logoUrl = getLogoUrl();
+  const logoHeader = `<tr>
           <td style="background:#ffffff;padding:28px 36px 20px;text-align:center;border-bottom:4px solid #1a3d2b;">
-            <img src="cid:${LOGO_CID}" alt="Susruta Hospital" width="240" height="27"
+            <img src="${logoUrl}" alt="Susruta Hospital" width="240" height="27"
               style="display:block;margin:0 auto;max-width:240px;height:auto;border:0;" />
             <p style="color:#6b7280;margin:8px 0 0;font-size:11px;font-family:Arial,sans-serif;letter-spacing:0.5px;">Authentic Ayurvedic Healthcare &middot; Tirupati</p>
-          </td>
-        </tr>`
-    : `<tr>
-          <td style="background:#1a3d2b;padding:32px;text-align:center;border-bottom:4px solid #0f2419;">
-            <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:bold;letter-spacing:0.5px;font-family:Arial,sans-serif;">SUSRUTA HOSPITAL</h1>
-            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0;font-size:12px;font-family:Arial,sans-serif;">Authentic Ayurvedic Healthcare &middot; Tirupati</p>
           </td>
         </tr>`;
 
@@ -689,7 +675,7 @@ export async function sendAppointmentAckEmail(opts: {
     return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
   }
 
-  const typeLabel = type === "online" ? "Online Consultation" : "In-Person Visit";
+  const typeLabel = type === "online" ? "Online Consultation" : "Offline Consultation";
   const timeStr = type === "online" && slotStartTime && slotEndTime
     ? `${fmtTime(slotStartTime)} – ${fmtTime(slotEndTime)}`
     : timeSlot ?? "";

@@ -190,7 +190,7 @@ export default function AdminOfflineRegister() {
     if (!bookingResult) return;
     const tokenStr = bookingResult.uploadToken || "";
     const uploadFullUrl = tokenStr
-      ? `${window.location.origin}/patient/offline-upload/${tokenStr}`
+      ? `${window.location.origin}/upload-documents/${tokenStr}`
       : `${window.location.origin}/portal`;
 
     QRCode.toDataURL(uploadFullUrl, {

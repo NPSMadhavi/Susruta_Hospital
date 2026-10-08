@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded } from "@/lib/ist";
+import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
 import {
   useListOpenMonths,
   useGetAvailability,
@@ -375,7 +376,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
     }
   }
 
-  async function uploadFiles(files: FileList) {
+  async function uploadFiles(files: FileList | File[]) {
     setUploading(true);
     setOnlineError("");
     for (const file of Array.from(files)) {
@@ -917,19 +918,12 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     Attach any medical reports, test results, or prescriptions for this consultation. You can also skip this step.
                   </p>
 
-                  {/* Upload zone */}
-                  <div onClick={() => fileRef.current?.click()}
-                    className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center bg-gray-50 hover:border-red-400 hover:bg-red-50 transition-colors cursor-pointer mb-3 flex flex-col items-center justify-center">
-                    {uploading
-                      ? <div className="flex items-center gap-2 text-blue-600 text-sm"><Loader2 size={16} className="animate-spin" /> Uploading…</div>
-                      : <>
-                          <Upload size={28} className="mx-auto mb-2 text-gray-400" />
-                          <p className="font-semibold text-gray-700 text-sm mb-0.5">Tap to upload documents</p>
-                          <p className="text-xs text-gray-400">PDF, JPG, PNG, DOCX · Max 10 MB each</p>
-                        </>}
-                    <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx"
-                      className="hidden" onChange={e => e.target.files && uploadFiles(e.target.files)} />
-                  </div>
+                  {/* Unified Medical Document Uploader */}
+                  <MedicalDocumentUploader
+                    mode="cards"
+                    isUploading={uploading}
+                    onUploadFiles={uploadFiles}
+                  />
 
                   {/* Attached docs for this consultation */}
                   {docs.length > 0 && (

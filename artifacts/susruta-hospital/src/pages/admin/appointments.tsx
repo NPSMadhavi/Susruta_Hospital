@@ -172,7 +172,7 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
 
   useEffect(() => {
     const uploadFullUrl = uploadToken
-      ? `${window.location.origin}/patient/offline-upload/${uploadToken}`
+      ? `${window.location.origin}/upload-documents/${uploadToken}`
       : `${window.location.origin}/portal`;
 
     QRCode.toDataURL(uploadFullUrl, {
