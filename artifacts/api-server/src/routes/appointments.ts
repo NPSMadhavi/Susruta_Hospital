@@ -8,7 +8,7 @@ import { requireAdmin } from "../lib/auth";
 import { verifyPatientSession } from "../lib/patient-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
 import { findOrRegisterPatient, findExistingPatientByPhoneOrEmail } from "../lib/patient-id";
-import { notifyPatientAppointmentUpdated } from "./patient";
+import { notifyPatientAppointmentUpdated, getFrontendUrl } from "./patient";
 
 const router = Router();
 
@@ -572,7 +572,8 @@ router.post("/offline", requireAdmin, async (req, res) => {
     expiresAt,
   });
 
-  const uploadUrl = `/upload-documents/${uploadToken}`;
+  const frontendUrl = getFrontendUrl(req);
+  const uploadUrl = `${frontendUrl}/portal/document-upload?token=${uploadToken}`;
 
   const serialized = {
     ...serializeAppt(appointment),

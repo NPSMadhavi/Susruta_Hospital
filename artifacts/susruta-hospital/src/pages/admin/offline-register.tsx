@@ -189,9 +189,16 @@ export default function AdminOfflineRegister() {
   useEffect(() => {
     if (!bookingResult) return;
     const tokenStr = bookingResult.uploadToken || "";
-    const uploadFullUrl = tokenStr
-      ? `${window.location.origin}/portal/document-upload?token=${tokenStr}`
-      : `${window.location.origin}/portal/document-upload`;
+    let uploadFullUrl = bookingResult.uploadUrl || "";
+
+    if (!uploadFullUrl) {
+      const baseUrl = window.location.origin;
+      uploadFullUrl = tokenStr
+        ? `${baseUrl}/portal/document-upload?token=${tokenStr}`
+        : `${baseUrl}/portal/document-upload`;
+    } else if (tokenStr && !uploadFullUrl.includes("token=")) {
+      uploadFullUrl = `${uploadFullUrl.split("?")[0]}?token=${tokenStr}`;
+    }
 
     QRCode.toDataURL(uploadFullUrl, {
       width: 160,
@@ -405,6 +412,8 @@ export default function AdminOfflineRegister() {
         paymentStatus: "paid",
         paymentThrough: data.paymentThrough || paymentThrough,
         notes: notes.trim(),
+        uploadToken: data.uploadToken,
+        uploadUrl: data.uploadUrl,
         createdAt: data.createdAt || new Date().toISOString(),
       });
 

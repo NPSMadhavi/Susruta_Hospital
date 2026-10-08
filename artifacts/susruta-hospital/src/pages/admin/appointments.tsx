@@ -171,9 +171,15 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
   const uploadToken = (appt as any).uploadToken || notesObj.uploadToken;
 
   useEffect(() => {
-    const uploadFullUrl = uploadToken
-      ? `${window.location.origin}/portal/document-upload?token=${uploadToken}`
-      : `${window.location.origin}/portal/document-upload`;
+    let uploadFullUrl = (appt as any).uploadUrl || notesObj.uploadUrl || "";
+    if (!uploadFullUrl) {
+      const baseUrl = window.location.origin;
+      uploadFullUrl = uploadToken
+        ? `${baseUrl}/portal/document-upload?token=${uploadToken}`
+        : `${baseUrl}/portal/document-upload`;
+    } else if (uploadToken && !uploadFullUrl.includes("token=")) {
+      uploadFullUrl = `${uploadFullUrl.split("?")[0]}?token=${uploadToken}`;
+    }
 
     QRCode.toDataURL(uploadFullUrl, {
       width: 140,

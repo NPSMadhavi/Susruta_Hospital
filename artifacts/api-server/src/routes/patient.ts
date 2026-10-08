@@ -126,7 +126,7 @@ function serializePatient(p: any) {
   };
 }
 
-function getFrontendUrl(req: any) {
+export function getFrontendUrl(req: any) {
   if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "null") return process.env.FRONTEND_URL.replace(/\/$/, "");
 
   const referer = req.get("referer") || req.get("origin");
