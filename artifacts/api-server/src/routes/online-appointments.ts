@@ -16,6 +16,7 @@ import { roomService, makeRoomName, createGuestToken } from "./livekit";
 import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated, broadcastPermissionUpdate, addAppointmentSseClient } from "../lib/appointmentSse";
 import { setPermission, getPermissions } from "../lib/permissionStore";
 import { notifyAdminCallEnded, notifyAdminNewOnlineAppointment } from "./appointments";
+import { extractClinicalNotes } from "./doctor";
 
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -162,29 +163,35 @@ router.get("/mine", requirePatient, async (req: any, res) => {
     .where(eq(onlineAppointmentsTable.patientId, patient.id))
     .orderBy(desc(onlineSlotsTable.date));
 
-  res.json(rows.map((r) => ({
-    id: r.appt.id,
-    status: r.appt.status,
-    reason: r.appt.reason,
-    documents: r.appt.documents,
-    joinEnabled: r.appt.joinEnabled,
-    joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
-    patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
-    livekitRoomName: r.appt.livekitRoomName ?? null,
-    guestToken: r.appt.guestToken ?? null,
-    createdAt: r.appt.createdAt.toISOString(),
-    slot: {
-      id: r.slot.id,
-      date: r.slot.date,
-      startTime: r.slot.startTime,
-      endTime: r.slot.endTime,
-    },
-    prescription: r.prescription ? {
-      photoObjectPath: r.prescription.photoObjectPath ?? null,
-      notes: r.prescription.notes ?? null,
-      updatedAt: r.prescription.updatedAt.toISOString(),
-    } : null,
-  })));
+  res.json(rows.map((r) => {
+    const rawNotes = r.prescription?.notes ?? null;
+    const clinicalNotes = extractClinicalNotes(rawNotes);
+    const photoPath = r.prescription?.photoObjectPath ?? null;
+    return {
+      id: r.appt.id,
+      status: r.appt.status,
+      reason: r.appt.reason,
+      documents: r.appt.documents,
+      joinEnabled: r.appt.joinEnabled,
+      joinEnabledAt: r.appt.joinEnabledAt?.toISOString() ?? null,
+      patientJoinedAt: r.appt.patientJoinedAt?.toISOString() ?? null,
+      livekitRoomName: r.appt.livekitRoomName ?? null,
+      guestToken: r.appt.guestToken ?? null,
+      createdAt: r.appt.createdAt.toISOString(),
+      slot: {
+        id: r.slot.id,
+        date: r.slot.date,
+        startTime: r.slot.startTime,
+        endTime: r.slot.endTime,
+      },
+      prescription: (photoPath || rawNotes || clinicalNotes) ? {
+        id: r.prescription?.id ?? r.appt.id,
+        photoObjectPath: photoPath,
+        notes: rawNotes ?? clinicalNotes,
+        updatedAt: r.prescription?.updatedAt?.toISOString() ?? r.appt.createdAt.toISOString(),
+      } : null,
+    };
+  }));
 });
 
 // ── POST /api/online-appointments/:id/patient-joined ──────────

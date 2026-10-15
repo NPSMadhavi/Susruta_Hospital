@@ -5,6 +5,7 @@ import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, Check
 import logoImg from "@assets/logo_1773840200056.png";
 import { patientApi } from "@/lib/patient-api";
 import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 
@@ -75,7 +76,8 @@ export default function PortalLogin() {
     if (!forgotEmail.trim()) { setError("Please enter your email address."); return; }
     setLoading(true); setError("");
     try {
-      await patientApi.forgotPassword(forgotEmail.trim());
+      const recaptchaToken = await executeRecaptcha("patient_forgot_password");
+      await patientApi.forgotPassword(forgotEmail.trim(), recaptchaToken);
       setSuccess("If an account exists for that email, a reset link has been sent. Please check your inbox.");
     } catch {
       setSuccess("If an account exists for that email, a reset link has been sent. Please check your inbox.");
@@ -88,7 +90,8 @@ export default function PortalLogin() {
     if (newPassword !== confirmNewPassword) { setError("Passwords do not match."); return; }
     setLoading(true); setError("");
     try {
-      await patientApi.resetPassword(resetToken!, newPassword);
+      const recaptchaToken = await executeRecaptcha("patient_reset_password");
+      await patientApi.resetPassword(resetToken!, newPassword, recaptchaToken);
       navigate(nextUrl, { replace: true });
     } catch (err: any) {
       setError(err?.message || "This reset link is invalid or has expired. Please request a new one.");
@@ -137,6 +140,7 @@ export default function PortalLogin() {
 
       setLoading(true);
       try {
+        const recaptchaToken = await executeRecaptcha("patient_register");
         await patientApi.register({
           name: form.name.trim(),
           age: Number(form.age),
@@ -146,7 +150,7 @@ export default function PortalLogin() {
           phone: phoneValidation.e164,
           countryCode: selectedCountry.code,
           password: form.password,
-        });
+        }, recaptchaToken);
         navigate(nextUrl, { replace: true });
       } catch (err: any) {
         setError(err?.message || "Something went wrong. Please try again.");
@@ -158,7 +162,8 @@ export default function PortalLogin() {
     setLoading(true);
     try {
       if (mode === "login") {
-        await patientApi.login({ email: form.email, password: form.password });
+        const recaptchaToken = await executeRecaptcha("patient_login");
+        await patientApi.login({ email: form.email, password: form.password }, recaptchaToken);
       }
       navigate(nextUrl, { replace: true });
     } catch (err: any) {
@@ -643,7 +648,9 @@ export default function PortalLogin() {
               </motion.div>
             </AnimatePresence>
 
-            <div className="mt-10 text-center">
+            <RecaptchaLegalNotice className="mt-6 text-center" />
+
+            <div className="mt-6 text-center">
               <a href="/" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
                 <Sparkles size={13} /> Back to Susruta Hospital Website
               </a>

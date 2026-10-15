@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import drPhoto from "@assets/Dr_Murali_Krishna_1773837837953.jpeg";
+import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 // ─── Checker grid background image (CSS gradients) ───────────
 const CHECKER_BG: React.CSSProperties = {
@@ -181,6 +182,9 @@ const HERO_TEXTS: Array<{ en: string; te: string }> = [
 
 function HeroSection({ lang }: { lang: "en" | "te" }) {
   const [activeHeroText, setActiveHeroText] = useState(0);
+  const { data: settings } = useGetSettings();
+  const isBookingDisabled = settings && settings.appointmentBookingEnabled === false;
+  const clinicPhone = settings?.clinicPhone1 || "9492068180";
 
   // ───────────────── HERO TEXT AUTO CHANGE ─────────────────
   useEffect(() => {
@@ -426,39 +430,72 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               duration: 0.6,
             }}
           >
-            <button
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent("open-booking-modal")
-                )
-              }
-              className="
-                group
-                inline-flex
-                items-center
-                justify-center
-                gap-3
-                px-7
-                md:px-8
-                py-3.5
-                md:py-4
-                bg-[#D95B2F]
-                text-white
-                rounded-[10px]
-                text-[14px]
-                md:text-[16px]
-                shadow-lg
-                shadow-[#D95B2F]/20
-                hover:bg-[#c84f28]
-                hover:-translate-y-0.5
-                transition-all
-              "
-              style={{
-                fontWeight: 600,
-              }}
-            >
-              Book Appointment
-            </button>
+            {isBookingDisabled ? (
+              <a
+                href={`tel:${clinicPhone}`}
+                className="
+                  group
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-3
+                  px-7
+                  md:px-8
+                  py-3.5
+                  md:py-4
+                  bg-[#D95B2F]
+                  text-white
+                  rounded-[10px]
+                  text-[14px]
+                  md:text-[16px]
+                  shadow-lg
+                  shadow-[#D95B2F]/20
+                  hover:bg-[#c84f28]
+                  hover:-translate-y-0.5
+                  transition-all
+                "
+                style={{
+                  fontWeight: 600,
+                }}
+              >
+                <Phone size={18} />
+                {lang === "te" ? `కాల్ చేయండి: ${clinicPhone}` : `Call to Book: ${clinicPhone}`}
+              </a>
+            ) : (
+              <button
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("open-booking-modal")
+                  )
+                }
+                className="
+                  group
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-3
+                  px-7
+                  md:px-8
+                  py-3.5
+                  md:py-4
+                  bg-[#D95B2F]
+                  text-white
+                  rounded-[10px]
+                  text-[14px]
+                  md:text-[16px]
+                  shadow-lg
+                  shadow-[#D95B2F]/20
+                  hover:bg-[#c84f28]
+                  hover:-translate-y-0.5
+                  transition-all
+                "
+                style={{
+                  fontWeight: 600,
+                }}
+              >
+                Book Appointment
+              </button>
+            )}
           </motion.div>
         </div>
       </div>
@@ -2221,11 +2258,19 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
   const morningSlots = slots.filter(s => MORNING_TIMES.has(s.time));
   const eveningSlots = slots.filter(s => !MORNING_TIMES.has(s.time));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedSlot || !formData.patientName || !formData.patientPhone) return;
+    const recaptchaToken = await executeRecaptcha("appointment_booking");
     createMutation.mutate(
-      { data: { ...formData, date: selectedDate, timeSlot: selectedSlot } },
+      {
+        data: {
+          ...formData,
+          date: selectedDate,
+          timeSlot: selectedSlot,
+          ...(recaptchaToken ? { recaptchaToken } : {}),
+        } as any,
+      },
       { onSuccess: () => setIsSuccess(true) }
     );
   };
@@ -2448,6 +2493,7 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
                         {createMutation.isError && (
                           <p className="text-destructive text-sm text-center mt-3 font-medium">{tr("appt.error", lang)}</p>
                         )}
+                        <RecaptchaLegalNotice className="mt-3 text-center" />
                       </div>
                     </div>
                   </motion.div>
@@ -2490,6 +2536,11 @@ function SlotGroup({ label, slots, selected, onSelect }: {
 function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
   const { data: testimonials = [], isLoading } = useListTestimonials();
+
+  // Hide testimonials section when disabled by admin in settings
+  if (settings && settings.testimonialsEnabled === false) {
+    return null;
+  }
 
   // Static fallback testimonials used when DB has no data yet
   const fallbackTestimonials = [
@@ -2648,6 +2699,8 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
 // ─── CONTACT ──────────────────────────────────────────────────
 function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
+  const isBookingDisabled = settings && settings.appointmentBookingEnabled === false;
+  const clinicPhone = settings?.clinicPhone1 || "9492068180";
 
   const galleryViewportRef = useRef<HTMLDivElement>(null);
   const gallerySetRef = useRef<HTMLDivElement>(null);
@@ -2682,6 +2735,10 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
   ];
 
   const handleBookClick = () => {
+    if (isBookingDisabled) {
+      window.location.href = `tel:${clinicPhone}`;
+      return;
+    }
     window.dispatchEvent(new CustomEvent("open-booking-modal"));
   };
 
@@ -2701,7 +2758,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
   const todayName = dayNames[today.getDay()];
 
   return (
-    <section id="contact" className="py-0 bg-[#F5F2E9] overflow-hidden">
+    <div className="py-0 bg-[#F5F2E9] overflow-hidden">
       {/* ───────────────── TOP IMAGE GALLERY ───────────────── */}
       <style>
         {`
@@ -2769,7 +2826,8 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
       </div>
 
       {/* ───────────────── CONTACT HEADER ───────────────── */}
-      <SC>
+      <section id="contact" className="scroll-mt-12">
+        <SC>
         <Reveal className="text-center max-w-3xl mx-auto mb-10 md:mb-9 px-4">
           <div
             className="text-[#AB6342] text-[13px] md:text-[14px] lg:text-[15px] uppercase mt-7 mb-4"
@@ -3071,30 +3129,58 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
               "
               style={{ lineHeight: "29px" }}
             >
-              Book your appointment today
+              {isBookingDisabled
+                ? (lang === "te" ? "కాల్ ద్వారా అపాయింట్‌మెంట్ పొందండి" : "Call us today to schedule your appointment")
+                : (lang === "te" ? "ఈరోజే మీ అపాయింట్‌మెంట్‌ను బుక్ చేసుకోండి" : "Book your appointment today")}
             </p>
 
-            <button
-              onClick={handleBookClick}
-              className="
-                px-8
-                py-3.5
-                bg-[#E65D2F]
-                text-white
-                rounded-[10px]
-                text-[14px]
-                md:text-[16px]
-                font-semibold
-                hover:bg-[#D95B2F]
-                transition-all
-                duration-200
-              "
-            >
-              Book appointment
-            </button>
+            {isBookingDisabled ? (
+              <a
+                href={`tel:${clinicPhone}`}
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  px-8
+                  py-3.5
+                  bg-[#E65D2F]
+                  text-white
+                  rounded-[10px]
+                  text-[14px]
+                  md:text-[16px]
+                  font-semibold
+                  hover:bg-[#D95B2F]
+                  transition-all
+                  duration-200
+                "
+              >
+                <Phone size={18} />
+                {lang === "te" ? `కాల్ చేయండి: ${clinicPhone}` : `Call ${clinicPhone}`}
+              </a>
+            ) : (
+              <button
+                onClick={handleBookClick}
+                className="
+                  px-8
+                  py-3.5
+                  bg-[#E65D2F]
+                  text-white
+                  rounded-[10px]
+                  text-[14px]
+                  md:text-[16px]
+                  font-semibold
+                  hover:bg-[#D95B2F]
+                  transition-all
+                  duration-200
+                "
+              >
+                Book appointment
+              </button>
+            )}
           </div>
         </div>
       </SC>
-    </section>
+      </section>
+    </div>
   );
 }

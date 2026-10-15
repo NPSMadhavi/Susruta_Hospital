@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, MapPin, Video, Calendar, Clock, ArrowRight, ArrowLeft,
   CheckCircle2, AlertCircle, Upload, FileText, Trash2,
-  Loader2, Leaf,
+  Loader2, Leaf, Phone,
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded } from "@/lib/ist";
@@ -12,6 +12,7 @@ import {
   useListOpenMonths,
   useGetAvailability,
   useGetSlots,
+  useGetSettings,
 } from "@workspace/api-client-react";
 import { getDaysInMonth, startOfMonth, getDay, format, parseISO } from "date-fns";
 
@@ -177,9 +178,38 @@ interface Props {
 }
 
 export function BookingWizard({ patient, onClose, onSuccess }: Props) {
+  const { data: settings } = useGetSettings();
   const [wizType, setWizType] = useState<WizardType | null>(null);
   const [wizardResending, setWizardResending] = useState(false);
   const [wizardResent, setWizardResent] = useState(false);
+
+  if (settings && settings.appointmentBookingEnabled === false) {
+    const clinicPhone = settings.clinicPhone1 || "9492068180";
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-xl border border-border">
+          <Calendar className="mx-auto text-muted-foreground mb-3 opacity-40" size={40} />
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Online Booking Unavailable</h3>
+          <p className="text-sm text-gray-600 mb-6">
+            Online booking is currently disabled. Please contact the hospital directly to schedule your appointment.
+          </p>
+          <a
+            href={`tel:${clinicPhone}`}
+            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#D95B2F] text-white font-semibold rounded-xl hover:bg-[#c44e25] transition-colors"
+          >
+            <Phone size={16} />
+            Call {clinicPhone}
+          </a>
+          <button
+            onClick={onClose}
+            className="mt-3 text-xs text-muted-foreground hover:text-gray-900 block w-full py-1 cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   async function handleResendVerificationInWizard() {
     setWizardResending(true);

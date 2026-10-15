@@ -3,15 +3,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Globe, KeyRound, CheckCircle2, ChevronDown, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
 import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 const API_BASE = `${import.meta.env.BASE_URL ?? "/"}api/patient`.replace(/\/\//g, "/");
 
-async function apiPost(path: string, body: object) {
+async function apiPost(path: string, body: object, recaptchaToken?: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (recaptchaToken) {
+    headers["x-recaptcha-token"] = recaptchaToken;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers,
+    body: JSON.stringify({ ...body, ...(recaptchaToken ? { recaptchaToken } : {}) }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw data;
@@ -102,7 +107,8 @@ export function BookingLoginModal({ open, onClose }: Props) {
     if (!forgotEmail.trim()) { setError("Please enter your email address."); return; }
     setLoading(true); setError("");
     try {
-      await apiPost("/auth/forgot-password", { email: forgotEmail.trim() });
+      const recaptchaToken = await executeRecaptcha("patient_forgot_password");
+      await apiPost("/auth/forgot-password", { email: forgotEmail.trim() }, recaptchaToken);
     } catch {
       // Always show success to avoid email enumeration
     } finally {
@@ -139,6 +145,7 @@ export function BookingLoginModal({ open, onClose }: Props) {
 
       setLoading(true);
       try {
+        const recaptchaToken = await executeRecaptcha("patient_register");
         await apiPost("/auth/register", {
           name: form.name.trim(),
           age: Number(form.age),
@@ -148,7 +155,7 @@ export function BookingLoginModal({ open, onClose }: Props) {
           phone: phoneValidation.e164,
           countryCode: selectedCountry.code,
           password: form.password,
-        });
+        }, recaptchaToken);
         onClose();
         navigate("/portal/dashboard");
       } catch (err: any) {
@@ -161,7 +168,8 @@ export function BookingLoginModal({ open, onClose }: Props) {
     setLoading(true);
     try {
       if (mode === "login") {
-        await apiPost("/auth/login", { email: form.email, password: form.password });
+        const recaptchaToken = await executeRecaptcha("patient_login");
+        await apiPost("/auth/login", { email: form.email, password: form.password }, recaptchaToken);
       }
       onClose();
       navigate("/portal/dashboard");

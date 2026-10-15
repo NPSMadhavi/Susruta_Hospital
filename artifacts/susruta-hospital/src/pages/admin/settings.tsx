@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import {
   Save, Mail, Send, CheckCircle2, AlertCircle, Eye, EyeOff,
@@ -82,29 +83,50 @@ function computeNextPatientId(prefix: string, currentNum: number | string): stri
   return `${nextPrefix}${nextNum.toString().padStart(padLength, "0")}`;
 }
 
-function Toggle({ checked, onChange, label, description }: {
-  checked: boolean; onChange: (v: boolean) => void; label: string; description: string;
+function Toggle({ checked, onChange, label, description, disabled }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  description: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center justify-between gap-4 cursor-pointer p-3.5 rounded-xl hover:bg-muted/40 transition-colors border border-border">
+    <div
+      onClick={() => {
+        if (!disabled) onChange(!checked);
+      }}
+      className={cn(
+        "flex items-center justify-between gap-4 p-3.5 rounded-xl transition-colors border border-border select-none",
+        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-muted/40"
+      )}
+    >
       <div>
         <div className="font-medium text-sm text-foreground">{label}</div>
         <div className="text-xs text-muted-foreground mt-0.5">{description}</div>
       </div>
       <button
-        type="button" role="switch" aria-checked={checked}
-        onClick={() => onChange(!checked)}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disabled) onChange(!checked);
+        }}
         className={cn(
           "relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none",
-          checked ? "bg-emerald-600" : "bg-gray-200"
+          checked ? "bg-emerald-600" : "bg-gray-200",
+          disabled ? "cursor-not-allowed" : "cursor-pointer"
         )}
       >
-        <span className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform",
-          checked ? "translate-x-5" : "translate-x-0"
-        )} />
+        <span
+          className={cn(
+            "inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform",
+            checked ? "translate-x-5" : "translate-x-0"
+          )}
+        />
       </button>
-    </label>
+    </div>
   );
 }
 
@@ -156,6 +178,8 @@ export default function AdminSettings() {
   const [pharmacyPassword, setPharmacyPassword] = useState("");
   const [showPharmacyPass, setShowPharmacyPass] = useState(false);
   const [qrUploading, setQrUploading] = useState(false);
+  const queryClient = useQueryClient();
+  const [featureUpdating, setFeatureUpdating] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [testTo, setTestTo] = useState("");
@@ -182,6 +206,32 @@ export default function AdminSettings() {
     return { ...f, ...updates };
   });
 
+  const toggleWebsiteFeature = async (k: "appointmentBookingEnabled" | "testimonialsEnabled", v: boolean) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setFeatureUpdating(k);
+    try {
+      const res = await apiFetch("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [k]: v }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update feature.");
+      setForm(f => ({ ...f, ...data }));
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      setSaveResult({
+        ok: true,
+        msg: `${k === "testimonialsEnabled" ? "Testimonials section" : "Online booking"} ${v ? "enabled" : "disabled"} successfully.`,
+      });
+    } catch (err: any) {
+      setForm(f => ({ ...f, [k]: !v }));
+      setSaveResult({ ok: false, msg: err.message || "Failed to update feature." });
+    } finally {
+      setFeatureUpdating(null);
+      setTimeout(() => setSaveResult(null), 4000);
+    }
+  };
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -206,6 +256,7 @@ export default function AdminSettings() {
       setDoctorPassword("");
       setPharmacyPassword("");
       setSaveResult({ ok: true, msg: "Settings saved successfully." });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
     } catch (err: any) {
       setSaveResult({ ok: false, msg: err.message });
     } finally {
@@ -314,15 +365,17 @@ export default function AdminSettings() {
             <Card title="Website Features" subtitle="Toggle public-facing features on or off instantly." icon={ToggleLeft}>
               <Toggle
                 checked={!!form.appointmentBookingEnabled}
-                onChange={setChecked("appointmentBookingEnabled")}
+                onChange={(v) => toggleWebsiteFeature("appointmentBookingEnabled", v)}
                 label="Enable Online Booking"
                 description="When off, the booking form is hidden and patients are asked to call."
+                disabled={featureUpdating === "appointmentBookingEnabled"}
               />
               <Toggle
                 checked={!!form.testimonialsEnabled}
-                onChange={setChecked("testimonialsEnabled")}
+                onChange={(v) => toggleWebsiteFeature("testimonialsEnabled", v)}
                 label="Show Testimonials Section"
                 description="Display patient reviews on the public website."
+                disabled={featureUpdating === "testimonialsEnabled"}
               />
             </Card>
           </div>

@@ -343,6 +343,10 @@ export default function AdminOfflineRegister() {
       setErrorMsg("Please select gender.");
       return;
     }
+    if (!address || !address.trim()) {
+      setErrorMsg("Please enter patient address.");
+      return;
+    }
     const trimmedEmail = patientEmail.trim();
     if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setErrorMsg("Please enter a valid email address, or leave it blank.");
@@ -797,10 +801,11 @@ export default function AdminOfflineRegister() {
                   {/* Row 4: Address */}
                   <div>
                     <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
-                      Address <span className="text-xs font-normal text-[#94A3B8]">(Optional)</span>
+                      Address <span className="text-red-500">*</span>
                     </label>
                     <textarea
                       rows={2}
+                      required
                       readOnly={Boolean(selectedPatient)}
                       disabled={Boolean(selectedPatient)}
                       placeholder="Enter address"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin } from "lucide-react";
+import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin, Phone } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import { isOfflineSessionExceeded, isSlotExceeded } from "@/lib/ist";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
@@ -11,6 +11,7 @@ import {
   useListOpenMonths,
   useGetAvailability,
   useGetSlots,
+  useGetSettings,
 } from "@workspace/api-client-react";
 
 import { getDaysInMonth, startOfMonth, getDay, format, parseISO } from "date-fns";
@@ -101,10 +102,39 @@ function CalendarGrid({
 
 export default function PortalBook() {
   const [, navigate] = useLocation();
+  const { data: settings } = useGetSettings();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [apptType, setApptType] = useState<"offline" | "online" | null>(null);
   const [hasOnlineSlots, setHasOnlineSlots] = useState(false);
+
+  if (settings && settings.appointmentBookingEnabled === false) {
+    const clinicPhone = settings.clinicPhone1 || "9492068180";
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center shadow-md border border-border">
+          <Calendar className="mx-auto text-muted-foreground mb-4 opacity-40" size={48} />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Online Booking Unavailable</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Online booking is currently disabled. Please contact the hospital directly to schedule your appointment.
+          </p>
+          <a
+            href={`tel:${clinicPhone}`}
+            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#D95B2F] text-white font-semibold rounded-xl hover:bg-[#c44e25] transition-colors"
+          >
+            <Phone size={16} />
+            Call {clinicPhone}
+          </a>
+          <button
+            onClick={() => navigate("/portal/dashboard")}
+            className="mt-4 text-sm text-muted-foreground hover:text-gray-900 block w-full py-1 cursor-pointer"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const [monthIdx, setMonthIdx] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

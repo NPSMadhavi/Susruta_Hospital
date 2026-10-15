@@ -18,13 +18,15 @@ import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
 import { notifyPatientSessionEnded } from "./patient";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
 import { addAppointmentSseClient } from "../lib/appointmentSse";
+import { streamPrescriptionDownload } from "../lib/prescription-service";
+import { verifyRecaptcha } from "../lib/recaptcha";
 
 const router = Router();
 const COOKIE = "doctor_session";
 const SESSION_DAYS = 7;
 
 // ── POST /api/doctor/login ────────────────────────────────────
-router.post("/login", async (req, res) => {
+router.post("/login", verifyRecaptcha("doctor_login"), async (req, res) => {
   const { password } = req.body;
   if (!password) { res.status(400).json({ error: "password_required" }); return; }
 
@@ -122,6 +124,46 @@ router.get("/appointments", requireDoctor, async (_req, res) => {
   })));
 });
 
+import { sql } from "drizzle-orm";
+
+async function ensureOfflinePrescriptionSchema() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE public.prescriptions ADD COLUMN IF NOT EXISTS appointment_id INTEGER UNIQUE REFERENCES public.appointments(id) ON DELETE CASCADE;
+      ALTER TABLE public.prescriptions ALTER COLUMN online_appointment_id DROP NOT NULL;
+    `);
+  } catch (err: any) {
+    console.error("⚠️ Failed to ensure offline prescription schema:", err.message);
+  }
+}
+ensureOfflinePrescriptionSchema();
+
+export function extractClinicalNotes(notes: string | null | undefined): string | null {
+  if (!notes || typeof notes !== "string") return null;
+  const trimmed = notes.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed.notes === "string" && parsed.notes.trim()) {
+        return parsed.notes.trim();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (trimmed.includes("DOCTOR NOTES:")) {
+    const parts = trimmed.split("DOCTOR NOTES:");
+    const extracted = parts[parts.length - 1].trim();
+    return extracted || null;
+  }
+  if (trimmed.startsWith("AYURVEDIC MEDICINAL FORMULATIONS:")) {
+    return null;
+  }
+  return trimmed;
+}
+
 // ── GET /api/doctor/all-appointments — Both types ────────────
 router.get("/all-appointments", requireDoctor, async (_req, res) => {
   const [onlineRows, offlineRows, allPatientDocs] = await Promise.all([
@@ -142,9 +184,11 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
       .select({
         appt: appointmentsTable,
         patient: patientsTable,
+        prescription: prescriptionsTable,
       })
       .from(appointmentsTable)
       .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
       .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
       .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt)),
     db.select().from(patientDocumentsTable),
@@ -176,7 +220,7 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     prescription: r.prescription ? {
       id: r.prescription.id,
       photoObjectPath: r.prescription.photoObjectPath ?? null,
-      notes: r.prescription.notes ?? null,
+      notes: r.prescription.notes ?? extractClinicalNotes(r.prescription.notes),
       updatedAt: r.prescription.updatedAt.toISOString(),
     } : null,
   }));
@@ -184,6 +228,8 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
   const offline = offlineRows.map((r) => {
     const pCode = r.patient?.patientCode || (r.appt.patientId ? `P${String(r.appt.patientId).padStart(3, "0")}` : `P${String(r.appt.id).padStart(3, "0")}`);
     const patId = r.patient?.id;
+    const rawNotes = r.prescription?.notes ?? r.appt.notes ?? null;
+    const clinicalNotes = extractClinicalNotes(rawNotes);
     return {
       id: r.appt.id,
       type: "offline" as const,
@@ -204,8 +250,18 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
         age: r.patient?.age ?? null,
         gender: r.patient?.gender ?? null,
       },
-      prescription: null,
-      notes: r.appt.notes ?? null,
+      prescription: r.prescription ? {
+        id: r.prescription.id,
+        photoObjectPath: r.prescription.photoObjectPath ?? null,
+        notes: r.prescription.notes ?? clinicalNotes,
+        updatedAt: r.prescription.updatedAt.toISOString(),
+      } : ((rawNotes || clinicalNotes) ? {
+        id: r.appt.id,
+        photoObjectPath: null,
+        notes: rawNotes ?? clinicalNotes,
+        updatedAt: r.appt.createdAt?.toISOString() ?? new Date().toISOString(),
+      } : null),
+      notes: rawNotes ?? clinicalNotes,
     };
   });
 
@@ -228,6 +284,46 @@ router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) =
   res.json({ ...updated, createdAt: updated.createdAt?.toISOString() });
 });
 
+// ── PUT /api/doctor/offline-appointments/:id/prescription ────
+router.put("/offline-appointments/:id/prescription", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { photoObjectPath, notes } = req.body;
+
+  const [existing] = await db
+    .select()
+    .from(prescriptionsTable)
+    .where(eq(prescriptionsTable.appointmentId, id));
+
+  let rx;
+  if (existing) {
+    [rx] = await db
+      .update(prescriptionsTable)
+      .set({
+        ...(photoObjectPath !== undefined ? { photoObjectPath } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(prescriptionsTable.appointmentId, id))
+      .returning();
+  } else {
+    [rx] = await db
+      .insert(prescriptionsTable)
+      .values({
+        appointmentId: id,
+        photoObjectPath: photoObjectPath ?? null,
+        notes: notes ?? null,
+      })
+      .returning();
+  }
+
+  res.json({
+    id: rx.id,
+    photoObjectPath: rx.photoObjectPath ?? null,
+    notes: rx.notes ?? null,
+    updatedAt: rx.updatedAt.toISOString(),
+  });
+});
+
 // ── PATCH /api/doctor/offline-appointments/:id/notes ──────────
 router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
@@ -241,6 +337,15 @@ router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) 
     .returning();
 
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+
+  // Also update or insert in prescriptionsTable if present
+  const [existingRx] = await db.select().from(prescriptionsTable).where(eq(prescriptionsTable.appointmentId, id));
+  if (existingRx) {
+    await db.update(prescriptionsTable).set({ notes, updatedAt: new Date() }).where(eq(prescriptionsTable.appointmentId, id));
+  } else {
+    await db.insert(prescriptionsTable).values({ appointmentId: id, photoObjectPath: null, notes });
+  }
+
   res.json({ ok: true, notes: updated.notes });
 });
 
@@ -295,49 +400,65 @@ router.get("/patients", requireDoctor, async (_req, res) => {
       .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
       .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
-    db.select().from(appointmentsTable).orderBy(desc(appointmentsTable.date)),
+    db
+      .select({
+        appt: appointmentsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(appointmentsTable)
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
+      .orderBy(desc(appointmentsTable.date)),
   ]);
 
   res.json(patients.map(p => {
     const onlineAppts = onlineRows
       .filter(r => r.appt.patientId === p.id)
       .map(r => {
-        const hasNotes = isRealClinicalNotes(r.prescription?.notes);
+        const rawNotes = r.prescription?.notes ?? null;
+        const clinicalNotes = extractClinicalNotes(rawNotes);
+        const hasNotes = !!(rawNotes || clinicalNotes);
         const hasPhoto = !!r.prescription?.photoObjectPath;
+        const reasonText = extractClinicalNotes(r.appt.reason);
         return {
           id: r.appt.id,
           type: "online" as const,
           status: r.appt.status,
           date: r.slot.date,
           timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
-          reason: isRealClinicalNotes(r.appt.reason) ? r.appt.reason : null,
+          reason: reasonText,
           joinEnabled: r.appt.joinEnabled,
           documents: (r.appt.documents as any[]) || [],
           prescription: (hasPhoto || hasNotes) ? {
+            id: r.prescription?.id ?? null,
             photoObjectPath: r.prescription?.photoObjectPath ?? null,
-            notes: hasNotes ? r.prescription!.notes : null,
-            updatedAt: r.prescription!.updatedAt.toISOString(),
+            notes: rawNotes ?? clinicalNotes,
+            updatedAt: r.prescription?.updatedAt?.toISOString() ?? new Date().toISOString(),
           } : null,
         };
       });
 
     const offlineAppts = offlineRows
-      .filter(r => r.patientId === p.id || (r.patientName && p.name && r.patientName.trim().toLowerCase() === p.name.trim().toLowerCase()))
+      .filter(r => r.appt.patientId === p.id || (r.appt.patientName && p.name && r.appt.patientName.trim().toLowerCase() === p.name.trim().toLowerCase()))
       .map(r => {
-        const hasNotes = isRealClinicalNotes(r.notes);
+        const rawNotes = r.prescription?.notes ?? r.appt.notes ?? null;
+        const clinicalNotes = extractClinicalNotes(rawNotes);
+        const hasPhoto = !!r.prescription?.photoObjectPath;
+        const hasNotes = !!(rawNotes || clinicalNotes);
+        const reasonText = extractClinicalNotes(r.appt.reason);
         return {
-          id: r.id,
+          id: r.appt.id,
           type: "offline" as const,
-          status: r.status,
-          date: r.date,
-          timeLabel: r.timeSlot,
-          reason: isRealClinicalNotes(r.reason) ? r.reason : null,
+          status: r.appt.status,
+          date: r.appt.date,
+          timeLabel: r.appt.timeSlot,
+          reason: reasonText,
           joinEnabled: false,
           documents: [],
-          prescription: hasNotes ? {
-            photoObjectPath: null,
-            notes: r.notes,
-            updatedAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+          prescription: (hasPhoto || hasNotes) ? {
+            id: r.prescription?.id ?? null,
+            photoObjectPath: r.prescription?.photoObjectPath ?? null,
+            notes: rawNotes ?? clinicalNotes,
+            updatedAt: r.prescription?.updatedAt?.toISOString() ?? (r.appt.createdAt ? r.appt.createdAt.toISOString() : new Date().toISOString()),
           } : null,
         };
       });
@@ -449,6 +570,26 @@ router.patch("/donations/:id/verify", requireDoctor, async (req, res) => {
     .where(eq(donationsTable.id, id));
   broadcastDonationUpdate({ id, status: newStatus });
   res.json({ success: true });
+});
+
+// ── GET /api/doctor/prescriptions/:id/download ─────────────────
+router.get("/prescriptions/:id/download", requireDoctor, async (req, res) => {
+  const requestedFileName = typeof req.query.filename === "string" ? req.query.filename : undefined;
+  await streamPrescriptionDownload({
+    rxIdOrApptParam: String(req.params.id),
+    requestedFileName,
+    res,
+  });
+});
+
+// ── GET /api/doctor/appointments/:type/:id/prescription/download 
+router.get("/appointments/:type/:id/prescription/download", requireDoctor, async (req, res) => {
+  const requestedFileName = typeof req.query.filename === "string" ? req.query.filename : undefined;
+  await streamPrescriptionDownload({
+    rxIdOrApptParam: `appt-${String(req.params.type)}-${String(req.params.id)}`,
+    requestedFileName,
+    res,
+  });
 });
 
 function fmtTime(t: string) {

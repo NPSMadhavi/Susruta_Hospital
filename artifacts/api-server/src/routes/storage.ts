@@ -144,9 +144,13 @@ router.use("/storage/objects", async (req: Request, res: Response) => {
       else if (filePath.endsWith(".pdf")) contentType = "application/pdf";
     }
 
+    const isDownload = req.query.download === "1" || req.query.download === "true";
+    const dispositionType = isDownload ? "attachment" : "inline";
+    const downloadName = (typeof req.query.filename === "string" && req.query.filename.trim()) ? req.query.filename.trim() : fileName;
+
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(fileName)}"`);
-    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(downloadName)}"`);
+    res.setHeader("Cache-Control", isDownload ? "no-cache" : "private, max-age=3600");
     fs.createReadStream(filePath).pipe(res);
     return;
   }

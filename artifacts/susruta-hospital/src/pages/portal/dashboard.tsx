@@ -20,8 +20,12 @@ import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
 import PatientProfile from "@/components/portal/PatientProfile";
 import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { PrintPrescriptionModal, extractDigitalPrescriptionData, parseMedicinesFromNotes } from "@/pages/doctor/appointments";
+import { downloadFileDirectly, downloadPrescriptionPdf, type PrintPrescriptionData } from "@/lib/prescription-download";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const PORTAL_PAGE_SIZE = 10;
 
 // ── Types ───────────────────────────────────────────────────────
 type DocFile = { name: string; objectPath: string; contentType: string; size: number };
@@ -37,6 +41,8 @@ type OnlineAppt = {
 type PhysicalAppt = {
   id: number; date: string; timeSlot: string; status: string;
   reason?: string; followUpStatus?: string; patientName: string; patientPhone?: string;
+  prescription?: { photoObjectPath: string | null; notes: string | null; updatedAt: string } | null;
+  documents?: DocFile[];
 };
 type Patient = { id: number; patientCode: string | null; name: string; age?: number | null; gender?: string | null; address?: string | null; email: string; phone?: string; emailVerified: boolean };
 type DirectCall = {
@@ -51,6 +57,10 @@ type DirectCall = {
 // ── Helpers ─────────────────────────────────────────────────────
 const IST = "Asia/Kolkata";
 const PRESCRIPTION_PRESCRIBER = "Prescribed by Dr. P. Murali Krishna";
+function paginatePortalItems<T>(items: T[], requestedPage: number) {
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(items.length / PORTAL_PAGE_SIZE)));
+  return { page, items: items.slice((page - 1) * PORTAL_PAGE_SIZE, page * PORTAL_PAGE_SIZE) };
+}
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: IST, weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
@@ -61,8 +71,16 @@ function cleanDoctorNotes(rawNotes: string | null | undefined): string {
   if (!rawNotes || typeof rawNotes !== "string") return "";
   let text = rawNotes.trim();
   if (!text) return "";
-  if (text.startsWith("{") && (text.includes('"token"') || text.includes('"amount"') || text.includes('"paymentMode"'))) {
-    return "";
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed.notes === "string" && parsed.notes.trim()) {
+        return parsed.notes.trim();
+      }
+      return "";
+    } catch {
+      return "";
+    }
   }
   if (text.includes("DOCTOR NOTES:")) {
     const parts = text.split("DOCTOR NOTES:");
@@ -72,6 +90,24 @@ function cleanDoctorNotes(rawNotes: string | null | undefined): string {
     return "";
   }
   return text;
+}
+
+function hasAppointmentPrescription(rx: { photoObjectPath?: string | null; notes?: string | null } | null | undefined): boolean {
+  if (!rx) return false;
+  if (rx.photoObjectPath) return true;
+  if (!rx.notes) return false;
+  const t = rx.notes.trim();
+  if (!t) return false;
+  if (t.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(t);
+      if (parsed.token && !parsed.digitalPrescription) return false;
+      return !!(parsed.digitalPrescription || (Array.isArray(parsed.formulationRows) && parsed.formulationRows.length > 0) || parsed.diagnosis || (typeof parsed.notes === "string" && parsed.notes.trim().length > 0));
+    } catch {
+      return false;
+    }
+  }
+  return !!cleanDoctorNotes(t) || t.includes("AYURVEDIC MEDICINAL FORMULATIONS:");
 }
 function isUpcoming(date: string, status: string) {
   const today = todayIST();
@@ -125,12 +161,32 @@ function AppointmentStatus({ status }: { status: string }) {
   )}><span className="size-1 rounded-full bg-current" />{status === "pending" ? "Pending" : STATUS_CONFIG[status]?.label || status}</span>;
 }
 
-function AppointmentActions({ item, onJoin }: { item: AppointmentItem; onJoin: (id: number) => void }) {
+function AppointmentActions({
+  item,
+  onJoin,
+  onViewPrescription,
+}: {
+  item: AppointmentItem;
+  onJoin: (id: number) => void;
+  onViewPrescription?: (item: AppointmentItem) => void;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [previewDocument, setPreviewDocument] = useState<DocFile | null>(null);
   const online = item.type === "online" ? item.data : null;
-  return <div className="flex flex-wrap  items-center gap-2">
+  const hasRx = hasAppointmentPrescription(item.data.prescription);
+
+  return <div className="flex flex-wrap items-center gap-2">
     {online?.joinEnabled && <button onClick={() => onJoin(online.id)} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1.5 text-[12px] text-white hover:bg-emerald-700"><Video size={11} /> Join Video Call</button>}
+    {hasRx && onViewPrescription && (
+      <button
+        type="button"
+        onClick={() => onViewPrescription(item)}
+        aria-label={"View prescription for " + fmtDateShort(item.date)}
+        className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-[#D95B2F] bg-white px-3 py-1.5 text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs"
+      >
+        <FileText size={12} /> View Prescription
+      </button>
+    )}
     <button onClick={() => dialogRef.current?.showModal()} aria-label={"View documents for " + fmtDateShort(item.date)} className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-[#D95B2F] px-3 py-1.5 text-[12px] font-medium leading-3 text-white hover:bg-[#c94e25]"><Eye size={12} /> View Documents</button>
     <dialog ref={dialogRef} aria-label="Appointment documents" className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-5 text-sm shadow-xl backdrop:bg-black/40">
       <div className="mb-4 flex items-center justify-between gap-4"><h3 className="font-bold text-[#20392b]">Documents · {fmtDateShort(item.date)}</h3><button onClick={() => dialogRef.current?.close()} aria-label="Close documents" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X size={18} /></button></div>
@@ -484,8 +540,146 @@ export default function PatientDashboard() {
   const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
   const [documentSearch, setDocumentSearch] = useState("");
   const [prescriptionSearch, setPrescriptionSearch] = useState("");
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const [pastPage, setPastPage] = useState(1);
+  const [prescriptionPage, setPrescriptionPage] = useState(1);
+  const [documentPage, setDocumentPage] = useState(1);
   const [previewDoc, setPreviewDoc] = useState<PatientDoc | null>(null);
   const [previewPrescription, setPreviewPrescription] = useState<Pick<PatientDoc, "name" | "objectPath" | "contentType"> | null>(null);
+  const [activeDigitalPrint, setActiveDigitalPrint] = useState<PrintPrescriptionData | null>(null);
+
+  const buildDigitalPrintData = useCallback((apptItem: { date?: string; time?: string }, rx: { notes?: string | null; updatedAt?: string }): PrintPrescriptionData | null => {
+    const rawNotes = rx.notes;
+    if (!rawNotes) return null;
+    const digitalData = extractDigitalPrescriptionData(rawNotes);
+    const parsedMeds = parseMedicinesFromNotes(rawNotes);
+
+    const dateStr = apptItem.date ? fmtDateShort(apptItem.date) : fmtDateShort(todayIST());
+    const timeStr = apptItem.time ? ` • ${apptItem.time}` : "";
+    const consultDate = `${dateStr}${timeStr}`;
+
+    return {
+      patientName: patient?.name || "Patient",
+      patientCode: patient?.patientCode || "",
+      age: patient?.age ? String(patient.age) : "",
+      gender: patient?.gender || "",
+      consultDate,
+      diagnosis: digitalData?.diagnosis || "",
+      formulationRows: digitalData?.formulationRows || [],
+      medicines: parsedMeds,
+      doctorNotes: digitalData?.notes || "",
+      signedAt: rx.updatedAt || undefined,
+    };
+  }, [patient]);
+
+  const openAppointmentPrescription = useCallback(async (apptItem: {
+    id?: number;
+    type?: "online" | "offline" | "physical";
+    date?: string;
+    time?: string;
+    prescription?: { photoObjectPath?: string | null; notes?: string | null; updatedAt?: string } | null;
+  }) => {
+    let rx = apptItem.prescription;
+
+    if (!rx?.photoObjectPath && !rx?.notes && apptItem.id && apptItem.type) {
+      try {
+        const typeParam = apptItem.type === "online" ? "online" : "offline";
+        const res = await fetch(`${BASE}/api/patient/prescriptions/appointment/${typeParam}/${apptItem.id}`, { credentials: "include" });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.prescription) {
+            rx = json.prescription;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load appointment prescription", e);
+      }
+    }
+
+    if (!rx) return;
+    if (rx.photoObjectPath) {
+      setPreviewPrescription({
+        name: "Prescription Document",
+        objectPath: rx.photoObjectPath,
+        contentType: "",
+      });
+      return;
+    }
+
+    const printData = buildDigitalPrintData(apptItem, rx);
+    if (printData) {
+      setActiveDigitalPrint(printData);
+    }
+  }, [buildDigitalPrintData]);
+
+  const handleDownloadPhotoPrescription = useCallback((photoPath: string, fileName?: string) => {
+    const defaultName = fileName || photoPath.split("/").pop() || "Prescription.pdf";
+    const url = photoPath.startsWith("http")
+      ? photoPath
+      : `${BASE}/api/storage${photoPath.startsWith("/") ? "" : "/"}${photoPath}?download=1&filename=${encodeURIComponent(defaultName)}`;
+    downloadFileDirectly(url, defaultName);
+  }, []);
+
+  const handleDownloadDigitalPrescription = useCallback(async (apptItem: {
+    id?: number;
+    type?: "online" | "offline" | "physical";
+    date?: string;
+    time?: string;
+    prescription?: { id?: number; photoObjectPath?: string | null; notes?: string | null; updatedAt?: string } | null;
+  }) => {
+    let rx = apptItem.prescription;
+
+    if (!rx?.photoObjectPath && !rx?.notes && apptItem.id && apptItem.type) {
+      try {
+        const typeParam = apptItem.type === "online" ? "online" : "offline";
+        const res = await fetch(`${BASE}/api/patient/prescriptions/appointment/${typeParam}/${apptItem.id}`, { credentials: "include" });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.prescription) {
+            rx = json.prescription;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load appointment prescription", e);
+      }
+    }
+
+    const patCode = patient?.patientCode || (patient?.id ? `A${String(patient.id).padStart(3, "0")}` : "A001");
+    const safePatName = (patient?.name || "Patient").replace(/\s+/g, "_");
+    const fileName = `Prescription_${safePatName}_${patCode}.pdf`;
+
+    if (rx?.photoObjectPath) {
+      handleDownloadPhotoPrescription(rx.photoObjectPath, fileName);
+      return;
+    }
+
+    if (rx) {
+      const printData = buildDigitalPrintData(apptItem, rx);
+      if (printData) {
+        await downloadPrescriptionPdf(printData, fileName);
+        return;
+      }
+    }
+
+    const typeParam = apptItem.type === "online" ? "online" : "offline";
+    const rxId = (rx as any)?.id;
+    const downloadUrl = rxId
+      ? `${BASE}/api/patient/prescriptions/${rxId}/download?filename=${encodeURIComponent(fileName)}`
+      : `${BASE}/api/patient/prescriptions/appointment/${typeParam}/${apptItem.id}/download?filename=${encodeURIComponent(fileName)}`;
+
+    await downloadFileDirectly(downloadUrl, fileName);
+  }, [patient, buildDigitalPrintData, handleDownloadPhotoPrescription]);
+
+  const handleViewApptRx = useCallback((item: AppointmentItem) => {
+    const time = appointmentTime(item);
+    openAppointmentPrescription({
+      id: item.data.id,
+      type: item.type === "online" ? "online" : "offline",
+      date: item.date,
+      time,
+      prescription: item.data.prescription,
+    });
+  }, [openAppointmentPrescription]);
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<PatientDoc | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -740,7 +934,31 @@ export default function PatientDashboard() {
   const upcomingAppointments = allAppointments.filter(a => isUpcoming(a.date, a.data.status));
   const upcomingCount = upcomingAppointments.length;
   const pastAppts = allAppointments.filter(a => !isUpcoming(a.date, a.data.status));
-  const prescriptions = onlineAppts.filter(a => a.prescription?.photoObjectPath || cleanDoctorNotes(a.prescription?.notes));
+  const allApptsForRx = [
+    ...onlineAppts.map(a => ({
+      id: a.id,
+      type: "online" as const,
+      slot: a.slot,
+      apptDate: a.slot.date,
+      timeLabel: appointmentTime({ type: "online", date: a.slot.date, data: a }),
+      documents: a.documents || [],
+      prescription: a.prescription,
+    })),
+    ...physicalAppts.map(a => ({
+      id: a.id,
+      type: "offline" as const,
+      slot: { id: 0, date: a.date, startTime: "", endTime: "" },
+      apptDate: a.date,
+      timeLabel: appointmentTime({ type: "physical", date: a.date, data: a }),
+      documents: a.documents || [],
+      prescription: a.prescription,
+    })),
+  ];
+
+  const prescriptions = allApptsForRx
+    .filter(a => hasAppointmentPrescription(a.prescription))
+    .sort((a, b) => (b.apptDate || "").localeCompare(a.apptDate || ""));
+
   const filteredPrescriptions = prescriptions.filter(appt => matchesPortalSearch(prescriptionSearch, [
     appt.prescription?.photoObjectPath ? "Prescription Document" : "Digital Prescription Issued",
     PRESCRIPTION_PRESCRIBER,
@@ -752,6 +970,10 @@ export default function PatientDashboard() {
     doc.createdAt ? "Uploaded" : "Uploaded Date unavailable",
     ...dateSearchTerms(doc.createdAt),
   ]));
+  const pagedUpcoming = paginatePortalItems(upcomingAppointments, upcomingPage);
+  const pagedPast = paginatePortalItems(pastAppts, pastPage);
+  const pagedPrescriptions = paginatePortalItems(filteredPrescriptions, prescriptionPage);
+  const pagedPatientDocs = paginatePortalItems(filteredPatientDocs, documentPage);
   const unreadCounts = usePortalSectionBadges(patient?.id, sidebarTab, {
     appointments: upcomingAppointments.map(item => `${item.type}:${item.data.id}`),
     prescriptions: prescriptions.map(appt => `${appt.id}:${appt.prescription?.updatedAt ?? ""}`),
@@ -981,7 +1203,7 @@ export default function PatientDashboard() {
       </aside>
 
       {/* ── MAIN CONTENT AREA ────────────────────────────────────── */}
-      <main className={cn("flex-1 w-full min-w-0 md:h-screen md:overflow-y-auto", sidebarTab === "appointments" ? "bg-[#f8faf9] px-4 pb-8 pt-4 md:pl-[18px] md:pr-2" : sidebarTab === "docs" ? "p-[14px]" : "p-5 md:p-8 xl:p-10")}>
+      <main className={cn("flex-1 w-full min-w-0 md:h-screen md:overflow-y-auto", sidebarTab === "appointments" ? "bg-[#f8faf9] px-4 pb-8 pt-4 md:pl-[18px] md:pr-2" : sidebarTab === "docs" ? "flex flex-col p-[14px]" : "p-5 md:p-8 xl:p-10")}>
 
         {/* Direct Call Alert Banner */}
         {directCall && !videoCallDirectId && (
@@ -1059,8 +1281,8 @@ export default function PatientDashboard() {
           </div>
         )}
 
-        {/* ── 1. DASHBOARD TAB ── */}
-        {(sidebarTab === "dashboard" || sidebarTab === "prescriptions") && previewPrescription && <MedicalDocumentPreview key={previewPrescription.objectPath} doc={previewPrescription} onClose={() => setPreviewPrescription(null)} />}
+        {previewPrescription && <MedicalDocumentPreview key={previewPrescription.objectPath} doc={previewPrescription} onClose={() => setPreviewPrescription(null)} />}
+        {activeDigitalPrint && <PrintPrescriptionModal data={activeDigitalPrint} onClose={() => setActiveDigitalPrint(null)} />}
 
         {sidebarTab === "dashboard" && (
           <div className="space-y-8 animate-in fade-in duration-200 w-full">
@@ -1219,38 +1441,65 @@ export default function PatientDashboard() {
                 {prescriptions.length > 0 ? (
                   prescriptions.map((appt, i) => {
                     const photoPath = appt.prescription?.photoObjectPath;
-                    const firstDoc = photoPath
-                      ? { name: "Prescription Document", objectPath: photoPath, contentType: "" }
-                      : appt.documents?.[0] || null;
+                    const hasDigital = !photoPath && !!appt.prescription?.notes;
 
                     return (
                       <div key={i} className={`flex items-center justify-between flex-wrap gap-2 ${i > 0 ? "pt-4" : ""}`}>
                         <div>
                           <p className="font-bold text-sm font-sans text-gray-900">
-                            Prescription — {fmtDateShort(appt.slot.date)}
+                            Prescription — {fmtDateShort(appt.apptDate)} • {appt.timeLabel}
                           </p>
                           <p className="text-xs font-sans text-gray-500 mt-0.5">
                             Prescribed by Dr. P. Murali Krishna
                           </p>
                         </div>
-                        {firstDoc && (
+                        {photoPath ? (
                           <div className="flex items-center gap-2 shrink-0">
                             <button
                               type="button"
-                              onClick={() => setPreviewPrescription(firstDoc)}
+                              onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
                               className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <Eye size={12} /> View
                             </button>
-                            <a
-                              href={`${BASE}/api/storage${firstDoc.objectPath}`}
-                              download
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPhotoPrescription(photoPath, `Prescription_${fmtDateShort(appt.apptDate).replace(/\s+/g, "_")}.pdf`)}
                               className="px-3 py-1 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <Download size={12} /> Download
-                            </a>
+                            </button>
                           </div>
-                        )}
+                        ) : hasDigital ? (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => openAppointmentPrescription({
+                                id: appt.id,
+                                type: appt.type,
+                                date: appt.apptDate,
+                                time: appt.timeLabel,
+                                prescription: appt.prescription,
+                              })}
+                              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye size={12} /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadDigitalPrescription({
+                                id: appt.id,
+                                type: appt.type,
+                                date: appt.apptDate,
+                                time: appt.timeLabel,
+                                prescription: appt.prescription,
+                              })}
+                              className="px-3 py-1 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download size={12} /> Download
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })
@@ -1283,15 +1532,20 @@ export default function PatientDashboard() {
             <section aria-labelledby="upcoming-appointments-heading">
               <h2 id="upcoming-appointments-heading" className="mb-[18px] flex items-center gap-3 text-[20px] font-bold leading-5 text-[#242424]"> Upcoming Appointments</h2>
               <div className="space-y-3">
-                {upcomingAppointments.map(item => (
+                {pagedUpcoming.items.map(item => (
                   <div key={item.type + item.data.id} className="flex min-h-16 flex-wrap items-center gap-4 rounded-[13px] border border-[#ffb29b] bg-white py-[11px] pl-[18px] pr-[17px]">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f6eae6] text-[#b9380d]">{item.type === "online" ? <Video size={17} fill="currentColor" strokeWidth={1.5} /> : <MapPin size={17} />}</div>
                     <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:ml-[19px]"><p className="text-base font-bold text-black">{fmtDateShort(item.date)}</p><p className="text-sm text-black">{appointmentTime(item)} · {item.type === "online" ? "Online Consultation" : "Offline Consultation"}</p></div>
-                    <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} /></div>
+                    <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></div>
                   </div>
                 ))}
                 {upcomingCount === 0 && <p className="rounded-[13px] border border-[#eee8e3] p-5 text-sm text-gray-500">No upcoming appointments scheduled</p>}
               </div>
+              {upcomingAppointments.length > PORTAL_PAGE_SIZE && (
+                <nav aria-label="Upcoming appointments pages" className="mt-3">
+                  <AdminPagination currentPage={pagedUpcoming.page} totalItems={upcomingAppointments.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setUpcomingPage} itemLabel="appointments" className="rounded-[13px] border border-[#eee8e3]" />
+                </nav>
+              )}
             </section>
             <section aria-labelledby="past-appointments-heading" className="mt-[23px]">
               <h2 id="past-appointments-heading" className="mb-3 flex items-center gap-1.5 text-[20px] font-bold leading-5 text-[#263248]"> Past Appointments</h2>
@@ -1300,17 +1554,22 @@ export default function PatientDashboard() {
                   <colgroup><col className="w-[17%]" /><col className="w-[26%]" /><col className="w-[23.5%]" /><col className="w-[18%]" /><col className="w-[15.5%]" /></colgroup>
                   <thead className="bg-[#FAF7F4] text-[16px]"><tr>{["Date", "Time", "Type", "Status", "Action"].map(label => <th key={label} scope="col" className="h-11 px-[18px] font-medium">{label}</th>)}</tr></thead>
                   <tbody>
-                    {pastAppts.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
+                    {pagedPast.items.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
                       <td className="px-[18px] py-3 font-medium">{fmtDateShort(item.date)}</td>
                       <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
                       <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
                       <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
-                      <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} /></td>
+                      <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></td>
                     </tr>)}
                     {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
                   </tbody>
                 </table>
               </div>
+              {pastAppts.length > PORTAL_PAGE_SIZE && (
+                <nav aria-label="Past appointments pages" className="mt-3">
+                  <AdminPagination currentPage={pagedPast.page} totalItems={pastAppts.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setPastPage} itemLabel="appointments" className="rounded-[13px] border border-[#eee8e3]" />
+                </nav>
+              )}
             </section>
           </div>
         )}
@@ -1323,7 +1582,7 @@ export default function PatientDashboard() {
               <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
                 <label className="flex h-[44px] w-full items-center gap-4 rounded-xl border border-[#cfd5c9] bg-white px-3.5 sm:w-[298px]">
                   <Search size={17} className="shrink-0 text-[#62685f]" />
-                  <input type="search" value={prescriptionSearch} onChange={event => setPrescriptionSearch(event.target.value)} aria-label="Search prescriptions by title, date or doctor" placeholder="Search title, date, doctor..." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
+                  <input type="search" value={prescriptionSearch} onChange={event => { setPrescriptionSearch(event.target.value); setPrescriptionPage(1); }} aria-label="Search prescriptions by title, date or doctor" placeholder="Search title, date, doctor..." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
                 </label>
                 {patient?.emailVerified && (
                   <button
@@ -1346,17 +1605,19 @@ export default function PatientDashboard() {
               <p role="status" className="rounded-[13px] border border-[#e3eaf3] bg-white p-6 text-center text-sm text-gray-500">No prescriptions match your search.</p>
             ) : (
               <div className="space-y-3">
-                {filteredPrescriptions.map(appt => {
+                {pagedPrescriptions.items.map(appt => {
                   const photoPath = appt.prescription?.photoObjectPath;
+                  const apptDate = appt.slot.date;
+                  const downloadHref = photoPath ? (photoPath.startsWith("http") ? photoPath : `${BASE}/api/storage${photoPath.startsWith("/") ? "" : "/"}${photoPath}`) : "";
                   return (
-                    <div key={appt.id} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
+                    <div key={`${appt.type || "rx"}-${appt.id}`} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e3eaf3] bg-[#f1f5f9] text-[#3d4e66]">
                           <FileText size={17} />
                         </div>
                         <div className="min-w-0">
                           <p className="text-[16px] font-bold leading-4 text-[#172238]">{photoPath ? "Prescription Document" : "Digital Prescription"}</p>
-                          <p className="mt-1 text-[12px] leading-4 text-[#7c8ca4]"><span className="text-[#27364c]">{fmtDateShort(appt.slot.date)}</span> · {PRESCRIPTION_PRESCRIBER}</p>
+                          <p className="mt-1 text-[12px] leading-4 text-[#7c8ca4]"><span className="text-[#27364c] font-semibold">{fmtDateShort(apptDate)} • {appt.timeLabel}</span> · {PRESCRIPTION_PRESCRIBER}</p>
                         </div>
                       </div>
                       <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -1365,17 +1626,46 @@ export default function PatientDashboard() {
                             <button
                               type="button"
                               onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
                             >
                               <Eye size={11} /> View
                             </button>
-                            <a
-                              href={`${BASE}/api/storage${photoPath}`}
-                              download
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50"
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPhotoPrescription(photoPath, `Prescription_${fmtDateShort(apptDate).replace(/\s+/g, "_")}.pdf`)}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
                             >
                               <Download size={10} /> Download
-                            </a>
+                            </button>
+                          </>
+                        ) : appt.prescription?.notes ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openAppointmentPrescription({
+                                id: appt.id,
+                                type: appt.type,
+                                date: appt.apptDate,
+                                time: appt.timeLabel,
+                                prescription: appt.prescription,
+                              })}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
+                            >
+                              <Eye size={11} /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadDigitalPrescription({
+                                id: appt.id,
+                                type: appt.type,
+                                date: appt.apptDate,
+                                time: appt.timeLabel,
+                                prescription: appt.prescription,
+                              })}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
+                            >
+                              <Download size={10} /> Download
+                            </button>
                           </>
                         ) : (
                           <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg">Issued</span>
@@ -1384,6 +1674,11 @@ export default function PatientDashboard() {
                     </div>
                   );
                 })}
+                {filteredPrescriptions.length > PORTAL_PAGE_SIZE && (
+                  <nav aria-label="Prescriptions pages">
+                    <AdminPagination currentPage={pagedPrescriptions.page} totalItems={filteredPrescriptions.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setPrescriptionPage} itemLabel="prescriptions" className="rounded-[13px] border border-[#e3eaf3]" />
+                  </nav>
+                )}
               </div>
             )}
           </div>
@@ -1391,14 +1686,14 @@ export default function PatientDashboard() {
 
         {/* ── 4. MY DOCS TAB ── */}
         {sidebarTab === "docs" && (
-          <div className="w-full p-7 animate-in fade-in duration-200">
+          <div className="flex min-h-full w-full flex-1 flex-col p-7 animate-in fade-in duration-200">
             {previewDoc && <MedicalDocumentPreview key={previewDoc.id} doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
             <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
               <h1 className="text-[30px] font-bold leading-7 text-[#20392b]">Medical Documents</h1>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="flex h-[44px] w-full items-center gap-4 rounded-xl border border-[#cfd5c9] bg-white px-3.5 sm:w-[298px]">
                   <Search size={17} className="shrink-0 text-[#62685f]" />
-                  <input type="search" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)} aria-label="Search documents by file name, patient ID or uploaded date" placeholder="Search file, patient ID, date..." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
+                  <input type="search" value={documentSearch} onChange={event => { setDocumentSearch(event.target.value); setDocumentPage(1); }} aria-label="Search documents by file name, patient ID or uploaded date" placeholder="Search file, patient ID, date..." className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[#777]" />
                 </label>
               <MedicalDocumentUploader
                 mode="popover"
@@ -1407,10 +1702,10 @@ export default function PatientDashboard() {
               />
               </div>
             </div>
-            <section aria-labelledby="recent-documents-heading">
+            <section aria-labelledby="recent-documents-heading" className="flex flex-1 flex-col">
               <h2 id="recent-documents-heading" className="mb-3 text-[20px] font-bold text-[#172238]">Recent Documents</h2>
               <div className="space-y-3">
-                {filteredPatientDocs.map(doc => (
+                {pagedPatientDocs.items.map(doc => (
                   <div key={doc.id} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e3eaf3] bg-[#f1f5f9] text-[#3d4e66]">
@@ -1423,7 +1718,7 @@ export default function PatientDashboard() {
                     </div>
                     <div className="ml-auto flex shrink-0 items-center gap-2">
                       <button type="button" onClick={() => setPreviewDoc(doc)} className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50"><Eye size={11} /> View</button>
-                      <a href={BASE + "/api/storage" + doc.objectPath} download={doc.name} className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50"><Download size={10} /> Download</a>
+                      <button type="button" onClick={() => downloadFileDirectly(BASE + "/api/storage" + doc.objectPath + "?download=1&filename=" + encodeURIComponent(doc.name), doc.name)} className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"><Download size={10} /> Download</button>
                       <button type="button" onClick={() => setConfirmDeleteDoc(doc)} aria-label={"Delete " + doc.name} title="Delete document" className="rounded p-1 text-[#9d9894] transition-colors hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
                     </div>
                   </div>
@@ -1438,6 +1733,11 @@ export default function PatientDashboard() {
                   <p role="status" className="rounded-[13px] border border-[#e3eaf3] bg-white p-6 text-center text-sm text-gray-500">No documents match your search.</p>
                 )}
               </div>
+              {filteredPatientDocs.length > PORTAL_PAGE_SIZE && (
+                <nav aria-label="Medical documents pages" className="sticky bottom-0 z-10 mt-auto bg-[#f8faf9] pt-3">
+                  <AdminPagination currentPage={pagedPatientDocs.page} totalItems={filteredPatientDocs.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setDocumentPage} itemLabel="documents" className="rounded-[13px] border border-[#e3eaf3]" />
+                </nav>
+              )}
             </section>
           </div>
         )}
@@ -1500,3 +1800,4 @@ export default function PatientDashboard() {
     </div>
   );
 }
+

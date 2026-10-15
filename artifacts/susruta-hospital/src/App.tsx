@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import { loadRecaptchaScript } from "@/lib/recaptcha";
 
 // Single public page
 import Home from "./pages/home";
@@ -21,6 +23,7 @@ import AdminOnlineSlots from "./pages/admin/online-slots";
 import AdminOnlineAppointments from "./pages/admin/online-appointments";
 import AdminPatients from "./pages/admin/patients";
 import AdminDonations from "./pages/admin/donations";
+import AdminMedicines from "./pages/admin/medicines";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
@@ -101,6 +104,7 @@ function Router() {
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />
       <Route path="/admin/online-appointments">{() => <Redirect to="/admin/appointments" />}</Route>
       <Route path="/admin/patients" component={AdminPatients} />
+      <Route path="/admin/medicines" component={AdminMedicines} />
       <Route path="/admin/donations" component={AdminDonations} />
       <Route path="/admin/settings" component={AdminSettings} />
 
@@ -110,6 +114,10 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    loadRecaptchaScript().catch(() => {});
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

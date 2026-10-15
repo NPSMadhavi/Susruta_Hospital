@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, prescriptionsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable } from "@workspace/db";
 import { eq, and, desc, ne, isNotNull, sql, or } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
@@ -11,10 +11,13 @@ import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes, randomInt, createHash, timingSafeEqual } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment } from "./appointments";
+import { extractClinicalNotes } from "./doctor";
 import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 import { normalizeVerificationEmail } from "../lib/verification";
 import { addDirectCallPatientClient } from "../lib/directCallSse";
 import { registerNewPatientWithNextId } from "../lib/patient-id";
+import { streamPrescriptionDownload } from "../lib/prescription-service";
+import { verifyRecaptcha } from "../lib/recaptcha";
 
 const OTP_PEPPER = process.env.UNSUBSCRIBE_SECRET || "susruta-otp-pepper-secure-2026";
 
@@ -171,7 +174,7 @@ const RegisterBody = z.object({
   password: z.string().min(6),
 });
 
-router.post("/auth/register", async (req, res) => {
+router.post("/auth/register", verifyRecaptcha("patient_register"), async (req, res) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -247,7 +250,7 @@ const LoginBody = z.object({
   password: z.string().min(1),
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", verifyRecaptcha("patient_login"), async (req, res) => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "validation_error", message: "Email and password are required." });
@@ -393,7 +396,7 @@ router.post("/logout", async (req, res) => {
 });
 
 // ── Forgot Password ────────────────────────────────────────────
-router.post("/auth/forgot-password", async (req, res) => {
+router.post("/auth/forgot-password", verifyRecaptcha("patient_forgot_password"), async (req, res) => {
   const { email } = req.body;
   if (!email || typeof email !== "string") {
     res.status(400).json({ error: "validation_error", message: "Email is required." });
@@ -423,7 +426,7 @@ router.post("/auth/forgot-password", async (req, res) => {
 });
 
 // ── Reset Password ─────────────────────────────────────────────
-router.post("/auth/reset-password", async (req, res) => {
+router.post("/auth/reset-password", verifyRecaptcha("patient_reset_password"), async (req, res) => {
   const { token, password } = req.body;
   if (!token || !password || typeof token !== "string" || typeof password !== "string") {
     res.status(400).json({ error: "validation_error", message: "Token and new password are required." });
@@ -866,21 +869,161 @@ router.get("/appointments", requirePatient, async (req, res) => {
     conditions.push(eq(appointmentsTable.patientPhone, patient.phone));
   }
 
-  const appts = await db
-    .select()
+  const rows = await db
+    .select({
+      appt: appointmentsTable,
+      prescription: prescriptionsTable,
+    })
     .from(appointmentsTable)
+    .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
     .where(or(...conditions))
     .orderBy(desc(appointmentsTable.date));
 
-  // Backfill patientId for matching records if missing
-  for (const a of appts) {
+  const result = rows.map((r) => {
+    const a = r.appt;
     if (!a.patientId) {
       db.update(appointmentsTable).set({ patientId: patient.id }).where(eq(appointmentsTable.id, a.id)).catch(() => {});
       a.patientId = patient.id;
     }
+
+    const clinicalNotes = extractClinicalNotes(r.prescription?.notes ?? a.notes);
+    const photoPath = r.prescription?.photoObjectPath ?? null;
+    const rxUpdatedAt = r.prescription?.updatedAt?.toISOString() ?? a.createdAt?.toISOString() ?? new Date().toISOString();
+
+    return {
+      id: a.id,
+      patientId: a.patientId,
+      patientName: a.patientName,
+      patientPhone: a.patientPhone,
+      patientEmail: a.patientEmail ?? null,
+      date: a.date,
+      timeSlot: a.timeSlot,
+      status: a.status,
+      reason: a.reason ?? null,
+      notes: r.prescription?.notes ?? a.notes ?? null,
+      arrivedAt: a.arrivedAt?.toISOString() ?? null,
+      createdAt: a.createdAt?.toISOString() ?? null,
+      prescription: (photoPath || r.prescription?.notes || clinicalNotes) ? {
+        id: r.prescription?.id ?? a.id,
+        photoObjectPath: photoPath,
+        notes: r.prescription?.notes ?? a.notes ?? null,
+        updatedAt: rxUpdatedAt,
+      } : null,
+    };
+  });
+
+  res.json(result);
+});
+
+// ── GET /api/patient/prescriptions/appointment/:type/:id ──────────
+// Fetch prescription for a specific consultation/appointment strictly belonging to the authenticated patient
+router.get("/prescriptions/appointment/:type/:id", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const apptType = req.params.type; // "online" | "offline"
+  const apptId = parseInt(req.params.id, 10);
+
+  if (!apptId || isNaN(apptId)) {
+    res.status(400).json({ error: "invalid_id", message: "Valid appointment ID is required." });
+    return;
   }
 
-  res.json(appts.map((a) => ({ ...a, createdAt: a.createdAt?.toISOString() ?? null, arrivedAt: a.arrivedAt?.toISOString() ?? null })));
+  if (apptType === "online") {
+    const [row] = await db
+      .select({
+        appt: onlineAppointmentsTable,
+        slot: onlineSlotsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(onlineAppointmentsTable)
+      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .where(and(eq(onlineAppointmentsTable.id, apptId), eq(onlineAppointmentsTable.patientId, patient.id)));
+
+    if (!row) {
+      res.status(404).json({ error: "not_found", message: "Consultation not found or unauthorized." });
+      return;
+    }
+
+    const rx = row.prescription;
+    res.json({
+      appointmentId: row.appt.id,
+      type: "online",
+      date: row.slot.date,
+      time: `${row.slot.startTime} – ${row.slot.endTime}`,
+      prescription: rx ? {
+        id: rx.id,
+        photoObjectPath: rx.photoObjectPath,
+        notes: rx.notes,
+        updatedAt: rx.updatedAt.toISOString(),
+      } : null,
+    });
+  } else {
+    // Offline hospital appointment
+    const conditions = [eq(appointmentsTable.patientId, patient.id)];
+    if (patient.email) {
+      conditions.push(sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`);
+    }
+    if (patient.phone) {
+      conditions.push(eq(appointmentsTable.patientPhone, patient.phone));
+    }
+
+    const [row] = await db
+      .select({
+        appt: appointmentsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(appointmentsTable)
+      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
+      .where(and(eq(appointmentsTable.id, apptId), or(...conditions)));
+
+    if (!row) {
+      res.status(404).json({ error: "not_found", message: "Consultation not found or unauthorized." });
+      return;
+    }
+
+    const rx = row.prescription;
+    res.json({
+      appointmentId: row.appt.id,
+      type: "offline",
+      date: row.appt.date,
+      time: row.appt.timeSlot,
+      prescription: rx ? {
+        id: rx.id,
+        photoObjectPath: rx.photoObjectPath,
+        notes: rx.notes,
+        updatedAt: rx.updatedAt.toISOString(),
+      } : (row.appt.notes ? {
+        id: row.appt.id,
+        photoObjectPath: null,
+        notes: row.appt.notes,
+        updatedAt: row.appt.createdAt?.toISOString() ?? new Date().toISOString(),
+      } : null),
+    });
+  }
+});
+
+// ── GET /api/patient/prescriptions/:id/download ────────────────────
+router.get("/prescriptions/:id/download", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const requestedFileName = typeof req.query.filename === "string" ? req.query.filename : undefined;
+  await streamPrescriptionDownload({
+    rxIdOrApptParam: String(req.params.id),
+    requestedFileName,
+    authenticatedPatientId: patient.id,
+    res,
+  });
+});
+
+// ── GET /api/patient/prescriptions/appointment/:type/:id/download ──
+router.get("/prescriptions/appointment/:type/:id/download", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  const requestedFileName = typeof req.query.filename === "string" ? req.query.filename : undefined;
+  await streamPrescriptionDownload({
+    rxIdOrApptParam: `appt-${String(req.params.type)}-${String(req.params.id)}`,
+    requestedFileName,
+    authenticatedPatientId: patient.id,
+    res,
+  });
 });
 
 // ── Book Appointment ──────────────────────────────────────────

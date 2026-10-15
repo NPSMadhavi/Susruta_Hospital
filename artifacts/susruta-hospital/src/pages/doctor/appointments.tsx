@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
@@ -7,7 +8,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, X, Download, User, ZoomIn, Eye,
   ChevronDown, ChevronUp, Mail, MailCheck, StickyNote, Save, ClipboardList,
   Stethoscope, CloudUpload, FilePlus2, Heart, IndianRupee, Search, ArrowLeft, ExternalLink,
-  Printer, Plus, Link as LinkIcon, AlertTriangle, Building2, UserCheck, FlaskConical, FileEdit, Trash2
+  Printer, Plus, Link as LinkIcon, AlertTriangle, Building2, UserCheck, FlaskConical, FileEdit, Trash2, Contact
 } from "lucide-react";
 import { VideoCall } from "@/components/VideoCall";
 import { CleanPdfViewer } from "@/components/CleanPdfViewer";
@@ -15,6 +16,10 @@ import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
 import { todayIST, fmtDateFromTs, fmtTimeIST } from "@/lib/ist";
 import { playDoctorCallAlert } from "@/lib/sound";
+import { downloadFileDirectly, downloadPrescriptionPdf, type PrintPrescriptionData } from "@/lib/prescription-download";
+import { HOSPITAL_LOGO_DATA_URL } from "@/lib/hospital-logo-b64";
+import { DigitalPrescriptionPages } from "@/components/DigitalPrescriptionPages";
+import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -82,6 +87,8 @@ type RegisteredPatient = {
   name: string;
   email: string;
   phone: string | null;
+  age?: number | string | null;
+  gender?: string | null;
   createdAt: string;
   documents: DocFile[];
   appointments: {
@@ -138,12 +145,26 @@ function fmtDateShort(d: string) {
   if (isNaN(dateObj.getTime())) return d;
   return dateObj.toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short" });
 }
+function fmtDateYear(d: string) {
+  if (!d) return "";
+  const dateObj = d.includes("T") ? new Date(d) : new Date(d + "T00:00:00+05:30");
+  if (isNaN(dateObj.getTime())) return d;
+  return dateObj.toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" });
+}
 export function cleanDoctorNotes(rawNotes: string | null | undefined): string {
   if (!rawNotes || typeof rawNotes !== "string") return "";
   let text = rawNotes.trim();
   if (!text) return "";
-  if (text.startsWith("{") && (text.includes('"token"') || text.includes('"amount"') || text.includes('"paymentMode"'))) {
-    return "";
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed.notes === "string" && parsed.notes.trim()) {
+        return parsed.notes.trim();
+      }
+      return "";
+    } catch {
+      return "";
+    }
   }
   if (text.includes("DOCTOR NOTES:")) {
     const parts = text.split("DOCTOR NOTES:");
@@ -155,19 +176,76 @@ export function cleanDoctorNotes(rawNotes: string | null | undefined): string {
   return text;
 }
 
-function parseMedicinesFromNotes(rawNotes: string | null | undefined): MedicineItem[] {
-  if (!rawNotes || !rawNotes.includes("AYURVEDIC MEDICINAL FORMULATIONS:")) return [];
+export function extractDigitalPrescriptionData(rawNotes: string | null | undefined) {
+  if (!rawNotes || typeof rawNotes !== "string") return null;
+  const trimmed = rawNotes.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.digitalPrescription || parsed.formulationRows || parsed.diagnosis) {
+        return {
+          diagnosis: parsed.diagnosis || "",
+          notes: parsed.notes || "",
+          formulationRows: Array.isArray(parsed.formulationRows) ? parsed.formulationRows : [],
+        };
+      }
+    } catch {}
+  }
+
+  const diagMatch = trimmed.match(/^Diagnosis:\s*([^\n]+)/i);
+  const meds = parseMedicinesFromNotes(trimmed);
+  const notes = cleanDoctorNotes(trimmed);
+  if (diagMatch || meds.length > 0) {
+    return {
+      diagnosis: diagMatch ? diagMatch[1].trim() : "",
+      notes,
+      formulationRows: [],
+    };
+  }
+
+  return null;
+}
+
+export function parseMedicinesFromNotes(rawNotes: string | null | undefined): MedicineItem[] {
+  if (!rawNotes || typeof rawNotes !== "string") return [];
+  const trimmed = rawNotes.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed.formulationRows)) {
+        return parsed.formulationRows.flatMap((row: any) =>
+          (row.medicines || [])
+            .filter((m: any) => m.name && m.name.trim().length > 0)
+            .map((m: any) => ({
+              id: `${row.id}_${m.id}`,
+              name: m.name ? `${m.name}${m.dosage ? ` (${m.dosage})` : ""}` : "",
+              morningBefore: row.timing?.morning?.mealRelation === "before",
+              morningAfter: row.timing?.morning?.mealRelation === "after",
+              afternoonBefore: row.timing?.afternoon?.mealRelation === "before",
+              afternoonAfter: row.timing?.afternoon?.mealRelation === "after",
+              nightBefore: row.timing?.night?.mealRelation === "before",
+              nightAfter: row.timing?.night?.mealRelation === "after",
+              duration: row.duration || "-",
+            }))
+        );
+      }
+    } catch {}
+  }
+
+  if (!rawNotes.includes("AYURVEDIC MEDICINAL FORMULATIONS:")) return [];
   const lines = rawNotes.split("\n");
   const meds: MedicineItem[] = [];
   let currentMed: Partial<MedicineItem> | null = null;
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\d+\.\s+/.test(trimmed)) {
+    const l = line.trim();
+    if (/^\d+\.\s+/.test(l)) {
       if (currentMed && currentMed.name) {
         meds.push(currentMed as MedicineItem);
       }
-      const name = trimmed.replace(/^\d+\.\s+/, "");
+      const name = l.replace(/^\d+\.\s+/, "");
       currentMed = {
         id: String(Math.random()),
         name,
@@ -177,19 +255,19 @@ function parseMedicinesFromNotes(rawNotes: string | null | undefined): MedicineI
         afternoonAfter: false,
         nightBefore: false,
         nightAfter: true,
-        duration: "21 Days",
+        duration: "-",
       };
-    } else if (currentMed && trimmed.startsWith("Dosage:")) {
-      const dosageStr = trimmed.replace("Dosage:", "");
+    } else if (currentMed && l.startsWith("Dosage:")) {
+      const dosageStr = l.replace("Dosage:", "");
       currentMed.morningBefore = dosageStr.includes("Morning (Before");
       currentMed.morningAfter = dosageStr.includes("Morning (After");
       currentMed.afternoonBefore = dosageStr.includes("Afternoon (Before");
       currentMed.afternoonAfter = dosageStr.includes("Afternoon (After");
       currentMed.nightBefore = dosageStr.includes("Night (Before");
       currentMed.nightAfter = dosageStr.includes("Night (After");
-    } else if (currentMed && trimmed.startsWith("Duration:")) {
-      currentMed.duration = trimmed.replace("Duration:", "").trim();
-    } else if (trimmed.startsWith("DOCTOR NOTES:")) {
+    } else if (currentMed && l.startsWith("Duration:")) {
+      currentMed.duration = l.replace("Duration:", "").trim();
+    } else if (l.startsWith("DOCTOR NOTES:")) {
       break;
     }
   }
@@ -295,14 +373,19 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  const handleDownload = useCallback(() => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc.name || (pdf ? "document.pdf" : "image.jpg");
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [url, doc.name, pdf]);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const handleDownload = useCallback(async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const downloadName = doc.name || (pdf ? "document.pdf" : "image.jpg");
+    try {
+      await downloadFileDirectly(url, downloadName);
+    } catch (err: any) {
+      console.error("Failed to download document:", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [url, doc.name, pdf, isDownloading]);
 
   const handlePrint = useCallback(() => {
     if (pdf) {
@@ -368,11 +451,12 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
             <button
               type="button"
               onClick={handleDownload}
-              className="px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+              disabled={isDownloading}
+              className="px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
               title="Download"
             >
-              <Download size={14} />
-              <span>Download</span>
+              {isDownloading ? <Loader2 size={14} className="animate-spin text-[#D95B2F]" /> : <Download size={14} />}
+              <span>{isDownloading ? "Downloading..." : "Download"}</span>
             </button>
             <button
               type="button"
@@ -411,9 +495,11 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="px-4 py-2 bg-[#D95B2F] hover:bg-[#c84e24] text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                  disabled={isDownloading}
+                  className="px-4 py-2 bg-[#D95B2F] hover:bg-[#c84e24] text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  <Download size={13} /> Download File
+                  {isDownloading ? <Loader2 size={13} className="animate-spin text-white" /> : <Download size={13} />}
+                  <span>{isDownloading ? "Downloading..." : "Download File"}</span>
                 </button>
               </div>
             </div>
@@ -437,9 +523,11 @@ function DocumentPreviewModal({ doc, onClose }: { doc: DocFile | null | undefine
               <button
                 type="button"
                 onClick={handleDownload}
-                className="px-5 py-2.5 bg-[#D95B2F] hover:bg-[#c84e24] text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 shadow-sm"
+                disabled={isDownloading}
+                className="px-5 py-2.5 bg-[#D95B2F] hover:bg-[#c84e24] text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
-                <Download size={14} /> Download File
+                {isDownloading ? <Loader2 size={14} className="animate-spin text-white" /> : <Download size={14} />}
+                <span>{isDownloading ? "Downloading..." : "Download File"}</span>
               </button>
             </div>
           )}
@@ -554,10 +642,21 @@ type MedicineItem = {
 };
 
 // ── Prescription Modal Component ───────────────────────────────────
-function PrescriptionModal({ appt, patientName: initialPatientName, patientCode: initialPatientCode, onSaved, onClose, onDocClick }: {
-  appt: OnlineAppt;
+function PrescriptionModal({
+  appt,
+  patientName: initialPatientName,
+  patientCode: initialPatientCode,
+  patientAge: initialPatientAge,
+  patientGender: initialPatientGender,
+  onSaved,
+  onClose,
+  onDocClick,
+}: {
+  appt: AnyAppt;
   patientName?: string;
   patientCode?: string;
+  patientAge?: number | string | null;
+  patientGender?: string | null;
   onSaved: (rx: Prescription) => void;
   onClose: () => void;
   onDocClick: (doc: DocFile) => void;
@@ -604,7 +703,10 @@ function PrescriptionModal({ appt, patientName: initialPatientName, patientCode:
       });
 
       if (appt?.id) {
-        await fetch(`${BASE}/api/online-appointments/doctor/${appt.id}/prescription`, {
+        const endpoint = appt.type === "offline"
+          ? `${BASE}/api/doctor/offline-appointments/${appt.id}/prescription`
+          : `${BASE}/api/online-appointments/doctor/${appt.id}/prescription`;
+        await fetch(endpoint, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -642,6 +744,8 @@ function PrescriptionModal({ appt, patientName: initialPatientName, patientCode:
           appt={appt}
           patientName={patientName}
           patientCode={patientCode}
+          patientAge={initialPatientAge ?? (appt as any)?.patient?.age}
+          patientGender={initialPatientGender ?? (appt as any)?.patient?.gender}
           onSaved={onSaved}
           onClose={onClose}
           onBack={() => setMode("select")}
@@ -746,264 +850,455 @@ function getFormulationSubtext(name: string): string {
   return "Ayurvedic Formulation";
 }
 
-// ── Print Prescription Template Modal (Matching User Image) ───────
-function PrintPrescriptionModal({
+// ── Print Prescription Template Modal (Multi-Page A4 with Repeating Header & Final-Page Signature) ──
+export function PrintPrescriptionModal({
   data,
   onClose,
 }: {
-  data: {
-    patientName: string;
-    patientCode: string;
-    age?: string;
-    gender?: string;
-    ageGender?: string;
-    consultDate: string;
-    medicines: MedicineItem[];
-    doctorNotes: string;
-  };
+  data: PrintPrescriptionData;
   onClose: () => void;
 }) {
-  const ehrUid = `${(data.patientName || "Patient").replace(/\s+/g, "")}_${(data.patientCode || "Code").replace(/#/g, "")}`;
-  const displayAge = data.age || (data.ageGender ? data.ageGender.split("/")[0]?.trim() : "") || "—";
-  const displayGender = data.gender || (data.ageGender ? data.ageGender.split("/")[1]?.trim() : "") || "—";
+  const printableRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-100 max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-150 my-auto">
-        {/* Printable Section */}
-        <div id="printable-prescription" className="flex-1 overflow-y-auto p-6 sm:p-10 bg-white">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-slate-200/80">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <img src={logoImg} alt="Susruta Hospital" className="h-10 w-auto max-w-[220px] object-contain" />
-              </div>
-              <p className="text-xs text-[#64748B] font-medium leading-relaxed">
-                119, Ramulavari North Mada Street, Tirupati - 517507 | Ph: 9492068180 / 0877-2220663
-              </p>
-              <p className="text-[11px] font-semibold text-[#64748B] mt-0.5">
-                Govt. Regd No: <span className="font-extrabold text-[#D95B2F]">AYUR-TPT-2024</span> • ISO 9001:2015 Certified
-              </p>
-            </div>
+  useEffect(() => {
+    if (printableRef.current) {
+      printableRef.current.scrollTop = 0;
+    }
+  }, []);
 
-            <div className="text-left sm:text-right shrink-0">
-              <p className="text-[10px] font-bold text-[#D95B2F] uppercase tracking-wider mb-0.5">
-                CHIEF CONSULTING PHYSICIAN
-              </p>
-              <h3 className="font-extrabold text-[#1E293B] text-base">
-                Dr. P. Murali Krishna
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D.
-              </p>
-              <p className="text-xs text-slate-400 font-medium">
-                Former Principal, S.V. Ayurvedic College
-              </p>
-            </div>
-          </div>
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
-          {/* Patient Details Banner */}
-          <div className="bg-[#FAF8F5] border border-[#EDE8DF] rounded-2xl p-4 sm:p-5 my-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-              <div>
-                <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Patient Full Name</p>
-                <p className="font-extrabold text-sm text-[#1E293B] truncate">{data.patientName || "Sinjini Saha"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Patient ID/IPD</p>
-                <p className="font-extrabold text-sm text-[#D95B2F] font-mono">{data.patientCode || "#A115"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Age</p>
-                <p className="font-extrabold text-xs text-[#1E293B]">{displayAge}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Gender</p>
-                <p className="font-extrabold text-xs text-[#1E293B]">{displayGender}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Date Of Consult & Time</p>
-                <p className="font-bold text-xs text-[#1E293B]">{data.consultDate || "24 Oct 2026 • 11:30 AM IST"}</p>
-              </div>
-            </div>
-          </div>
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-          {/* Ayurvedic Formulations Table */}
-          <div className="space-y-3 mb-6">
-            <div>
-              <h4 className="font-extrabold text-xs text-[#1E293B] uppercase tracking-wider">
-                AYURVEDIC MEDICINAL FORMULATIONS
-              </h4>
-              <p className="text-[11px] text-[#64748B] font-medium">
-                Administer precisely as charted below with indicated Anupana
-              </p>
-            </div>
+  const handlePrintPrescription = async () => {
+    if (isPrinting || isDownloading) return;
+    setIsPrinting(true);
+    try {
+      if (document.fonts) {
+        try {
+          await document.fonts.ready;
+        } catch {}
+      }
+      // Brief pause to allow button state to update visually
+      await new Promise(resolve => setTimeout(resolve, 80));
+      window.print();
+    } catch (err) {
+      console.error("Print Prescription error:", err);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
-            <div className="border border-[#E2E4DE] rounded-2xl overflow-hidden bg-white shadow-2xs">
-              <div className="bg-[#F0EDE8] py-3 px-4 text-[11px] font-bold text-[#475569] grid grid-cols-12 gap-2 items-center tracking-wide border-b border-[#E2E4DE]">
-                <div className="col-span-1 text-center">S.NO</div>
-                <div className="col-span-4">Medicine & Formulation</div>
-                <div className="col-span-5 text-center">
-                  Dosage Timing & Food Association
-                  <span className="block text-[10px] text-slate-400 font-normal italic">(strict before / after meals correlation)</span>
-                </div>
-                <div className="col-span-2 text-center">Duration</div>
-              </div>
+  const handleDownloadPdf = async () => {
+    if (isDownloading || isPrinting) return;
+    setIsDownloading(true);
+    try {
+      const filename = `Prescription_${(patientName || "Patient").replace(/\s+/g, "_")}.pdf`;
+      await downloadPrescriptionPdf(data, filename);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
-              <div className="divide-y divide-slate-100">
-                {data.medicines.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400 italic">No specific medicines recorded.</div>
-                ) : (
-                  data.medicines.map((m, idx) => (
-                    <div key={m.id || idx} className="p-4 grid grid-cols-12 gap-2.5 items-center text-xs bg-white">
-                      <div className="col-span-1 text-center font-extrabold text-[#1E293B] text-xs">
-                        {String(idx + 1).padStart(2, "0")}
-                      </div>
+  const patientName = data.patientName || "-";
 
-                      <div className="col-span-4">
-                        <h5 className="font-bold text-sm text-[#1E293B]">{m.name || "Bilwadi Gutika"}</h5>
-                        <p className="text-[11px] font-semibold text-[#D95B2F] mt-0.5">
-                          {getFormulationSubtext(m.name)}
-                        </p>
-                      </div>
-
-                      <div className="col-span-5">
-                        <div className="space-y-1.5 max-w-xs mx-auto">
-                          {/* Morning */}
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.morningBefore ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.morningBefore ? "✓ Before" : "Before"}
-                            </span>
-                            <span className="font-bold text-[#1E293B] text-xs px-2">Breakfast</span>
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.morningAfter ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.morningAfter ? "After ✓" : "After"}
-                            </span>
-                          </div>
-
-                          {/* Afternoon */}
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.afternoonBefore ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.afternoonBefore ? "✓ Before" : "Before"}
-                            </span>
-                            <span className="font-bold text-[#1E293B] text-xs px-2">Lunch</span>
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.afternoonAfter ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.afternoonAfter ? "After ✓" : "After"}
-                            </span>
-                          </div>
-
-                          {/* Night */}
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.nightBefore ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.nightBefore ? "✓ Before" : "Before"}
-                            </span>
-                            <span className="font-bold text-[#1E293B] text-xs px-2">Dinner</span>
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${m.nightAfter ? "bg-[#D95B2F] text-white" : "bg-slate-100 text-slate-300"}`}>
-                              {m.nightAfter ? "After ✓" : "After"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="col-span-2 text-center">
-                        <span className="inline-block px-3 py-1 bg-slate-50 text-[#1E293B] border border-slate-200 rounded-xl text-xs font-bold shadow-2xs">
-                          {m.duration || "21 Days"}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Doctor Notes */}
-          {data.doctorNotes && (
-            <div className="bg-[#FAF8F5] border border-[#EDE8DF] rounded-2xl p-5 mb-6 space-y-2">
-              <h5 className="font-extrabold text-xs text-[#D95B2F]">Doctor Notes</h5>
-              <div className="text-xs text-[#475569] leading-relaxed whitespace-pre-line font-medium">
-                {data.doctorNotes}
-              </div>
-            </div>
-          )}
-
-          {/* Stamp & Signature Block */}
-          <div className="flex flex-col items-end justify-end mt-8 mb-4 pr-2">
-            <div className="relative text-right">
-              <div className="absolute -top-3 -left-12 w-20 h-20 rounded-full border-2 border-dashed border-[#D95B2F]/30 bg-[#FFF4EF]/40 flex flex-col items-center justify-center text-[8px] font-extrabold text-[#D95B2F]/60 select-none rotate-[-12deg] pointer-events-none">
-                <span>SUSRUTA</span>
-                <span>HOSPITAL</span>
-                <span>TIRUPATI</span>
-              </div>
-
-              <p className="font-serif italic text-2xl text-[#64748B] select-none pr-4">
-                P. Murali Krishna
-              </p>
-
-              <div className="w-48 border-t border-slate-300 my-1.5 ml-auto"></div>
-              <p className="font-extrabold text-xs text-[#1E293B]">
-                Dr. P. Murali Krishna
-              </p>
-              <p className="text-[10px] text-slate-500 font-medium">
-                Chief Physician & Research Director
-              </p>
-              <p className="text-[9px] text-slate-400 font-mono mt-0.5">
-                Digitally Signed & Timestamped: {format(new Date(), "dd-MM-yyyy HH:mm")} IST
-              </p>
-            </div>
-          </div>
+  const modalContent = (
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      className="print-modal-overlay fixed inset-0 z-[160] bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-4 sm:p-6 print:p-0 print:bg-white print:static print:overflow-visible"
+    >
+      {/* Screen-only top action bar */}
+      <div className="no-print sticky top-0 z-50 w-full max-w-[210mm] flex items-center justify-between pb-3 pt-1 bg-slate-950/90 backdrop-blur-md px-2 rounded-b-xl shrink-0">
+        <div className="flex items-center gap-2 text-white">
+          <Printer className="w-4 h-4 text-[#D95B2F]" />
+          <span className="font-bold text-xs sm:text-sm tracking-wide text-slate-200" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            Digital Prescription — Print Preview
+          </span>
         </div>
-
-        {/* Footer Bar */}
-        <div className="bg-[#F0EDE8] px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[#EAE6DF] shrink-0">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#475569]">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-            <span>Electronic Health Record (EHR) Linked to UID: {ehrUid}</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-white border border-[#CBD5E1] hover:bg-slate-50 text-[#475569] text-xs font-bold transition-all shadow-2xs cursor-pointer"
-            >
-              Close Window
-            </button>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-2"
-            >
-              <Printer size={15} /> Print Prescription
-            </button>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer border border-white/10 shadow-xs"
+          >
+            Close
+          </button>
+          
+          <button
+            type="button"
+            onClick={handlePrintPrescription}
+            disabled={isDownloading || isPrinting}
+            className="px-5 py-2 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+          >
+            {isPrinting ? <Loader2 size={14} className="animate-spin text-white" /> : <Printer size={14} />}
+            <span>{isPrinting ? "Preparing Print..." : "Print"}</span>
+          </button>
         </div>
       </div>
 
+      {/* A4 Sheet(s) Container */}
+      <div
+        id="printable-prescription-container"
+        ref={printableRef}
+        className="print-modal-container w-[210mm] max-w-[210mm] flex flex-col items-center gap-8 py-4 pb-16 print:p-0 print:m-0 print:max-w-none print:w-[210mm] print:gap-0 print:block"
+        style={{ fontFamily: "'DM Sans', sans-serif" }}
+      >
+        <DigitalPrescriptionPages data={data} />
+      </div>
+
       <style>{`
+        /* Force DM Sans on ALL elements inside the print modal (portaled outside .doctor-portal) */
+        .print-modal-overlay,
+        .print-modal-overlay *,
+        .print-modal-overlay h1,
+        .print-modal-overlay h2,
+        .print-modal-overlay h3,
+        .print-modal-overlay h4,
+        .print-modal-overlay h5,
+        .print-modal-overlay h6,
+        .print-modal-overlay p,
+        .print-modal-overlay span,
+        .print-modal-overlay div,
+        .print-modal-overlay button,
+        .print-modal-overlay input,
+        .print-modal-overlay select,
+        .print-modal-overlay textarea,
+        .print-modal-overlay table,
+        .print-modal-overlay td,
+        .print-modal-overlay th,
+        .print-modal-overlay .font-serif,
+        .print-modal-overlay .font-dm-serif-display {
+          font-family: 'DM Sans', sans-serif !important;
+        }
+        @page {
+          size: A4 portrait;
+          margin: 0 !important;
+        }
         @media print {
-          body * {
-            visibility: hidden;
+          html, body {
+            width: 210mm !important;
+            height: auto !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            overflow: visible !important;
+            font-family: 'DM Sans', sans-serif !important;
           }
-          #printable-prescription, #printable-prescription * {
-            visibility: visible;
+          body > *:not(.print-modal-overlay) {
+            display: none !important;
           }
-          #printable-prescription {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+          #root {
+            display: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-modal-overlay,
+          .print-modal-overlay * {
+            font-family: 'DM Sans', sans-serif !important;
+          }
+          .print-modal-overlay {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+            inset: auto !important;
+            width: 210mm !important;
+            min-height: auto !important;
+            height: auto !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .print-modal-container {
+            position: static !important;
+            display: block !important;
+            transform: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+            width: 210mm !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: transparent !important;
+          }
+          .prescription-print-page {
+            position: relative !important;
+            width: 210mm !important;
+            height: 297mm !important;
+            min-height: 297mm !important;
+            max-height: 297mm !important;
+            margin: 0 !important;
+            padding: 9mm 9mm 14mm 9mm !important;
+            box-sizing: border-box !important;
+            background: #ffffff !important;
+            overflow: hidden !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          .prescription-print-page:last-child {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+          .prescription-print-page *::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+          .prescription-watermark {
+            position: absolute !important;
+            inset: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            pointer-events: none !important;
+            z-index: 0 !important;
+          }
+          .prescription-main-content {
+            width: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .prescription-final-signature {
+            position: absolute !important;
+            right: 9mm !important;
+            bottom: 10mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-end !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .prescription-page-number {
+            position: absolute !important;
+            left: 9mm !important;
+            bottom: 10mm !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(modalContent, document.body)
+    : modalContent;
+}
+
+// ── DB Medicine Definition & Searchable Combobox Component ──────────
+interface DbMedicine {
+  id?: number;
+  medicineId?: string;
+  medicineName: string;
+  dosage?: string | null;
+  frequency?: string | null;
+  formulation?: string | null;
+  properties?: string | null;
+  indications?: string | null;
+}
+
+function MedicineCombobox({
+  nameValue,
+  dosageValue,
+  dbMedicines,
+  onSelectMedicine,
+  onChangeName,
+  onChangeDosage,
+  onRemove,
+  canRemove,
+  compact = false,
+}: {
+  nameValue: string;
+  dosageValue: string;
+  dbMedicines: DbMedicine[];
+  onSelectMedicine: (med: DbMedicine) => void;
+  onChangeName: (val: string) => void;
+  onChangeDosage: (val: string) => void;
+  onRemove?: () => void;
+  canRemove?: boolean;
+  compact?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredMedicines = useMemo(() => {
+    const q = nameValue.trim().toLowerCase();
+    if (!q) return dbMedicines;
+    return dbMedicines.filter(m =>
+      m.medicineName.toLowerCase().includes(q) ||
+      (m.dosage && m.dosage.toLowerCase().includes(q)) ||
+      (m.indications && m.indications.toLowerCase().includes(q)) ||
+      (m.formulation && m.formulation.toLowerCase().includes(q))
+    );
+  }, [nameValue, dbMedicines]);
+
+  return (
+    <div ref={containerRef} className="space-y-1.5 relative">
+      {/* Upper input: Medicine Name + Searchable Dropdown Button */}
+      <div className="relative">
+        <input
+          type="text"
+          value={nameValue}
+          onFocus={() => setIsOpen(true)}
+          onChange={e => {
+            onChangeName(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          placeholder="Enter medicine name"
+          className={cn(
+            "w-full rounded-lg border border-[#CBD5E1] bg-white font-semibold text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all",
+            compact ? "px-2.5 py-1.5 pr-7 text-xs" : "px-3 py-2 pr-8 text-xs"
+          )}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen(prev => !prev)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#D95B2F] p-1 cursor-pointer transition-colors"
+          title="Toggle medicine database dropdown"
+        >
+          <ChevronDown
+            size={14}
+            className={cn("transition-transform duration-150", isOpen && "rotate-180 text-[#D95B2F]")}
+          />
+        </button>
+
+        {/* Searchable Dropdown Popup */}
+        {isOpen && (
+          <div className="absolute left-0 right-0 top-full mt-0.5 bg-white border border-[#CBD5E1] rounded-none shadow-2xl z-[300] max-h-60 overflow-y-auto divide-y divide-slate-100 py-1 animate-in fade-in-50 duration-100">
+            {/* <div className="px-3 py-1.5 bg-[#FAF9F5] flex items-center justify-between text-[10px] font-bold text-[#8C7E72] sticky top-0 z-10 border-b border-[#EAE5DC]">
+              <span>Medicines from database ({filteredMedicines.length})</span>
+              <span className="text-[9px] text-[#A89F91]">Click to auto-fill</span>
+            </div> */}
+
+            {filteredMedicines.length === 0 ? (
+              <div className="px-3.5 py-3 text-center text-xs text-slate-400">
+                No matching medicine found. You can still type custom name and dosage.
+              </div>
+            ) : (
+              filteredMedicines.map((med, idx) => (
+                <div
+                  key={`${med.medicineName}-${idx}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onSelectMedicine(med);
+                    setIsOpen(false);
+                  }}
+                  className="px-3 py-2 hover:bg-[#FFF4EF] cursor-pointer transition-colors group flex flex-col gap-0.5 text-left"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-xs text-[#1E293B] group-hover:text-[#D95B2F] transition-colors">
+                      {med.medicineName}
+                    </span>
+                    {med.formulation && (
+                      <span className="text-[10px] font-bold bg-[#FAF9F5] text-[#8C7E72] border border-[#EAE5DC] px-1.5 py-0.5 rounded">
+                        {med.formulation}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-[#64748B] font-medium truncate">
+                      {med.dosage || "Standard dosage"}
+                    </span>
+                    {med.indications && (
+                      <span className="text-[10px] text-slate-400 truncate max-w-[150px]" title={med.indications}>
+                        {med.indications}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Lower input: Dosage & Frequency (Auto-filled on select, freely editable) */}
+      <div className="flex items-center gap-1.5">
+        <input
+          type="text"
+          value={dosageValue}
+          onChange={e => onChangeDosage(e.target.value)}
+          placeholder="Dosage (optional)"
+          className={cn(
+            "flex-1 rounded-lg border border-[#CBD5E1] bg-white font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all",
+            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-1.5 text-xs"
+          )}
+        />
+        {canRemove && onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="p-1 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+            title="Remove from set"
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Digital Prescription Form Component (Image 1 & Image 2) ──────
-function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onClose, onBack }: {
-  appt: OnlineAppt;
+function DigitalPrescriptionForm({
+  appt,
+  patientName,
+  patientCode,
+  patientAge,
+  patientGender,
+  onSaved,
+  onClose,
+  onBack,
+}: {
+  appt: AnyAppt;
   patientName: string;
   patientCode: string;
+  patientAge?: number | string | null;
+  patientGender?: string | null;
   onSaved: (rx: Prescription) => void;
   onClose: () => void;
   onBack: () => void;
@@ -1012,8 +1307,9 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
     if (pAge === null || pAge === undefined || pAge === "") return "";
     const s = String(pAge).trim();
     if (!s) return "";
-    if (/^\d+$/.test(s)) return `${s} Y`;
-    return s;
+    const cleaned = s.replace(/\s*(years?|y)\s*$/i, "").trim();
+    if (/^\d+$/.test(cleaned)) return cleaned;
+    return cleaned;
   };
 
   const getInitialGender = (pGen: any) => {
@@ -1025,80 +1321,295 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
     return g;
   };
 
-  const [patientFullName, setPatientFullName] = useState(patientName);
-  const [patientIdStr, setPatientIdStr] = useState(patientCode);
-  const [patientAge, setPatientAge] = useState(() => getInitialAge((appt as any)?.patient?.age));
-  const [patientGender, setPatientGender] = useState(() => getInitialGender((appt as any)?.patient?.gender));
-  const [consultDate, setConsultDate] = useState(() => format(new Date(), "dd MMM yyyy • hh:mm a"));
+  const rawAge = patientAge ?? (appt as any)?.patient?.age ?? (appt as any)?.age;
+  const rawGender = patientGender ?? (appt as any)?.patient?.gender ?? (appt as any)?.gender;
 
-  const [medicines, setMedicines] = useState<MedicineItem[]>([]);
-  const [doctorNotes, setDoctorNotes] = useState(appt?.prescription?.notes ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-  const [printData, setPrintData] = useState<{
-    patientName: string;
-    patientCode: string;
-    age?: string;
-    gender?: string;
-    ageGender?: string;
-    consultDate: string;
-    medicines: MedicineItem[];
-    doctorNotes: string;
-  } | null>(null);
+  const initAge = getInitialAge(rawAge);
+  const initGender = getInitialGender(rawGender);
 
-  const addMedicine = () => {
-    setMedicines(prev => [
-      ...prev,
+  const displayAgeGender = [initAge, initGender].filter(Boolean).join(" / ") || "-";
+
+  const consultDateStr = useMemo(() => {
+    if (appt?.date) {
+      const d = fmtDateYear(appt.date);
+      const slot = (appt as any)?.timeLabel || (appt as any)?.slotTime || (appt as any)?.time;
+      return slot ? `${d} • ${slot}` : d;
+    }
+    return format(new Date(), "dd MMM yyyy • hh:mm a");
+  }, [appt?.date, (appt as any)?.timeLabel, (appt as any)?.slotTime, (appt as any)?.time]);
+
+  const [diagnosis, setDiagnosis] = useState("");
+
+  const createEmptyRow = () => ({
+    id: String(Date.now() + Math.random()),
+    medicines: [
       {
         id: String(Date.now() + Math.random()),
         name: "",
-        morningBefore: false,
-        morningAfter: false,
-        afternoonBefore: false,
-        afternoonAfter: false,
-        nightBefore: false,
-        nightAfter: false,
-        duration: "21 Days",
+        dosage: "",
       },
-    ]);
+    ],
+    toBeTaken: "",
+    timing: {
+      morning: { count: "0", mealRelation: "" as const },
+      afternoon: { count: "0", mealRelation: "" as const },
+      night: { count: "0", mealRelation: "" as const },
+    },
+    duration: "",
+    quantity: "",
+    notes: "",
+  });
+
+  const [formulationRows, setFormulationRows] = useState<{
+    id: string;
+    medicines: { id: string; name: string; dosage: string }[];
+    toBeTaken: string;
+    timing: {
+      morning: { count: string; mealRelation: "before" | "after" | "" };
+      afternoon: { count: string; mealRelation: "before" | "after" | "" };
+      night: { count: string; mealRelation: "before" | "after" | "" };
+    };
+    duration: string;
+    quantity: string;
+    notes: string;
+  }[]>([createEmptyRow()]);
+
+  // Medicines dynamically loaded from admin portal database module (ONLY medicines added in admin portal)
+  const [dbMedicines, setDbMedicines] = useState<DbMedicine[]>([]);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/medicines`, { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const adminMeds: DbMedicine[] = data.map((m: any) => ({
+            id: m.id,
+            medicineId: m.medicineId,
+            medicineName: m.medicineName,
+            dosage: m.dosage || m.dosageAndFrequency || "",
+            frequency: m.frequency,
+            formulation: m.formulation,
+            properties: m.properties,
+            indications: m.indications,
+          }));
+          setDbMedicines(adminMeds);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const [doctorNotes, setDoctorNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [printData, setPrintData] = useState<PrintPrescriptionData | null>(null);
+
+  const hasValidMedicine = useMemo(() => {
+    return formulationRows.some(row =>
+      row.medicines.some(m => m.name && m.name.trim().length > 0)
+    );
+  }, [formulationRows]);
+
+  const addFormulationRow = () => {
+    setFormulationRows(prev => [...prev, createEmptyRow()]);
   };
 
-  const updateMedicine = (id: string, key: keyof MedicineItem, val: any) => {
-    setMedicines(prev =>
-      prev.map(m => (m.id === id ? { ...m, [key]: val } : m))
+  const removeFormulationRow = (rowId: string) => {
+    setFormulationRows(prev => prev.filter(r => r.id !== rowId));
+  };
+
+  const updateRow = (rowId: string, key: "toBeTaken" | "duration" | "quantity" | "notes", val: string) => {
+    setFormulationRows(prev =>
+      prev.map(r => (r.id === rowId ? { ...r, [key]: val } : r))
     );
   };
 
-  const removeMedicine = (id: string) => {
-    setMedicines(prev => prev.filter(m => m.id !== id));
+  const addSubMedicine = (rowId: string) => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          medicines: [
+            ...r.medicines,
+            {
+              id: String(Date.now() + Math.random()),
+              name: "",
+              dosage: "",
+            },
+          ],
+        };
+      })
+    );
   };
 
+  const removeSubMedicine = (rowId: string, subId: string) => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        if (r.medicines.length <= 1) return r;
+        return {
+          ...r,
+          medicines: r.medicines.filter(m => m.id !== subId),
+        };
+      })
+    );
+  };
+
+  const updateSubMedicine = (rowId: string, subId: string, field: "name" | "dosage", val: string) => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          medicines: r.medicines.map(m => (m.id === subId ? { ...m, [field]: val } : m)),
+        };
+      })
+    );
+  };
+
+  const selectMedicineAutoFill = (rowId: string, subId: string, med: DbMedicine) => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          medicines: r.medicines.map(m => {
+            if (m.id !== subId) return m;
+            return {
+              ...m,
+              name: med.medicineName,
+              dosage: med.dosage || (med.formulation ? `${med.formulation} formulation` : "") || m.dosage,
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  const updateTimingCount = (rowId: string, slot: "morning" | "afternoon" | "night", count: string) => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          timing: {
+            ...r.timing,
+            [slot]: {
+              ...r.timing[slot],
+              count,
+            },
+          },
+        };
+      })
+    );
+  };
+
+  const toggleMealRelation = (rowId: string, slot: "morning" | "afternoon" | "night", relation: "before" | "after") => {
+    setFormulationRows(prev =>
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        const current = r.timing[slot].mealRelation;
+        const next = current === relation ? "" : relation;
+        return {
+          ...r,
+          timing: {
+            ...r.timing,
+            [slot]: {
+              ...r.timing[slot],
+              count: next ? "1" : "0",
+              mealRelation: next,
+            },
+          },
+        };
+      })
+    );
+  };
+
+  const hasValidDosageTiming = useMemo(() => {
+    return formulationRows.every(row => {
+      const m = row.timing.morning.count !== "0" && row.timing.morning.mealRelation !== "";
+      const a = row.timing.afternoon.count !== "0" && row.timing.afternoon.mealRelation !== "";
+      const n = row.timing.night.count !== "0" && row.timing.night.mealRelation !== "";
+      return m || a || n;
+    }) && formulationRows.length > 0;
+  }, [formulationRows]);
+
+
   const handleSave = async (shouldPrint = false) => {
+    if (formulationRows.length > 0 && !hasValidDosageTiming) {
+      setErr("Dosage Timing & Food Association is mandatory. Please select Before or After for at least one meal slot per medicine.");
+      return;
+    }
     setSaving(true); setErr("");
     try {
-      const notesToSave = doctorNotes.trim();
+      const diagClean = diagnosis.trim();
+      const existingNotesWithoutDiag = doctorNotes.replace(/^Diagnosis:\s*[^\n]+\n*/i, "").trim();
 
-      if (appt?.id) {
-        await fetch(`${BASE}/api/online-appointments/doctor/${appt.id}/notes`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: notesToSave }),
-        }).catch(() => {});
+      const rxPayload = {
+        digitalPrescription: true,
+        diagnosis: diagClean,
+        notes: existingNotesWithoutDiag,
+        formulationRows: formulationRows,
+      };
+      const notesToSave = JSON.stringify(rxPayload);
+
+      if (!appt?.id) {
+        throw new Error("No consultation/appointment ID found to save this prescription against.");
       }
 
-      const rxObj = { photoObjectPath: null, notes: notesToSave, updatedAt: new Date().toISOString() };
+      const endpoint = appt.type === "offline"
+        ? `${BASE}/api/doctor/offline-appointments/${appt.id}/notes`
+        : `${BASE}/api/online-appointments/doctor/${appt.id}/notes`;
+
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesToSave }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to save prescription (status: ${res.status})`);
+      }
+
+      const savedData = await res.json().catch(() => ({}));
+      const rxObj = {
+        photoObjectPath: null,
+        notes: notesToSave,
+        updatedAt: savedData?.updatedAt || new Date().toISOString()
+      };
       onSaved(rxObj);
 
       if (shouldPrint) {
+        const mappedMeds: MedicineItem[] = formulationRows.flatMap(row =>
+          row.medicines
+            .filter(m => m.name && m.name.trim().length > 0)
+            .map(m => ({
+              id: `${row.id}_${m.id}`,
+              name: m.name ? `${m.name}${m.dosage ? ` (${m.dosage})` : ""}` : "",
+              morningBefore: row.timing.morning.mealRelation === "before",
+              morningAfter: row.timing.morning.mealRelation === "after",
+              afternoonBefore: row.timing.afternoon.mealRelation === "before",
+              afternoonAfter: row.timing.afternoon.mealRelation === "after",
+              nightBefore: row.timing.night.mealRelation === "before",
+              nightAfter: row.timing.night.mealRelation === "after",
+              duration: row.duration || "-",
+            }))
+        );
+
         setPrintData({
-          patientName: patientFullName,
-          patientCode: patientIdStr,
-          age: patientAge,
-          gender: patientGender,
-          consultDate: consultDate,
-          medicines: medicines,
-          doctorNotes: doctorNotes || "",
+          patientName: patientName || "-",
+          patientCode: patientCode || "-",
+          age: initAge || "",
+          gender: initGender || "",
+          ageGender: displayAgeGender,
+          consultDate: consultDateStr,
+          diagnosis: diagClean || "-",
+          formulationRows: formulationRows,
+          medicines: mappedMeds,
+          doctorNotes: existingNotesWithoutDiag,
+          signedAt: new Date().toISOString(),
         });
       } else {
         onClose();
@@ -1120,323 +1631,622 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
   }
 
   return (
-    <div className="bg-white rounded-3xl shadow-2xl max-w-4xl sm:max-w-5xl w-full overflow-hidden border border-gray-100 max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-150">
+    <div className="bg-white rounded-3xl shadow-2xl max-w-5xl sm:max-w-6xl w-full overflow-hidden border border-[#EDE8DF] max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-150 relative">
+      {/* Background Emblem Watermark */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0">
+        <img
+          src={HOSPITAL_LOGO_DATA_URL}
+          alt=""
+          className="w-72 sm:w-96 h-auto opacity-[0.045] grayscale brightness-90 transform -translate-y-4"
+        />
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+      <div className="flex items-center justify-between px-7 py-5 bg-white border-b border-[#FAF7F2] shrink-0 relative z-10">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-1.5 rounded-xl text-slate-400 hover:text-[#D95B2F] hover:bg-[#FFF4EF] transition-colors cursor-pointer mr-1">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="w-9 h-9 rounded-xl bg-[#FFF4EF] border border-[#FDE8E0] flex items-center justify-center text-[#D95B2F] shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#FEECE5] border border-[#FDCFBF] flex items-center justify-center text-[#D95B2F] shrink-0 shadow-2xs">
             <ClipboardList size={18} />
           </div>
-          <h3 className="font-extrabold text-[#1E293B] text-lg">Add Prescription</h3>
+          <h3 className="font-extrabold text-[#1E293B] text-lg tracking-tight">Add Prescription</h3>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+        >
           <X size={18} />
         </button>
       </div>
 
       {/* Main Body (Scrollable) */}
-      <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-white">
+      <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-transparent relative z-10">
         {/* Section 1: Patient Details */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-5 h-5 rounded-md bg-[#FFF4EF] text-[#D95B2F] flex items-center justify-center font-bold text-xs">
-              <User size={12} />
-            </div>
-            <h4 className="font-bold text-sm text-[#1E293B]">Patient Details</h4>
+            <Contact size={16} className="text-[#B84A2A]" />
+            <h4 className="font-bold text-sm text-[#2C1810]">Patient Details</h4>
           </div>
 
-          <div className="bg-[#FAF8F5] border border-[#EDE8DF] rounded-2xl p-4 sm:p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-              {/* Card 1 */}
+          <div className="bg-[#FAF7F2] border border-[#EFE9DF] rounded-2xl p-4 sm:p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Card 1: Patient Full Name */}
               <div className="bg-white rounded-xl p-3 border border-[#E8E3DA] shadow-2xs">
-                <label className="text-[10px] font-bold text-[#64748B] block mb-1 uppercase tracking-wider">Patient Full Name</label>
-                <div className="flex items-center gap-2 text-xs font-bold text-[#1E293B]">
-                  <User size={13} className="text-[#94A3B8] shrink-0" />
-                  <input
-                    type="text"
-                    value={patientFullName}
-                    onChange={e => setPatientFullName(e.target.value)}
-                    placeholder="e.g. Sinjini Saha"
-                    className="w-full bg-transparent focus:outline-none font-bold text-xs text-[#1E293B]"
-                  />
-                </div>
+                <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">Patient Full Name</label>
+                <p className="font-bold text-xs text-[#1E293B] truncate">{patientName || "-"}</p>
               </div>
 
-              {/* Card 2 */}
+              {/* Card 2: Patient ID / IPD */}
               <div className="bg-white rounded-xl p-3 border border-[#E8E3DA] shadow-2xs">
-                <label className="text-[10px] font-bold text-[#64748B] block mb-1 uppercase tracking-wider">Patient ID / IPD</label>
-                <div className="flex items-center gap-2 text-xs font-bold text-[#1E293B]">
-                  <span className="text-[#94A3B8] font-mono text-xs shrink-0">#</span>
-                  <input
-                    type="text"
-                    value={patientIdStr}
-                    onChange={e => setPatientIdStr(e.target.value)}
-                    placeholder="e.g. #A115"
-                    className="w-full bg-transparent focus:outline-none font-bold text-xs text-[#1E293B]"
-                  />
-                </div>
+                <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">Patient ID</label>
+                <p className="font-bold text-xs text-[#1E293B] font-mono truncate">{patientCode || "-"}</p>
               </div>
 
-              {/* Card 3 */}
+              {/* Card 3: Age/Gender */}
               <div className="bg-white rounded-xl p-3 border border-[#E8E3DA] shadow-2xs">
-                <label className="text-[10px] font-bold text-[#64748B] block mb-1 uppercase tracking-wider">Age</label>
-                <div className="flex items-center gap-2 text-xs font-bold text-[#1E293B]">
-                  <User size={13} className="text-[#94A3B8] shrink-0" />
-                  <input
-                    type="text"
-                    value={patientAge}
-                    onChange={e => setPatientAge(e.target.value)}
-                    placeholder="e.g. 34 Y"
-                    className="w-full bg-transparent focus:outline-none font-bold text-xs text-[#1E293B]"
-                  />
-                </div>
+                <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">Age / Gender</label>
+                <p className="font-bold text-xs text-[#1E293B] truncate">{displayAgeGender}</p>
               </div>
 
-              {/* Card 4 */}
+              {/* Card 4: Date & Time Of Consult */}
               <div className="bg-white rounded-xl p-3 border border-[#E8E3DA] shadow-2xs">
-                <label className="text-[10px] font-bold text-[#64748B] block mb-1 uppercase tracking-wider">Gender</label>
-                <div className="flex items-center gap-2 text-xs font-bold text-[#1E293B]">
-                  <User size={13} className="text-[#94A3B8] shrink-0" />
-                  <select
-                    value={patientGender}
-                    onChange={e => setPatientGender(e.target.value)}
-                    className="w-full bg-transparent focus:outline-none font-bold text-xs text-[#1E293B] cursor-pointer"
-                  >
-                    <option value="">Select Gender</option>
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Card 5 */}
-              <div className="bg-white rounded-xl p-3 border border-[#E8E3DA] shadow-2xs">
-                <label className="text-[10px] font-bold text-[#64748B] block mb-1 uppercase tracking-wider">Date & Time Of Consult</label>
-                <div className="flex items-center gap-2 text-xs font-bold text-[#1E293B]">
-                  <Calendar size={13} className="text-[#94A3B8] shrink-0" />
-                  <input
-                    type="text"
-                    value={consultDate}
-                    onChange={e => setConsultDate(e.target.value)}
-                    placeholder="e.g. 24 Oct 2026 • 11:30 AM"
-                    className="w-full bg-transparent focus:outline-none font-bold text-xs text-[#1E293B]"
-                  />
-                </div>
+                <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">Date & Time Of Consult</label>
+                <p className="font-bold text-xs text-[#1E293B] truncate">{consultDateStr}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Section 2: Ayurvedic Medicinal Formulations */}
+        {/* Section 2: Diagnosis */}
+        <div>
+          <label className="block font-bold text-sm text-[#2C1810] mb-2">
+            Diagnosis
+          </label>
+          <textarea
+            value={diagnosis}
+            onChange={e => setDiagnosis(e.target.value)}
+            rows={3}
+            placeholder="Enter diagnosis (e.g. bullet points, observations, or multi-line diagnosis)"
+            className="w-full px-4 py-3 rounded-xl border border-[#D8D2C7] bg-white text-xs sm:text-sm font-medium text-[#1E293B] placeholder-[#C9A89A] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all shadow-2xs resize-y min-h-[75px]"
+          />
+        </div>
+
+        {/* Section 3: Ayurvedic Medicinal Formulations */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-md bg-[#FFF4EF] text-[#D95B2F] flex items-center justify-center font-bold text-xs">
-                <Plus size={12} />
+              <div className="w-4 h-4 rounded-xs bg-[#B84A2A] text-white flex items-center justify-center font-bold text-[11px] shrink-0">
+                <Plus size={11} strokeWidth={3} />
               </div>
-              <h4 className="font-bold text-sm text-[#1E293B]">Ayurvedic Medicinal Formulations</h4>
+              <h4 className="font-bold text-sm text-[#2C1810]">Ayurvedic Medicinal Formulations</h4>
             </div>
 
-            {medicines.length > 0 && (
+            {formulationRows.length > 0 && (
               <button
                 type="button"
-                onClick={addMedicine}
-                className="bg-[#FFF4EF] hover:bg-[#FDE8E0] text-[#D95B2F] border border-[#FDE8E0] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                onClick={addFormulationRow}
+                className="bg-[#FFF4EF] hover:bg-[#FDE8E0] text-[#D95B2F] border border-[#FDE8E0] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
               >
-                <Plus size={14} /> Add Medicine
+                <Plus size={14} />
+                <span>Add Medicine</span>
               </button>
             )}
           </div>
 
-          {medicines.length === 0 ? (
-            /* Empty State (Image 1) */
-            <div className="border-2 border-dashed border-[#E2E4DE] bg-white rounded-2xl p-10 sm:p-12 flex flex-col items-center justify-center text-center">
+          {formulationRows.length === 0 ? (
+            /* Empty State (Image 2) */
+            <div className="border-2 border-dashed border-[#DDD7CE] bg-white/70 rounded-2xl p-10 sm:p-12 flex flex-col items-center justify-center text-center">
               <button
                 type="button"
-                onClick={addMedicine}
-                className="w-10 h-10 rounded-xl bg-[#FFF4EF] border border-[#FDE8E0] text-[#D95B2F] flex items-center justify-center hover:bg-[#FDE8E0] cursor-pointer transition-colors mb-3 shadow-2xs"
+                onClick={addFormulationRow}
+                className="w-12 h-12 rounded-full bg-[#FEECE5] border border-[#FDCFBF] text-[#D95B2F] flex items-center justify-center hover:bg-[#FDD8CC] cursor-pointer transition-colors mb-3 shadow-2xs"
               >
-                <Plus size={20} />
+                <Plus size={20} strokeWidth={2.5} />
               </button>
               <h5 className="font-bold text-sm text-[#1E293B]">No medicines added yet</h5>
-              <p className="text-xs text-[#64748B] mt-1 max-w-sm">
+              <p className="text-xs text-[#8C7E72] mt-1 max-w-sm">
                 Click the button below to add Ayurvedic formulations to this prescription.
               </p>
             </div>
           ) : (
-            /* Medicines Form Table (Image 2) */
-            <div className="border border-[#E2E4DE] rounded-2xl overflow-hidden bg-white shadow-2xs">
-              {/* Header Row */}
-              <div className="bg-[#F0EDE8] py-3 px-4 text-[11px] font-bold text-[#475569] grid grid-cols-12 gap-2 items-center tracking-wide border-b border-[#E2E4DE]">
-                <div className="col-span-1 text-center">S.NO</div>
-                <div className="col-span-3 font-bold">Medicine & Formulation</div>
-                <div className="col-span-6 text-center font-bold">
-                  Dosage Timing & Food Association
-                  <div className="grid grid-cols-3 gap-2 mt-1 text-[10px] font-semibold text-[#64748B]">
-                    <span>Morning</span>
-                    <span>Afternoon</span>
-                    <span>Night</span>
+            /* Rich Formulations Table (Image 1) */
+            <div className="space-y-4">
+              {/* DESKTOP TABLE VIEW (lg and up) - Fits naturally without horizontal scroll */}
+              <div className="hidden lg:block w-full border border-[#DFD9CE] rounded-lg overflow-visible bg-[#FAF8F5] shadow-2xs">
+                {/* Table Header */}
+                <div className="w-full bg-[#FAF8F5] rounded-t-lg text-[11px] font-bold text-[#475569] border-b border-[#DFD9CE] grid grid-cols-[45px_minmax(100px,0.7fr)_100px_300px_115px_115px_90px] items-stretch tracking-wide">
+                  <div className="flex items-center justify-center font-bold px-2 py-3">S.NO</div>
+                  <div className="flex items-center justify-center font-bold px-2 py-3 border-l border-[#DFD9CE]">Medicine & Formulation</div>
+                  <div className="flex items-center justify-center font-bold px-2 py-3 border-l border-[#DFD9CE]">To Be Taken</div>
+                  <div className="text-center font-bold px-2 py-3 border-l border-[#DFD9CE]">
+                    <div>Dosage Timing & Food Association</div>
+                    <div className="grid grid-cols-3 gap-1.5 mt-1 text-[10px] font-semibold text-[#64748B]">
+                      <span>Breakfast</span>
+                      <span>Lunch</span>
+                      <span>Dinner</span>
+                    </div>
                   </div>
+                  <div className="flex items-center justify-center font-bold px-2 py-3 border-l border-[#DFD9CE]">Duration</div>
+                  <div className="flex items-center justify-center font-bold px-2 py-3 border-l border-[#DFD9CE]">Quantity</div>
+                  <div className="flex items-center justify-center font-bold px-2 py-3 border-l border-[#DFD9CE]">Action</div>
                 </div>
-                <div className="col-span-1.5 text-center font-bold">Duration</div>
-                <div className="col-span-0.5 text-right font-bold">Action</div>
+
+                {/* Table Rows */}
+                <div className="w-full bg-white divide-y divide-[#E2E4DE] rounded-b-lg">
+                  {formulationRows.map((row, idx) => (
+                    <div key={row.id} className="w-full bg-white hover:bg-slate-50/30 transition-colors">
+                      {/* Upper Grid — cells use border-l for full-height column dividers matching the header */}
+                      <div className="w-full grid grid-cols-[45px_minmax(100px,0.7fr)_100px_300px_115px_115px_90px] items-stretch text-xs">
+                        {/* S.NO */}
+                        <div className="text-center font-extrabold text-[#1E293B] text-sm py-3 px-2 flex items-center justify-center">
+                          {String(idx + 1).padStart(2, "0")}
+                        </div>
+
+                        {/* Medicine & Formulation */}
+                        <div className="space-y-1.5 py-3 px-2 border-l border-[#E2E4DE]">
+                          {row.medicines.length > 1 && (
+                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF5F2] border border-[#FDCFBF] text-[#D95B2F] text-[9px] font-bold mb-1 shadow-2xs">
+                              <Users size={9} />
+                              <span>Combined Set</span>
+                            </div>
+                          )}
+
+                          {row.medicines.map((m) => (
+                            <MedicineCombobox
+                              key={m.id}
+                              nameValue={m.name}
+                              dosageValue={m.dosage}
+                              dbMedicines={dbMedicines}
+                              onSelectMedicine={(med) => selectMedicineAutoFill(row.id, m.id, med)}
+                              onChangeName={(val) => updateSubMedicine(row.id, m.id, "name", val)}
+                              onChangeDosage={(val) => updateSubMedicine(row.id, m.id, "dosage", val)}
+                              onRemove={() => removeSubMedicine(row.id, m.id)}
+                              canRemove={row.medicines.length > 1}
+                              compact
+                            />
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() => addSubMedicine(row.id)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-[#D95B2F] hover:text-[#C84A1F] mt-0.5 transition-colors cursor-pointer"
+                          >
+                            <Plus size={11} strokeWidth={2.5} />
+                            <span>Add Medicine</span>
+                          </button>
+                        </div>
+
+                        {/* To Be Taken */}
+                        <div className="py-3 px-2 border-l border-[#E2E4DE]">
+                          <div className="relative">
+                            <select
+                              value={row.toBeTaken}
+                              onChange={e => updateRow(row.id, "toBeTaken", e.target.value)}
+                              className="w-full appearance-none px-2.5 py-2 pr-6 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] cursor-pointer"
+                            >
+                              <option value="">Select</option>
+                              <option value="Orally">Orally</option>
+                              <option value="External">External</option>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          </div>
+                        </div>
+
+                        {/* Dosage Timing & Food Association (3 cards) */}
+                        <div className="py-3 px-2 border-l border-[#E2E4DE]">
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {/* Morning */}
+                            <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-1.5 flex flex-col justify-between">
+                              <div className="flex items-center justify-center mb-1">
+                                <div
+                                  className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold flex items-center justify-center text-[#1E293B] bg-white select-none"
+                                >
+                                  {row.timing.morning.count}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "morning", "before")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.morning.mealRelation === "before"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>Before</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "morning", "after")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.morning.mealRelation === "after"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>After</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Afternoon */}
+                            <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-1.5 flex flex-col justify-between">
+                              <div className="flex items-center justify-center mb-1">
+                                <div
+                                  className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold flex items-center justify-center text-[#1E293B] bg-white select-none"
+                                >
+                                  {row.timing.afternoon.count}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "afternoon", "before")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.afternoon.mealRelation === "before"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>Before</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "afternoon", "after")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.afternoon.mealRelation === "after"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>After</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Night */}
+                            <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-1.5 flex flex-col justify-between">
+                              <div className="flex items-center justify-center mb-1">
+                                <div
+                                  className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold flex items-center justify-center text-[#1E293B] bg-white select-none"
+                                >
+                                  {row.timing.night.count}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "night", "before")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.night.mealRelation === "before"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>Before</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMealRelation(row.id, "night", "after")}
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded-full text-[9px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                    row.timing.night.mealRelation === "after"
+                                      ? "bg-[#D95B2F] text-white font-bold"
+                                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span>After</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Duration */}
+                        <div className="py-3 px-2 border-l border-[#E2E4DE]">
+                          <input
+                            type="text"
+                            value={row.duration}
+                            onChange={e => updateRow(row.id, "duration", e.target.value)}
+                            placeholder="eg: 5 Days"
+                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                          />
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="py-3 px-2 border-l border-[#E2E4DE]">
+                          <input
+                            type="text"
+                            value={row.quantity}
+                            onChange={e => updateRow(row.id, "quantity", e.target.value)}
+                            placeholder="eg: 10 Tablets"
+                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                          />
+                        </div>
+
+                        {/* Action */}
+                        <div className="flex items-center justify-center h-full w-full border-l border-[#E2E4DE]">
+                          <button
+                            type="button"
+                            onClick={() => removeFormulationRow(row.id)}
+                            className="text-slate-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="Delete formulation"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Medicine Notes Strip */}
+                      <div className="px-4 py-2.5 bg-[#FAF8F5]/60 border-t border-[#EAE5DC]">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#475569] mb-1">
+                          <FileEdit size={13} className="text-[#64748B]" />
+                          <span>Medicine Notes</span>
+                        </div>
+                        <textarea
+                          value={row.notes}
+                          onChange={e => updateRow(row.id, "notes", e.target.value)}
+                          rows={2}
+                          placeholder="Enter notes (optional - e.g. bullet points, instructions, or multi-line notes)"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] bg-white transition-all shadow-2xs resize-y min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Rows */}
-              <div className="divide-y divide-slate-100">
-                {medicines.map((m, idx) => (
-                  <div key={m.id} className="p-3.5 grid grid-cols-12 gap-2.5 items-center text-xs bg-white hover:bg-slate-50/50 transition-colors">
-                    {/* S.NO */}
-                    <div className="col-span-1 text-center font-extrabold text-[#1E293B] text-xs">
-                      {String(idx + 1).padStart(2, "0")}
+              {/* MOBILE / TABLET CARD VIEW (< lg) - Stacked cards with zero horizontal scroll */}
+              <div className="block lg:hidden space-y-4">
+                {formulationRows.map((row, idx) => (
+                  <div
+                    key={row.id}
+                    className="border border-[#DFD9CE] rounded-2xl bg-white shadow-2xs p-4 space-y-3.5"
+                  >
+                    {/* Header: S.NO Badge & Delete Action */}
+                    <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-[#FAF4ED] text-[#D95B2F] font-extrabold text-xs flex items-center justify-center border border-[#F6E1D3]">
+                          {String(idx + 1).padStart(2, "0")}
+                        </span>
+                        <span className="font-bold text-xs text-[#1E293B]">Medicine Entry</span>
+                        {row.medicines.length > 1 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF5F2] border border-[#FDCFBF] text-[#D95B2F] text-[10px] font-bold">
+                            <Users size={10} />
+                            Combined
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFormulationRow(row.id)}
+                        className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Delete formulation"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
 
-                    {/* Medicine Name */}
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        list="ayurvedic-meds-list"
-                        value={m.name}
-                        onChange={e => updateMedicine(m.id, "name", e.target.value)}
-                        placeholder="e.g. Bilwadi Gutika / Dashamularishta"
-                        className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
-                      />
+                    {/* Medicine & Formulation Inputs */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-[#8C7E72] block tracking-wider">
+                        Medicine & Formulation
+                      </label>
+                      {row.medicines.map((m) => (
+                        <MedicineCombobox
+                          key={m.id}
+                          nameValue={m.name}
+                          dosageValue={m.dosage}
+                          dbMedicines={dbMedicines}
+                          onSelectMedicine={(med) => selectMedicineAutoFill(row.id, m.id, med)}
+                          onChangeName={(val) => updateSubMedicine(row.id, m.id, "name", val)}
+                          onChangeDosage={(val) => updateSubMedicine(row.id, m.id, "dosage", val)}
+                          onRemove={() => removeSubMedicine(row.id, m.id)}
+                          canRemove={row.medicines.length > 1}
+                        />
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => addSubMedicine(row.id)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D95B2F] hover:text-[#C84A1F] transition-colors cursor-pointer pt-1"
+                      >
+                        <Plus size={12} strokeWidth={2.5} />
+                        <span>Add Medicine to Set</span>
+                      </button>
                     </div>
 
-                    {/* Dosage Timing (3 Cards) */}
-                    <div className="col-span-6">
-                      <div className="grid grid-cols-3 gap-2">
-                        {/* Morning */}
-                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2 text-center">
-                          <span className="text-[10px] font-bold text-[#64748B] block mb-1">Breakfast</span>
-                          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-[#1E293B]">
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.morningBefore}
-                                onChange={e => updateMedicine(m.id, "morningBefore", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> Before
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.morningAfter}
-                                onChange={e => updateMedicine(m.id, "morningAfter", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> After
-                            </label>
+                    {/* Row Settings: To Be Taken, Duration, Quantity */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                      <div>
+                        <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">
+                          To Be Taken
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={row.toBeTaken}
+                            onChange={e => updateRow(row.id, "toBeTaken", e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-7 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] cursor-pointer"
+                          >
+                            <option value="">Select</option>
+                            <option value="Orally">Orally</option>
+                            <option value="External">External</option>
+                          </select>
+                          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">
+                          Duration
+                        </label>
+                        <input
+                          type="text"
+                          value={row.duration}
+                          onChange={e => updateRow(row.id, "duration", e.target.value)}
+                          placeholder="eg: 5 Days"
+                          className="w-full px-3 py-2 text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-[#8C7E72] block mb-1 tracking-wider">
+                          Quantity
+                        </label>
+                        <input
+                          type="text"
+                          value={row.quantity}
+                          onChange={e => updateRow(row.id, "quantity", e.target.value)}
+                          placeholder="eg: 10 Tablets"
+                          className="w-full px-3 py-2 text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dosage Timing & Food Association */}
+                    <div className="pt-1">
+                      <label className="text-[10px] font-bold text-[#8C7E72] block mb-1.5 tracking-wider">
+                        Dosage Timing & Food Association
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {/* Breakfast */}
+                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2.5 flex items-center justify-between sm:flex-col sm:items-stretch gap-2">
+                          <div className="flex items-center justify-between sm:mb-1">
+                            <span className="text-[10px] font-bold text-[#64748B]">Breakfast</span>
+                            <div
+                              className="w-6 h-6 border border-slate-200 rounded-md text-[11px] font-bold flex items-center justify-center text-[#1E293B] bg-white ml-2 sm:ml-0 select-none"
+                            >
+                              {row.timing.morning.count}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "morning", "before")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.morning.mealRelation === "before"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>Before</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "morning", "after")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.morning.mealRelation === "after"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>After</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* Afternoon */}
-                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2 text-center">
-                          <span className="text-[10px] font-bold text-[#64748B] block mb-1">Lunch</span>
-                          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-[#1E293B]">
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.afternoonBefore}
-                                onChange={e => updateMedicine(m.id, "afternoonBefore", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> Before
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.afternoonAfter}
-                                onChange={e => updateMedicine(m.id, "afternoonAfter", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> After
-                            </label>
+                        {/* Lunch */}
+                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2.5 flex items-center justify-between sm:flex-col sm:items-stretch gap-2">
+                          <div className="flex items-center justify-between sm:mb-1">
+                            <span className="text-[10px] font-bold text-[#64748B]">Lunch</span>
+                            <div
+                              className="w-6 h-6 border border-slate-200 rounded-md text-[11px] font-bold flex items-center justify-center text-[#1E293B] bg-white ml-2 sm:ml-0 select-none"
+                            >
+                              {row.timing.afternoon.count}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "afternoon", "before")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.afternoon.mealRelation === "before"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>Before</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "afternoon", "after")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.afternoon.mealRelation === "after"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>After</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* Night */}
-                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2 text-center">
-                          <span className="text-[10px] font-bold text-[#64748B] block mb-1">Dinner</span>
-                          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-[#1E293B]">
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.nightBefore}
-                                onChange={e => updateMedicine(m.id, "nightBefore", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> Before
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={m.nightAfter}
-                                onChange={e => updateMedicine(m.id, "nightAfter", e.target.checked)}
-                                className="rounded text-[#D95B2F] focus:ring-[#D95B2F]"
-                              /> After
-                            </label>
+                        {/* Dinner */}
+                        <div className="bg-[#FAF9F5] border border-[#EAE5DC] rounded-xl p-2.5 flex items-center justify-between sm:flex-col sm:items-stretch gap-2">
+                          <div className="flex items-center justify-between sm:mb-1">
+                            <span className="text-[10px] font-bold text-[#64748B]">Dinner</span>
+                            <div
+                              className="w-6 h-6 border border-slate-200 rounded-md text-[11px] font-bold flex items-center justify-center text-[#1E293B] bg-white ml-2 sm:ml-0 select-none"
+                            >
+                              {row.timing.night.count}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "night", "before")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.night.mealRelation === "before"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>Before</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleMealRelation(row.id, "night", "after")}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center",
+                                row.timing.night.mealRelation === "after"
+                                  ? "bg-[#D95B2F] text-white font-bold"
+                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              )}
+                            >
+                              <span>After</span>
+                            </button>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Duration */}
-                    <div className="col-span-1.5">
-                      <input
-                        type="text"
-                        value={m.duration}
-                        onChange={e => updateMedicine(m.id, "duration", e.target.value)}
-                        placeholder="e.g. 21 Days"
-                        className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                    {/* Medicine Notes Strip */}
+                    <div className="pt-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#475569] mb-1">
+                        <FileEdit size={13} className="text-[#64748B]" />
+                        <span>Medicine Notes</span>
+                      </div>
+                      <textarea
+                        value={row.notes}
+                        onChange={e => updateRow(row.id, "notes", e.target.value)}
+                        rows={2}
+                        placeholder="Enter notes (optional - e.g. bullet points, instructions, or multi-line notes)"
+                        className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] bg-white transition-all shadow-2xs resize-y min-h-[60px]"
                       />
-                    </div>
-
-                    {/* Action (Delete) */}
-                    <div className="col-span-0.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeMedicine(m.id)}
-                        className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          <datalist id="ayurvedic-meds-list">
-            <option value="Bilwadi Gutika" />
-            <option value="Dashamoolarishta" />
-            <option value="Ashwagandharishta" />
-            <option value="Triphala Churna" />
-            <option value="Kanakasava" />
-            <option value="Chyawanprash" />
-            <option value="Brahmi Vati" />
-            <option value="Yograj Guggulu" />
-            <option value="Saraswatarishta" />
-          </datalist>
-        </div>
-
-        {/* Section 3: Doctor Notes */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-5 h-5 rounded-md bg-[#FFF4EF] text-[#D95B2F] flex items-center justify-center font-bold text-xs">
-              <Plus size={12} />
-            </div>
-            <h4 className="font-bold text-sm text-[#1E293B]">Doctor Notes</h4>
-          </div>
-
-          <textarea
-            rows={4}
-            value={doctorNotes}
-            onChange={e => setDoctorNotes(e.target.value)}
-            placeholder={`Write clinical notes, observations, diagnosis, or follow-up instructions for ${patientName}...`}
-            className="w-full px-4 py-3.5 rounded-2xl border border-[#CBD5E1] text-xs font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all bg-white"
-          />
         </div>
 
         {err && (
@@ -1447,23 +2257,26 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
       </div>
 
       {/* Footer Bar */}
-      <div className="bg-[#F0EDE8] px-6 py-4 flex items-center justify-end gap-3 border-t border-[#EAE6DF] shrink-0">
-        <button
+      <div className="bg-[#EFECE6] px-6 py-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-[#E5E0D8] shrink-0 relative z-10">
+        {/* <button
           type="button"
           onClick={() => handleSave(false)}
           disabled={saving}
-          className="px-6 py-2.5 rounded-xl bg-white border border-[#CBD5E1] hover:bg-slate-50 text-[#475569] text-xs font-bold transition-all shadow-2xs cursor-pointer"
+          className="px-6 py-2.5 rounded-xl bg-white border border-[#DDD7CE] hover:bg-slate-50 text-[#475569] text-xs font-bold transition-all shadow-2xs cursor-pointer text-center"
         >
           {saving ? "Saving..." : "Save Draft"}
-        </button>
+        </button> */}
 
         <button
           type="button"
           onClick={() => handleSave(true)}
-          disabled={saving}
-          className="px-6 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
+          disabled={!hasValidMedicine || saving}
+          className={cn(
+            "px-6 py-2.5 rounded-xl bg-[#D95B2F] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center justify-center gap-2",
+            (!hasValidMedicine || saving) ? "opacity-50 cursor-not-allowed pointer-events-none" : "hover:bg-[#c04e26]"
+          )}
         >
-          {saving ? "Saving..." : "Print Prescription"}
+          {saving ? "Saving..." : "Preview"}
         </button>
       </div>
     </div>
@@ -1472,7 +2285,7 @@ function DigitalPrescriptionForm({ appt, patientName, patientCode, onSaved, onCl
 
 // ── Rx Upload Panel ───────────────────────────────────────────────
 function RxUploadPanel({ appt, initialFile, onSaved, onDocClick }: {
-  appt: OnlineAppt;
+  appt: AnyAppt;
   initialFile?: File | null;
   onSaved: (rx: Prescription) => void;
   onDocClick: (doc: DocFile) => void;
@@ -1522,9 +2335,15 @@ function RxUploadPanel({ appt, initialFile, onSaved, onDocClick }: {
         objectPath = newPath;
       }
       if (objectPath) {
-        await fetch(`${BASE}/api/online-appointments/doctor/${appt.id}/prescription`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ photoObjectPath: objectPath }) });
+        const endpoint = appt.type === "offline"
+          ? `${BASE}/api/doctor/offline-appointments/${appt.id}/prescription`
+          : `${BASE}/api/online-appointments/doctor/${appt.id}/prescription`;
+        await fetch(endpoint, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ photoObjectPath: objectPath }) });
       }
-      const notesRes = await fetch(`${BASE}/api/online-appointments/doctor/${appt.id}/notes`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) });
+      const notesEndpoint = appt.type === "offline"
+        ? `${BASE}/api/doctor/offline-appointments/${appt.id}/notes`
+        : `${BASE}/api/online-appointments/doctor/${appt.id}/notes`;
+      const notesRes = await fetch(notesEndpoint, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) });
       if (!notesRes.ok) throw new Error("Failed to save notes");
       const rx = await notesRes.json();
       if (objectPath) rx.photoObjectPath = objectPath;
@@ -1739,7 +2558,10 @@ export default function DoctorPortal() {
   const [previewDoc, setPreviewDoc] = useState<DocFile | null>(null);
   const [showUploadDocModal, setShowUploadDocModal] = useState(false);
   const [showAddRxModal, setShowAddRxModal] = useState(false);
-  const [activePrintData, setActivePrintData] = useState<any>(null);
+  const [rxTargetAppt, setRxTargetAppt] = useState<AnyAppt | null>(null);
+  const [activePrintData, setActivePrintData] = useState<PrintPrescriptionData | null>(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<string | number | null>(null);
+  const { toast } = useToast();
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   const now = new Date();
@@ -1913,6 +2735,7 @@ export default function DoctorPortal() {
 
   function handlePrescriptionUploaded(apptId: number, rx: Prescription) {
     setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
+    setOffline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
     setRegisteredPatients(prev => prev.map(p => ({
       ...p,
       appointments: p.appointments.map(a => a.id === apptId ? { ...a, prescription: rx } : a),
@@ -1974,7 +2797,11 @@ export default function DoctorPortal() {
   // Derived datasets
   const upcomingOnline = useMemo(() => online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date)), [online]);
   const upcomingOffline = useMemo(() => offline.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date)), [offline]);
-  const rxNeeded = useMemo(() => online.filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath).sort((a, b) => b.date.localeCompare(a.date)), [online]);
+  const rxNeeded = useMemo(() => {
+    const onlineNeedingRx = online.filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath);
+    const offlineNeedingRx = offline.filter(a => a.status === "completed" && !a.prescription?.photoObjectPath);
+    return [...onlineNeedingRx, ...offlineNeedingRx].sort((a, b) => b.date.localeCompare(a.date));
+  }, [online, offline]);
 
   const filteredDonations = useMemo(() => {
     return donations.filter(d => {
@@ -2090,6 +2917,8 @@ export default function DoctorPortal() {
         name: selectedPatient.name,
         email: selectedPatient.email,
         phone: selectedPatient.phone,
+        age: selectedPatient.age ?? null,
+        gender: selectedPatient.gender ?? null,
       },
       prescription: firstAppt?.prescription || null,
     };
@@ -2793,8 +3622,14 @@ export default function DoctorPortal() {
                 </div>
 
                 <button
-                  onClick={() => setShowAddRxModal(true)}
-                  className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
+                  onClick={() => {
+                    const target = (selectedPatient.appointments && selectedPatient.appointments.length > 0)
+                      ? selectedPatient.appointments[0]
+                      : activeApptForPatient;
+                    setRxTargetAppt(target as any);
+                    setShowAddRxModal(true);
+                  }}
+                  className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
                 >
                   <Plus size={15} />
                   <span>Add Prescription</span>
@@ -2818,60 +3653,227 @@ export default function DoctorPortal() {
                     <span>No medical documents uploaded yet</span>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
-                    {selectedPatient.documents.map((doc: any, idx) => {
-                      const img = isImage(doc);
-                      const sizeStr = doc.size ? (doc.size > 1000000 ? `${(doc.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(doc.size / 1024)} KB`) : "Document";
-                      const category = doc.type || (doc.name.toLowerCase().includes("receipt") ? "Payment Receipt" : doc.name.toLowerCase().includes("payslip") ? "Income Verification" : img ? "Clinical Image / Investigation Photo" : "Medical Document");
-                      const dateStr = (doc.date && doc.date !== "Invalid Date") ? doc.date : (doc.createdAt && !isNaN(new Date(doc.createdAt).getTime())) ? fmtDateShort(doc.createdAt) : fmtDateShort(selectedPatient.createdAt);
+                  (() => {
+                    const sortedDocs = [...selectedPatient.documents].sort((a: any, b: any) => {
+                      const tA = new Date(a.createdAt || a.date || 0).getTime();
+                      const tB = new Date(b.createdAt || b.date || 0).getTime();
+                      return tB - tA;
+                    });
 
-                      return (
-                        <div
-                          key={idx}
-                          className="bg-white border border-gray-200/90 rounded-2xl p-4 flex items-center justify-between hover:border-gray-300 transition-all shadow-2xs"
-                        >
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div className={cn(
-                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                              img ? "bg-blue-50 text-blue-500" : "bg-red-50 text-red-500"
-                            )}>
-                              {img ? <ImageIcon size={20} /> : <FileText size={20} />}
-                            </div>
-                            <div className="min-w-0">
-                              <h4 className="text-sm font-bold text-gray-900 truncate">{doc.name}</h4>
-                              <p className="text-xs text-gray-400 font-medium mt-0.5">
-                                Uploaded {dateStr} • {sizeStr} • {category}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 ml-3">
-                            <button
-                              onClick={() => setPreviewDoc(doc)}
-                              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
-                              title="View Document"
+                    return (
+                      <div className={cn("space-y-2.5", sortedDocs.length > 5 && "max-h-[380px] overflow-y-auto pr-1.5 scrollbar-thin")}>
+                        {sortedDocs.map((doc: any, idx) => {
+                          const img = isImage(doc);
+                          const sizeStr = doc.size ? (doc.size > 1000000 ? `${(doc.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(doc.size / 1024)} KB`) : "Document";
+                          const category = doc.type || (doc.name.toLowerCase().includes("receipt") ? "Payment Receipt" : doc.name.toLowerCase().includes("payslip") ? "Income Verification" : img ? "Clinical Image / Investigation Photo" : "Medical Document");
+                          const dateStr = (doc.date && doc.date !== "Invalid Date") ? doc.date : (doc.createdAt && !isNaN(new Date(doc.createdAt).getTime())) ? fmtDateShort(doc.createdAt) : fmtDateShort(selectedPatient.createdAt);
+
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-white border border-gray-200/90 rounded-2xl p-4 flex items-center justify-between hover:border-gray-300 transition-all shadow-2xs"
                             >
-                              <Eye size={18} />
-                            </button>
-                            <a
-                              href={doc.objectPath?.startsWith("http") ? doc.objectPath : `${BASE}/api/storage${doc.objectPath?.startsWith("/") ? "" : "/"}${doc.objectPath || ""}`}
-                              download={doc.name}
-                              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
-                              title="Download Document"
-                            >
-                              <Download size={18} />
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className={cn(
+                                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                  img ? "bg-blue-50 text-blue-500" : "bg-red-50 text-red-500"
+                                )}>
+                                  {img ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-gray-900 truncate">{doc.name}</h4>
+                                  <p className="text-xs text-gray-400 font-medium mt-0.5">
+                                    Uploaded {dateStr} • {sizeStr} • {category}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <button
+                                  onClick={() => setPreviewDoc(doc)}
+                                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+                                  title="View Document"
+                                >
+                                  <Eye size={18} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={downloadingDocId === String(doc.id || idx)}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (downloadingDocId) return;
+                                    const docKey = String(doc.id || idx);
+                                    setDownloadingDocId(docKey);
+                                    const docUrl = doc.objectPath?.startsWith("http")
+                                      ? doc.objectPath
+                                      : `${BASE}/api/storage${doc.objectPath?.startsWith("/") ? "" : "/"}${doc.objectPath || ""}?download=1&filename=${encodeURIComponent(doc.name)}`;
+                                    try {
+                                      await downloadFileDirectly(docUrl, doc.name);
+                                    } catch (err: any) {
+                                      toast({
+                                        title: "Download Failed",
+                                        description: err?.message || "Failed to download document. Please try again.",
+                                        variant: "destructive",
+                                      });
+                                    } finally {
+                                      setDownloadingDocId(null);
+                                    }
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Download Document"
+                                >
+                                  {downloadingDocId === String(doc.id || idx) ? (
+                                    <Loader2 size={18} className="animate-spin text-[#D95B2F]" />
+                                  ) : (
+                                    <Download size={18} />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
                 )}
               </section>
 
               {/* 2. PRESCRIPTION HISTORY */}
               {(() => {
                 const rxAppointments = selectedPatient.appointments
-                  .filter(a => a.prescription?.photoObjectPath || cleanDoctorNotes(a.prescription?.notes));
+                  .filter(a => {
+                    if (a.prescription?.photoObjectPath) return true;
+                    if (!a.prescription?.notes) return false;
+                    const rawNotes = a.prescription.notes;
+                    const digital = extractDigitalPrescriptionData(rawNotes);
+                    if (digital && (digital.diagnosis || digital.notes || (digital.formulationRows && digital.formulationRows.length > 0))) return true;
+                    const meds = parseMedicinesFromNotes(rawNotes);
+                    if (meds.length > 0) return true;
+                    const cleaned = cleanDoctorNotes(rawNotes);
+                    if (cleaned) return true;
+                    return false;
+                  });
+
+                const getConsultationType = (a: any) => {
+                  if (a.type === "online") return "Online Consultation";
+                  const reason = (a.reason || "").toLowerCase();
+                  if (reason.includes("admin") || reason.includes("registration") || a.bookingType === "admin" || a.type === "admin_offline") {
+                    return "Admin Offline Registration";
+                  }
+                  return "Offline Hospital Visit";
+                };
+
+                const rxDocs: Array<{
+                  id: string | number;
+                  name: string;
+                  objectPath?: string;
+                  contentType?: string;
+                  sizeStr: string;
+                  uploadedDate: string;
+                  apptDateStr: string;
+                  slotTime: string;
+                  consultationType: string;
+                  isImg: boolean;
+                  handleView: () => void;
+                  handleDownload: () => void;
+                  downloadUrl?: string;
+                }> = [];
+
+                rxAppointments.forEach((a, idx) => {
+                  const rawNotes = a.prescription?.notes;
+                  const cleanedNotes = cleanDoctorNotes(rawNotes);
+                  const parsedMeds = parseMedicinesFromNotes(rawNotes);
+                  const digitalData = extractDigitalPrescriptionData(rawNotes);
+                  const photoPath = a.prescription?.photoObjectPath;
+                  const dateStrShort = fmtDateShort(a.date);
+                  const apptDateYear = fmtDateYear(a.date);
+                  const slotTime = a.timeLabel || "10 AM – 1 PM";
+                  const consultType = getConsultationType(a);
+                  const uploadedDate = a.prescription?.updatedAt ? fmtDateShort(a.prescription.updatedAt) : dateStrShort;
+
+                  if (photoPath) {
+                    const isImg = isImage({ name: photoPath, objectPath: photoPath, contentType: photoPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg", size: 0 });
+                    const rawName = photoPath.split('/').pop() || "";
+                    const hasExt = /\.(pdf|png|jpg|jpeg)$/i.test(rawName);
+                    const patCode = selectedPatient.patientCode || (selectedPatient.id ? `A${String(selectedPatient.id).padStart(3, "0")}` : "A001");
+                    const safePatientName = (selectedPatient.name || "Patient").replace(/\s+/g, "_");
+                    const fileName = hasExt ? rawName : `Prescription_${safePatientName}_${patCode}.pdf`;
+                    const downloadUrl = photoPath.startsWith("http")
+                      ? photoPath
+                      : `${BASE}/api/storage${photoPath.startsWith("/") ? "" : "/"}${photoPath}?download=1&filename=${encodeURIComponent(fileName)}`;
+                    const sizeStr = (a.prescription as any)?.size ? ((a.prescription as any).size > 1000000 ? `${((a.prescription as any).size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round((a.prescription as any).size / 1024)} KB`) : "125 KB";
+
+                    rxDocs.push({
+                      id: `photo-${a.id || idx}`,
+                      name: fileName,
+                      objectPath: photoPath,
+                      contentType: photoPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                      sizeStr,
+                      uploadedDate,
+                      apptDateStr: apptDateYear,
+                      slotTime,
+                      consultationType: consultType,
+                      isImg,
+                      handleView: () => {
+                        setPreviewDoc({
+                          name: fileName,
+                          objectPath: photoPath,
+                          contentType: photoPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                          size: 0,
+                        });
+                      },
+                      handleDownload: async () => {
+                        await downloadFileDirectly(downloadUrl, fileName);
+                      },
+                      downloadUrl,
+                    });
+                  }
+
+                  if (digitalData || cleanedNotes || parsedMeds.length > 0) {
+                    const patCode = selectedPatient.patientCode || (selectedPatient.id ? `A${String(selectedPatient.id).padStart(3, "0")}` : "A001");
+                    const safePatientName = (selectedPatient.name || "Patient").replace(/\s+/g, "_");
+                    const fileName = `Prescription_${safePatientName}_${patCode}.pdf`;
+                    const sizeStr = "125 KB";
+                    const rxId = a.prescription?.id;
+                    const downloadUrl = rxId
+                      ? `${BASE}/api/doctor/prescriptions/${rxId}/download?filename=${encodeURIComponent(fileName)}`
+                      : `${BASE}/api/doctor/appointments/${a.type || (a.joinEnabled !== undefined ? "online" : "offline")}/${a.id}/prescription/download?filename=${encodeURIComponent(fileName)}`;
+
+                    const patAge = (selectedPatient as any).age ? String((selectedPatient as any).age).replace(/\s*(years?|y)\s*$/i, "").trim() : "";
+                    const patGender = (selectedPatient as any).gender || "";
+                    const patAgeGender = [patAge, patGender].filter(Boolean).join(" / ") || "-";
+                    const printData: PrintPrescriptionData = {
+                      patientName: selectedPatient.name || "-",
+                      patientCode: selectedPatient.patientCode || (selectedPatient.id ? `#A00${selectedPatient.id}` : "-"),
+                      age: patAge,
+                      gender: patGender,
+                      ageGender: patAgeGender,
+                      consultDate: `${fmtDate(a.date)} • ${slotTime}`,
+                      diagnosis: digitalData?.diagnosis || undefined,
+                      formulationRows: digitalData?.formulationRows?.length ? digitalData.formulationRows : undefined,
+                      medicines: parsedMeds,
+                      doctorNotes: digitalData?.notes || cleanedNotes,
+                      signedAt: a.prescription?.updatedAt || undefined,
+                    };
+
+                    rxDocs.push({
+                      id: `digital-${a.id || idx}`,
+                      name: fileName,
+                      sizeStr,
+                      uploadedDate,
+                      apptDateStr: apptDateYear,
+                      slotTime,
+                      consultationType: consultType,
+                      isImg: false,
+                      handleView: () => {
+                        setActivePrintData(printData);
+                      },
+                      handleDownload: () => {
+                        downloadPrescriptionPdf(printData, fileName);
+                      },
+                      downloadUrl,
+                    });
+                  }
+                });
 
                 return (
                   <section>
@@ -2879,97 +3881,88 @@ export default function DoctorPortal() {
                       <div className="flex items-center gap-2">
                         <FlaskConical size={16} className="text-[#64748b]" />
                         <h2 className="text-sm font-bold text-[#64748b]">
-                          Prescription History ({rxAppointments.length})
+                          Prescription History ({rxDocs.length})
                         </h2>
                       </div>
-                      <span className="text-xs text-gray-400 font-normal">
-                        Total {rxAppointments.length} Prescriptions Recorded
-                      </span>
                     </div>
 
-                    {rxAppointments.length === 0 ? (
+                    {rxDocs.length === 0 ? (
                       <div className="p-6 text-center text-xs text-gray-400 bg-slate-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-center gap-1.5">
                         <StickyNote size={20} className="text-gray-300" />
                         <span>No prescriptions recorded yet. Click <b>+ Add Prescription</b> to issue a prescription.</span>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        {rxAppointments.map((a, idx) => {
-                          const rawNotes = a.prescription?.notes;
-                          const cleanedNotes = cleanDoctorNotes(rawNotes);
-                          const parsedMeds = parseMedicinesFromNotes(rawNotes);
-                          const photoPath = a.prescription?.photoObjectPath;
-                          const apptDocs = a.documents || [];
-                          const isActive = a.status !== "completed";
-                          const dateStr = fmtDateShort(a.date);
-
-                          return (
-                            <div
-                              key={a.id || idx}
-                              className="bg-white border border-gray-200/90 rounded-2xl p-4.5 space-y-3 hover:border-gray-300 transition-all shadow-2xs"
-                            >
-                              {/* Header Row */}
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", isActive ? "bg-emerald-500" : "bg-gray-400")} />
-                                  <h4 className="text-sm font-bold text-gray-900 truncate">
-                                    Prescription — {fmtDate(a.date)}
-                                  </h4>
-                                  <span className={cn(
-                                    "text-[10px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0",
-                                    isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-600 border-gray-200"
-                                  )}>
-                                    {isActive ? "Active" : "Completed"}
-                                  </span>
+                      <div className={cn("space-y-2.5", rxDocs.length > 5 && "max-h-[580px] overflow-y-auto pr-1.5 scrollbar-thin")}>
+                        {rxDocs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="bg-white border border-gray-200/90 rounded-2xl p-4 space-y-3 hover:border-gray-300 transition-all shadow-2xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className={cn(
+                                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                  doc.isImg ? "bg-blue-50 text-blue-500" : "bg-red-50 text-red-500"
+                                )}>
+                                  {doc.isImg ? <ImageIcon size={20} /> : <FileText size={20} />}
                                 </div>
-                                <span className="text-xs text-gray-400 font-medium shrink-0">{a.timeLabel || dateStr}</span>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-gray-900 truncate">{doc.name}</h4>
+                                  <p className="text-xs text-gray-400 font-medium mt-0.5">
+                                    Uploaded {doc.uploadedDate} • {doc.sizeStr} • Prescription
+                                  </p>
+                                </div>
                               </div>
-
-                              {/* Attached Documents Section (Uploaded & Generated) */}
-                              <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                                {/* Generated Digital Prescription (only if notes or parsed medicines exist) */}
-                                {(cleanedNotes || parsedMeds.length > 0) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActivePrintData({
-                                        patientName: selectedPatient.name,
-                                        patientCode: selectedPatient.patientCode || `#A00${selectedPatient.id}`,
-                                        ageGender: `${(selectedPatient as any).age || 34} Y / ${(selectedPatient as any).gender || "Female"}`,
-                                        consultDate: `${fmtDate(a.date)} • ${a.timeLabel || "11:30 AM"}`,
-                                        medicines: parsedMeds,
-                                        doctorNotes: cleanedNotes,
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <button
+                                  type="button"
+                                  onClick={doc.handleView}
+                                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+                                  title="View Document"
+                                >
+                                  <Eye size={18} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={downloadingDocId === doc.id}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (downloadingDocId) return;
+                                    setDownloadingDocId(doc.id);
+                                    try {
+                                      await doc.handleDownload();
+                                    } catch (err: any) {
+                                      toast({
+                                        title: "Download Failed",
+                                        description: err?.message || "Failed to download prescription PDF. Please try again.",
+                                        variant: "destructive",
                                       });
-                                    }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF4EF] hover:bg-[#FDE8E0] border border-[#FDE8E0] rounded-xl text-xs font-bold text-[#D95B2F] transition-colors cursor-pointer"
-                                  >
-                                    <Printer size={13} />
-                                    <span>Generated Digital Prescription</span>
-                                  </button>
-                                )}
-
-                                {/* Uploaded Prescription Document (if any) */}
-                                {photoPath && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPreviewDoc({
-                                        name: `Uploaded Prescription - ${selectedPatient.name}`,
-                                        objectPath: photoPath,
-                                        contentType: photoPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
-                                        size: 0,
-                                      });
-                                    }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-700 transition-colors cursor-pointer"
-                                  >
-                                    <Eye size={13} />
-                                    <span>Uploaded Prescription Document</span>
-                                  </button>
-                                )}
+                                    } finally {
+                                      setDownloadingDocId(null);
+                                    }
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Download Prescription"
+                                >
+                                  {downloadingDocId === doc.id ? (
+                                    <Loader2 size={18} className="animate-spin text-[#D95B2F]" />
+                                  ) : (
+                                    <Download size={18} />
+                                  )}
+                                </button>
                               </div>
                             </div>
-                          );
-                        })}
+
+                            <div className="pt-2.5 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs text-gray-500 font-medium">
+                              <div>
+                                <span className="font-semibold text-gray-700">Appointment:</span> {doc.apptDateStr} • {doc.slotTime}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-gray-700">Consultation:</span> {doc.consultationType}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </section>
@@ -2977,55 +3970,62 @@ export default function DoctorPortal() {
               })()}
 
               {/* 3. CONSULTATION HISTORY */}
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <Calendar size={16} className="text-[#64748b]" />
-                  <h2 className="text-sm font-bold text-[#64748b]">
-                    Consultation History ({selectedPatient.appointments.length})
-                  </h2>
-                </div>
+              {(() => {
+                const sortedAppts = [...selectedPatient.appointments].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-                {selectedPatient.appointments.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-gray-400 bg-slate-50 rounded-2xl border border-gray-100">
-                    No consultation history recorded yet
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {selectedPatient.appointments.map((a, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white border border-gray-200/90 rounded-2xl p-4 flex items-center justify-between hover:border-gray-300 transition-all shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
-                            <Video size={20} />
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-bold text-gray-900 truncate">
-                              {fmtDateShort(a.date)} • {a.timeLabel}
-                            </h4>
-                            <p className="text-xs text-gray-400 font-medium mt-0.5">
-                              {a.type === "offline" ? "Offline Hospital Visit" : `Online Video ${a.status === "completed" ? "consultation completed" : "Awaiting review"}`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0 ml-3">
-                          <span className={cn(
-                            "text-[10px] font-bold px-3 py-1 rounded-full border tracking-wider uppercase",
-                            a.status === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                          )}>
-                            {a.status === "completed" ? "COMPLETED" : a.status === "pending" ? "PENDING" : "CONFIRMED"}
-                          </span>
-                        </div>
+                return (
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calendar size={16} className="text-[#64748b]" />
+                      <h2 className="text-sm font-bold text-[#64748b]">
+                        Consultation History ({sortedAppts.length})
+                      </h2>
+                    </div>
+
+                    {sortedAppts.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-gray-400 bg-slate-50 rounded-2xl border border-gray-100">
+                        No consultation history recorded yet
                       </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                    ) : (
+                      <div className={cn("space-y-2.5", sortedAppts.length > 5 && "max-h-[380px] overflow-y-auto pr-1.5 scrollbar-thin")}>
+                        {sortedAppts.map((a, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-white border border-gray-200/90 rounded-2xl p-4 flex items-center justify-between hover:border-gray-300 transition-all shadow-2xs"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+                                <Video size={20} />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-gray-900 truncate">
+                                  {fmtDateShort(a.date)} • {a.timeLabel}
+                                </h4>
+                                <p className="text-xs text-gray-400 font-medium mt-0.5">
+                                  {a.type === "offline" ? "Offline Hospital Visit" : `Online Video ${a.status === "completed" ? "consultation completed" : "Awaiting review"}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2.5 shrink-0 ml-3">
+                              <span className={cn(
+                                "text-[10px] font-bold px-3 py-1 rounded-full border tracking-wider uppercase",
+                                a.status === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                              )}>
+                                {a.status === "completed" ? "COMPLETED" : a.status === "pending" ? "PENDING" : "CONFIRMED"}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
 
               {/* 4. DOCTOR NOTE'S HISTORY */}
               {(() => {
-                const notesWithData = selectedPatient.appointments
+                const sortedAppts = [...selectedPatient.appointments].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                const notesWithData = sortedAppts
                   .map(a => {
                     const cleaned = cleanDoctorNotes(a.prescription?.notes);
                     if (!cleaned) return null;
@@ -3052,7 +4052,7 @@ export default function DoctorPortal() {
                         <span>No doctor notes recorded yet. Clinical notes written when giving prescription will appear here.</span>
                       </div>
                     ) : (
-                      <div className="space-y-2.5">
+                      <div className={cn("space-y-2.5", notesWithData.length > 5 && "max-h-[460px] overflow-y-auto pr-1.5 scrollbar-thin")}>
                         {notesWithData.map((note, idx) => (
                           <div
                             key={idx}
@@ -3101,28 +4101,32 @@ export default function DoctorPortal() {
                   </div>
                 </div>
 
-                {selectedAppt.type === "online" ? (
-                  <button
-                    onClick={() => setShowAddRxModal(true)}
-                    className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
-                  >
-                    <Plus size={15} />
-                    <span>Add Prescription</span>
-                  </button>
-                ) : (
-                  selectedAppt.status !== "completed" ? (
+                {selectedAppt.type === "online" || selectedAppt.status === "completed" ? (
+                  <div className="flex items-center gap-2">
+                    {selectedAppt.type === "offline" && selectedAppt.status === "completed" && (
+                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 mr-1">
+                        <CheckCircle2 size={16} /> Visit Completed
+                      </span>
+                    )}
                     <button
-                      onClick={() => markOfflineCompleted(selectedAppt.id)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                      onClick={() => {
+                        setRxTargetAppt(selectedAppt);
+                        setShowAddRxModal(true);
+                      }}
+                      className="bg-[#D95B2F] hover:bg-[#C84F27] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
                     >
-                      <CheckCircle2 size={15} />
-                      <span>Mark Visit Completed</span>
+                      <Plus size={15} />
+                      <span>Add Prescription</span>
                     </button>
-                  ) : (
-                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 size={16} /> Visit Completed
-                    </span>
-                  )
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => markOfflineCompleted(selectedAppt.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>Mark Visit Completed</span>
+                  </button>
                 )}
               </div>
 
@@ -3227,32 +4231,42 @@ export default function DoctorPortal() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm space-y-2.5">
-                  {patientDocsList.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-gray-400 flex flex-col items-center gap-1.5">
-                      <FileText size={20} className="text-gray-300" />
-                      <span>No patient documents uploaded for this appointment</span>
-                    </div>
-                  ) : (
-                    patientDocsList.map((doc, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setPreviewDoc(doc)}
-                        className="bg-[#f8fafc] border border-gray-200/80 rounded-xl px-4 py-3.5 flex items-center justify-between hover:bg-slate-100/70 transition-all cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
-                            <FileText size={16} />
-                          </div>
-                          <span className="text-sm font-semibold text-[#1e293b] truncate group-hover:text-[#D95B2F] transition-colors">
-                            {doc.name}
-                          </span>
+                {(() => {
+                  const sortedSlotDocs = [...patientDocsList].sort((a: any, b: any) => {
+                    const tA = new Date(a.createdAt || a.date || 0).getTime();
+                    const tB = new Date(b.createdAt || b.date || 0).getTime();
+                    return tB - tA;
+                  });
+
+                  return (
+                    <div className={cn("bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm space-y-2.5", sortedSlotDocs.length > 5 && "max-h-[380px] overflow-y-auto pr-1.5 scrollbar-thin")}>
+                      {sortedSlotDocs.length === 0 ? (
+                        <div className="text-center py-6 text-xs text-gray-400 flex flex-col items-center gap-1.5">
+                          <FileText size={20} className="text-gray-300" />
+                          <span>No patient documents uploaded for this appointment</span>
                         </div>
-                        <ZoomIn size={16} className="text-gray-400 group-hover:text-gray-600 shrink-0 ml-2" />
-                      </div>
-                    ))
-                  )}
-                </div>
+                      ) : (
+                        sortedSlotDocs.map((doc, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setPreviewDoc(doc)}
+                            className="bg-[#f8fafc] border border-gray-200/80 rounded-xl px-4 py-3.5 flex items-center justify-between hover:bg-slate-100/70 transition-all cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+                                <FileText size={16} />
+                              </div>
+                              <span className="text-sm font-semibold text-[#1e293b] truncate group-hover:text-[#D95B2F] transition-colors">
+                                {doc.name}
+                              </span>
+                            </div>
+                            <ZoomIn size={16} className="text-gray-400 group-hover:text-gray-600 shrink-0 ml-2" />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })()}
               </section>
 
               {/* SECTION 3: DOCTOR'S NOTES & OBSERVATIONS */}
@@ -3269,7 +4283,7 @@ export default function DoctorPortal() {
                     apptId={selectedAppt.id}
                     isOnline={selectedAppt.type === "online"}
                     patientName={selectedAppt.patient.name}
-                    initialNotes={selectedAppt.prescription?.notes ?? (selectedAppt as OfflineAppt).notes ?? ""}
+                    initialNotes={cleanDoctorNotes(selectedAppt.prescription?.notes ?? (selectedAppt as OfflineAppt).notes)}
                     onSaved={newNotes => {
                       if (selectedAppt.type === "online") {
                         handlePrescriptionUploaded(selectedAppt.id, {
@@ -3316,17 +4330,44 @@ export default function DoctorPortal() {
       )}
 
       {/* Add Prescription Modal */}
-      {showAddRxModal && (activeApptForPatient || selectedAppt || selectedPatient) && (
+      {showAddRxModal && (rxTargetAppt || activeApptForPatient || selectedAppt || selectedPatient) && (
         <PrescriptionModal
-          patientName={selectedPatient?.name || (activeApptForPatient || selectedAppt)?.patient?.name || "Patient"}
-          patientCode={selectedPatient?.patientCode || (activeApptForPatient || selectedAppt)?.patient?.patientCode || `A00${selectedPatient?.id || (activeApptForPatient || selectedAppt)?.id || 1}`}
-          appt={(activeApptForPatient || selectedAppt || {
+          patientName={selectedPatient?.name || (rxTargetAppt || activeApptForPatient || selectedAppt)?.patient?.name || "Patient"}
+          patientCode={selectedPatient?.patientCode || (rxTargetAppt || activeApptForPatient || selectedAppt)?.patient?.patientCode || `A00${selectedPatient?.id || (rxTargetAppt || activeApptForPatient || selectedAppt)?.id || 1}`}
+          patientAge={
+            selectedPatient?.age 
+            ?? (rxTargetAppt as any)?.patient?.age
+            ?? (activeApptForPatient as any)?.patient?.age 
+            ?? (selectedAppt as any)?.patient?.age
+            ?? (online.find(a => a.patient.id === selectedPatient?.id || (a.patient.name && selectedPatient?.name && a.patient.name.toLowerCase() === selectedPatient.name.toLowerCase()))?.patient?.age)
+            ?? (offline.find(a => a.patient.id === selectedPatient?.id || (a.patient.name && selectedPatient?.name && a.patient.name.toLowerCase() === selectedPatient.name.toLowerCase()))?.patient?.age)
+          }
+          patientGender={
+            selectedPatient?.gender 
+            ?? (rxTargetAppt as any)?.patient?.gender
+            ?? (activeApptForPatient as any)?.patient?.gender 
+            ?? (selectedAppt as any)?.patient?.gender
+            ?? (online.find(a => a.patient.id === selectedPatient?.id || (a.patient.name && selectedPatient?.name && a.patient.name.toLowerCase() === selectedPatient.name.toLowerCase()))?.patient?.gender)
+            ?? (offline.find(a => a.patient.id === selectedPatient?.id || (a.patient.name && selectedPatient?.name && a.patient.name.toLowerCase() === selectedPatient.name.toLowerCase()))?.patient?.gender)
+          }
+          appt={(rxTargetAppt || activeApptForPatient || selectedAppt || {
             id: selectedPatient?.id || 1,
-            patient: { name: selectedPatient?.name || "Patient", patientCode: selectedPatient?.patientCode || `A00${selectedPatient?.id}` },
+            patient: {
+              name: selectedPatient?.name || "Patient",
+              patientCode: selectedPatient?.patientCode || `A00${selectedPatient?.id}`,
+              age: selectedPatient?.age ?? null,
+              gender: selectedPatient?.gender ?? null,
+            },
             prescription: null
           }) as OnlineAppt}
-          onSaved={rx => handlePrescriptionUploaded((activeApptForPatient || selectedAppt)?.id || selectedPatient?.id || 1, rx)}
-          onClose={() => setShowAddRxModal(false)}
+          onSaved={rx => {
+            const targetId = (rxTargetAppt || activeApptForPatient || selectedAppt)?.id || selectedPatient?.id || 1;
+            handlePrescriptionUploaded(targetId, rx);
+          }}
+          onClose={() => {
+            setShowAddRxModal(false);
+            setRxTargetAppt(null);
+          }}
           onDocClick={d => setPreviewDoc(d)}
         />
       )}

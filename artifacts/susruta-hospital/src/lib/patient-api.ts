@@ -1,10 +1,14 @@
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api/patient`;
 
-async function req(path: string, opts: RequestInit = {}) {
+async function req(path: string, opts: RequestInit = {}, recaptchaToken?: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers as any) };
+  if (recaptchaToken) {
+    headers["x-recaptcha-token"] = recaptchaToken;
+  }
   const res = await fetch(`${API}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...opts.headers },
+    headers,
     ...opts,
   });
   const data = await res.json().catch(() => ({}));
@@ -13,19 +17,41 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const patientApi = {
-  register: (body: { name: string; age: number; gender: string; address: string; email: string; phone: string; countryCode: string; password: string }) =>
-    req("/auth/register", { method: "POST", body: JSON.stringify(body) }),
+  register: (
+    body: { name: string; age: number; gender: string; address: string; email: string; phone: string; countryCode: string; password: string; recaptchaToken?: string },
+    recaptchaToken?: string
+  ) =>
+    req(
+      "/auth/register",
+      { method: "POST", body: JSON.stringify({ ...body, recaptchaToken: recaptchaToken || body.recaptchaToken }) },
+      recaptchaToken || body.recaptchaToken
+    ),
 
-  login: (body: { email: string; password: string }) =>
-    req("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+  login: (
+    body: { email: string; password: string; recaptchaToken?: string },
+    recaptchaToken?: string
+  ) =>
+    req(
+      "/auth/login",
+      { method: "POST", body: JSON.stringify({ ...body, recaptchaToken: recaptchaToken || body.recaptchaToken }) },
+      recaptchaToken || body.recaptchaToken
+    ),
 
   logout: () => req("/logout", { method: "POST" }),
 
-  forgotPassword: (email: string) =>
-    req("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  forgotPassword: (email: string, recaptchaToken?: string) =>
+    req(
+      "/auth/forgot-password",
+      { method: "POST", body: JSON.stringify({ email, recaptchaToken }) },
+      recaptchaToken
+    ),
 
-  resetPassword: (token: string, password: string) =>
-    req("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+  resetPassword: (token: string, password: string, recaptchaToken?: string) =>
+    req(
+      "/auth/reset-password",
+      { method: "POST", body: JSON.stringify({ token, password, recaptchaToken }) },
+      recaptchaToken
+    ),
 
   resendVerification: () => req("/auth/resend-verification", { method: "POST" }),
 

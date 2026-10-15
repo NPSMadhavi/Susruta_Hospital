@@ -1,0 +1,14 @@
+.prescription-print-page,
+.prescription-print-page * {
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+.prescription-final-signature {
+  white-space: nowrap;
+}
+
+.rx-capture .prescription-print-page {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}

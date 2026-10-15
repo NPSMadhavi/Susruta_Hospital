@@ -16,6 +16,7 @@ import {
   validateManualCounterSetting,
   searchPatients,
 } from "../lib/patient-id";
+import { verifyRecaptcha } from "../lib/recaptcha";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ const SETTINGS_FIELDS = [
   "meetingLink",
 ] as const;
 
-router.post("/login", async (req, res) => {
+router.post("/login", verifyRecaptcha("admin_login"), async (req, res) => {
   const { username, password } = req.body;
   if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
     res.status(401).json({ error: "invalid_credentials", message: "Invalid username or password" });

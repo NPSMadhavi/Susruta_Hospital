@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Stethoscope, Lock, Eye, EyeOff, ArrowRight, RotateCcw } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
+import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -33,13 +34,20 @@ export default function DoctorLogin() {
     setError("");
     setLoading(true);
     try {
-      await doctorFetch("/login", { method: "POST", body: JSON.stringify({ password }) });
+      const recaptchaToken = await executeRecaptcha("doctor_login");
+      await doctorFetch("/login", {
+        method: "POST",
+        headers: recaptchaToken ? { "x-recaptcha-token": recaptchaToken } : {},
+        body: JSON.stringify({ password, recaptchaToken }),
+      });
       navigate("/doctor/appointments");
     } catch (err: any) {
       if (err?.error === "not_configured") {
         setError("Doctor portal is not yet configured. Please ask the admin to set the doctor password in Settings.");
       } else if (err?.error === "invalid_password") {
         setError("Incorrect password. Please try again.");
+      } else if (err?.error === "recaptcha_failed") {
+        setError(err?.message || "Security verification failed. Please try again.");
       } else {
         setError("Something went wrong. Please try again.");
       }
@@ -140,6 +148,8 @@ export default function DoctorLogin() {
                   : <><span>Sign In to Portal</span><ArrowRight size={15} /></>
                 }
               </button>
+
+              <RecaptchaLegalNotice className="mt-4 text-center" />
             </form>
 
             <div className="mt-8 text-center text-[#647897] text-[14px] leading-[22px]">

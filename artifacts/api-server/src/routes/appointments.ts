@@ -9,6 +9,7 @@ import { verifyPatientSession } from "../lib/patient-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
 import { findOrRegisterPatient, findExistingPatientByPhoneOrEmail, registerNewPatientWithNextId } from "../lib/patient-id";
 import { notifyPatientAppointmentUpdated, getFrontendUrl } from "./patient";
+import { verifyRecaptcha } from "../lib/recaptcha";
 
 const router = Router();
 
@@ -80,24 +81,42 @@ router.get("/notifications", requireAdmin, (req, res) => {
   req.on("close", () => { sseClients.delete(res); clearInterval(heartbeat); });
 });
 
-// ── Helper ────────────────────────────────────────────────────
+function extractClinicalNotes(notes: string | null | undefined): string | null {
+  if (!notes || typeof notes !== "string") return null;
+  const trimmed = notes.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed.notes === "string" && parsed.notes.trim()) {
+        return parsed.notes.trim();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (trimmed.includes("DOCTOR NOTES:")) {
+    const parts = trimmed.split("DOCTOR NOTES:");
+    const extracted = parts[parts.length - 1].trim();
+    return extracted || null;
+  }
+  if (trimmed.startsWith("AYURVEDIC MEDICINAL FORMULATIONS:")) {
+    return null;
+  }
+  return trimmed;
+}
+
 function serializeAppt(a: any) {
   let extra: any = {};
-  if (a.notes) {
+  let userNotes: string | null = extractClinicalNotes(a.notes);
+  if (a.notes && typeof a.notes === "string" && a.notes.startsWith("{")) {
     try {
       const parsed = JSON.parse(a.notes);
-      if (parsed.token) {
-        extra.token = parsed.token;
-      }
-      if (parsed.amount) {
-        extra.amount = parsed.amount;
-      }
-      if (parsed.patientCode) {
-        extra.patientCode = parsed.patientCode;
-      }
-      if (parsed.paymentThrough) {
-        extra.paymentThrough = parsed.paymentThrough;
-      }
+      if (parsed.token) extra.token = parsed.token;
+      if (parsed.amount) extra.amount = parsed.amount;
+      if (parsed.patientCode) extra.patientCode = parsed.patientCode;
+      if (parsed.paymentThrough) extra.paymentThrough = parsed.paymentThrough;
     } catch {}
   }
   if (!extra.amount) {
@@ -106,15 +125,30 @@ function serializeAppt(a: any) {
   if (!extra.paymentThrough) {
     extra.paymentThrough = a.paymentThrough || (a.paymentMode ? (a.paymentMode.toLowerCase() === "cash" ? "Cash" : "UPI") : "UPI");
   }
-  // Patient ID is strictly patientCode (e.g. A001, A005), NEVER the appointment primary key
   const patientCode = a.patientCode || extra.patientCode || null;
   extra.patientCode = patientCode;
 
   return {
-    ...a,
-    ...extra,
-    createdAt: a.createdAt?.toISOString() ?? null,
+    id: a.id,
+    patientId: a.patientId ?? null,
+    patientName: a.patientName,
+    patientPhone: a.patientPhone,
+    patientEmail: a.patientEmail ?? null,
+    date: a.date,
+    timeSlot: a.timeSlot,
+    reason: a.reason ?? null,
+    status: a.status,
+    notes: userNotes,
     arrivedAt: a.arrivedAt?.toISOString() ?? null,
+    paymentStatus: a.paymentStatus,
+    paymentMode: a.paymentMode ?? null,
+    paymentThrough: extra.paymentThrough,
+    token: extra.token ?? null,
+    patientCode: extra.patientCode,
+    amount: extra.amount,
+    followUpDate: a.followUpDate ?? null,
+    followUpConfirmed: !!a.followUpConfirmed,
+    createdAt: a.createdAt?.toISOString() ?? null,
   };
 }
 
@@ -435,6 +469,16 @@ router.post("/offline", requireAdmin, async (req, res) => {
     return;
   }
 
+  // Mandatory address validation
+  const rawAddress = address ? String(address).trim() : "";
+  if (!rawAddress) {
+    res.status(400).json({
+      error: "invalid_address",
+      message: "Patient address is required for offline patient registration."
+    });
+    return;
+  }
+
   const formattedPhone = `+91${cleanPhone}`;
   const resolvedPaymentThrough = paymentThrough === "Cash" || paymentThrough === "cash" ? "Cash" : "UPI";
 
@@ -662,7 +706,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
 });
 
 // ── Public: Book (walk-in) ────────────────────────────────────
-router.post("/", async (req, res) => {
+router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
   const parsed = CreateAppointmentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "validation_error", message: parsed.error.message });

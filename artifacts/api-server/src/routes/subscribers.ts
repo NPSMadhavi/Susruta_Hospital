@@ -5,6 +5,7 @@ import { db, subscribersTable } from "@workspace/db";
 import { eq, desc, and, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 import { sendSubscriptionConfirmation, sendBroadcastEmail, verifyUnsubscribeToken } from "../lib/email";
+import { verifyRecaptcha } from "../lib/recaptcha";
 import { z } from "zod/v4";
 
 const router = Router();
@@ -247,8 +248,8 @@ const handleSubscribe = async (req: any, res: any) => {
   res.status(201).json({ id: sub.id, message: "Subscribed successfully." });
 };
 
-router.post("/", handleSubscribe);
-router.post("/subscribe", handleSubscribe);
+router.post("/", verifyRecaptcha("newsletter_subscribe"), handleSubscribe);
+router.post("/subscribe", verifyRecaptcha("newsletter_subscribe"), handleSubscribe);
 
 // ── Admin: List ──────────────────────────────────────────────
 router.get("/", requireAdmin, async (_req, res) => {

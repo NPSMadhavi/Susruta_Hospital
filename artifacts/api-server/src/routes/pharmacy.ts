@@ -5,6 +5,7 @@ import { eq, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requirePharmacy, createPharmacySession, deletePharmacySession, verifyPharmacySession } from "../lib/pharmacy-auth";
 import { getSmtpConfig } from "../lib/email";
+import { verifyRecaptcha } from "../lib/recaptcha";
 import nodemailer from "nodemailer";
 
 const router = Router();
@@ -20,7 +21,7 @@ export function notifyPharmacySse(event: string, data: unknown) {
 }
 
 // ── POST /api/pharmacy/login ──────────────────────────────────
-router.post("/login", async (req, res) => {
+router.post("/login", verifyRecaptcha("pharmacy_login"), async (req, res) => {
   const { password } = req.body;
   if (!password) { res.status(400).json({ error: "password_required" }); return; }
 

@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Video, Calendar, Clock, Upload, Trash2, ChevronLeft,
-  ArrowRight, CheckCircle2, AlertCircle, Loader2, FileText, Leaf
+  ArrowRight, CheckCircle2, AlertCircle, Loader2, FileText, Leaf, Phone,
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
 import { isSlotExceeded } from "@/lib/ist";
@@ -11,6 +11,7 @@ import logoImg from "@assets/logo_1773840200056.png";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
 import { MathCaptcha } from "@/components/MathCaptcha";
 import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
+import { useGetSettings } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -37,9 +38,38 @@ type Step = "select-slot" | "upload-docs" | "confirm" | "done";
 
 export default function OnlineBook() {
   const [, navigate] = useLocation();
+  const { data: settings } = useGetSettings();
   const [step, setStep] = useState<Step>("select-slot");
   const [dateGroups, setDateGroups] = useState<DateGroup[]>([]);
   const [loading, setLoading] = useState(true);
+
+  if (settings && settings.appointmentBookingEnabled === false) {
+    const clinicPhone = settings.clinicPhone1 || "9492068180";
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center shadow-md border border-border">
+          <Calendar className="mx-auto text-muted-foreground mb-4 opacity-40" size={48} />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Online Booking Unavailable</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Online booking is currently disabled. Please contact the hospital directly to schedule your appointment.
+          </p>
+          <a
+            href={`tel:${clinicPhone}`}
+            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#D95B2F] text-white font-semibold rounded-xl hover:bg-[#c44e25] transition-colors"
+          >
+            <Phone size={16} />
+            Call {clinicPhone}
+          </a>
+          <button
+            onClick={() => navigate("/portal/dashboard")}
+            className="mt-4 text-sm text-muted-foreground hover:text-gray-900 block w-full py-1 cursor-pointer"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [reason, setReason] = useState("");

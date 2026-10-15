@@ -12,10 +12,11 @@ import {
   useGetSettings,
 } from "@workspace/api-client-react";
 import {
-  Calendar, Clock, CheckCircle2, Info, Leaf, UserCheck, LogIn,
+  Calendar, Clock, CheckCircle2, Info, Leaf, UserCheck, LogIn, Phone,
 } from "lucide-react";
 import { format, parseISO, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import { patientApi } from "@/lib/patient-api";
+import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 // ── Shared helpers (copied from home.tsx) ─────────────────────
 
@@ -201,17 +202,26 @@ export default function Appointments() {
   const morningSlots = visibleSlots.filter(s => MORNING_TIMES.has(s.time));
   const eveningSlots = visibleSlots.filter(s => !MORNING_TIMES.has(s.time));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedSlot || !formData.patientName || !formData.patientPhone) return;
+    const recaptchaToken = await executeRecaptcha("appointment_booking");
     createMutation.mutate(
-      { data: { ...formData, date: selectedDate, timeSlot: selectedSlot } },
+      {
+        data: {
+          ...formData,
+          date: selectedDate,
+          timeSlot: selectedSlot,
+          ...(recaptchaToken ? { recaptchaToken } : {}),
+        } as any,
+      },
       { onSuccess: () => setIsSuccess(true) }
     );
   };
 
   // Booking disabled
   if (settings && !settings.appointmentBookingEnabled) {
+    const clinicPhone = settings.clinicPhone1 || "9492068180";
     return (
       <PublicLayout>
         <TexturedSection className="py-24 bg-[#f7f7f7]">
@@ -219,7 +229,14 @@ export default function Appointments() {
             <Reveal>
               <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
               <h2 className="text-2xl font-serif font-bold mb-2">{tr("appt.label", lang)}</h2>
-              <p className="text-muted-foreground">{tr("appt.unavailable", lang)}</p>
+              <p className="text-muted-foreground mb-6">{tr("appt.unavailable", lang)}</p>
+              <a
+                href={`tel:${clinicPhone}`}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#D95B2F] text-white font-semibold shadow hover:opacity-90 transition-all"
+              >
+                <Phone size={18} />
+                Call {clinicPhone}
+              </a>
             </Reveal>
           </div>
         </TexturedSection>
@@ -475,6 +492,7 @@ export default function Appointments() {
                           {createMutation.isError && (
                             <p className="text-destructive text-sm text-center mt-3 font-medium">{tr("appt.error", lang)}</p>
                           )}
+                          <RecaptchaLegalNotice className="mt-3 text-center" />
                         </div>
                       </div>
                     </motion.div>
