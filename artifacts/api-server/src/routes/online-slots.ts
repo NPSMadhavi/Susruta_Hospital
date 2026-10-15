@@ -74,7 +74,7 @@ router.post("/sessions", requireAdmin, async (req, res): Promise<void> => {
   }
 
   // Multiple sessions may share a date, but their time ranges must not overlap.
-  const existing = await db.select().from(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.date, date));
+  const existing = await db.select().from(onlineSlotSessionsTable).where(and(eq(onlineSlotSessionsTable.date, date), eq(onlineSlotSessionsTable.deleteColumn, 0)));
   const overlaps = existing.find((session) =>
     timeToMinutes(startTime) < timeToMinutes(session.endTime) &&
     timeToMinutes(endTime) > timeToMinutes(session.startTime)
@@ -95,15 +95,15 @@ router.post("/sessions", requireAdmin, async (req, res): Promise<void> => {
 
   const [session] = await db
     .insert(onlineSlotSessionsTable)
-    .values({ date, startTime, endTime, intervalMinutes, maxBookings: slots.length })
+    .values({ date, startTime, endTime, intervalMinutes, maxBookings: slots.length, deleteColumn: 0 })
     .returning();
 
   // Insert all individual slots
   await db.insert(onlineSlotsTable).values(
-    slots.map((s) => ({ sessionId: session.id, date, startTime: s.startTime, endTime: s.endTime }))
+    slots.map((s) => ({ sessionId: session.id, date, startTime: s.startTime, endTime: s.endTime, deleteColumn: 0 }))
   );
 
-  const createdSlots = await db.select().from(onlineSlotsTable).where(eq(onlineSlotsTable.sessionId, session.id));
+  const createdSlots = await db.select().from(onlineSlotsTable).where(and(eq(onlineSlotsTable.sessionId, session.id), eq(onlineSlotsTable.deleteColumn, 0)));
 
   // Notify registered patients via email about updated online slots
   sendSlotAvailabilityUpdateBroadcastEmail({
@@ -183,6 +183,7 @@ router.patch("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
       date: session.date,
       startTime: slot.startTime,
       endTime: slot.endTime,
+      deleteColumn: 0,
     }))
   );
 
@@ -192,13 +193,13 @@ router.patch("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
       endTime,
       maxBookings: existingSlots.length + newSlots.length,
     })
-    .where(eq(onlineSlotSessionsTable.id, session.id))
+    .where(and(eq(onlineSlotSessionsTable.id, session.id), eq(onlineSlotSessionsTable.deleteColumn, 0)))
     .returning();
 
   const updatedSlots = await db
     .select()
     .from(onlineSlotsTable)
-    .where(eq(onlineSlotsTable.sessionId, session.id));
+    .where(and(eq(onlineSlotsTable.sessionId, session.id), eq(onlineSlotsTable.deleteColumn, 0)));
 
   res.json({ session: updatedSession, slots: updatedSlots, addedSlots: newSlots.length });
 });
@@ -208,13 +209,18 @@ router.get("/sessions", requireAdmin, async (_req, res): Promise<void> => {
   const sessions = await db
     .select()
     .from(onlineSlotSessionsTable)
+    .where(eq(onlineSlotSessionsTable.deleteColumn, 0))
     .orderBy(desc(onlineSlotSessionsTable.date), asc(onlineSlotSessionsTable.startTime));
 
   const allSlots = await db
     .select()
     .from(onlineSlotsTable)
+    .where(eq(onlineSlotsTable.deleteColumn, 0))
     .orderBy(asc(onlineSlotsTable.startTime), asc(onlineSlotsTable.id));
-  const allAppts = await db.select().from(onlineAppointmentsTable);
+  const allAppts = await db
+    .select()
+    .from(onlineAppointmentsTable)
+    .where(eq(onlineAppointmentsTable.deleteColumn, 0));
 
   const slotsBySession = allSlots.reduce<Record<number, typeof allSlots>>((acc, s) => {
     (acc[s.sessionId] ||= []).push(s);
@@ -239,8 +245,7 @@ router.get("/sessions", requireAdmin, async (_req, res): Promise<void> => {
 });
 
 // ── Admin: DELETE /api/online-slots/sessions/:id ──────────────
-// Deletes a session and all its slots.
-// First removes all appointment records for those slots (FK would otherwise block CASCADE).
+// Soft deletes a session and all its slots and associated appointments.
 router.delete("/sessions/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseSessionId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
@@ -250,17 +255,18 @@ router.delete("/sessions/:id", requireAdmin, async (req, res): Promise<void> => 
     const slots = await db
       .select({ id: onlineSlotsTable.id })
       .from(onlineSlotsTable)
-      .where(eq(onlineSlotsTable.sessionId, id));
+      .where(and(eq(onlineSlotsTable.sessionId, id), eq(onlineSlotsTable.deleteColumn, 0)));
 
     if (slots.length > 0) {
       const slotIds = slots.map(s => s.id);
-      // 2. Hard-delete all appointment records for these slots.
-      //    (The FK on online_appointments.slot_id has no CASCADE so we must remove them first.)
-      await db.delete(onlineAppointmentsTable).where(inArray(onlineAppointmentsTable.slotId, slotIds));
+      // Soft-delete all appointment records for these slots
+      await db.update(onlineAppointmentsTable).set({ deleteColumn: 1 }).where(and(inArray(onlineAppointmentsTable.slotId, slotIds), eq(onlineAppointmentsTable.deleteColumn, 0)));
+      // Soft-delete all slots for this session
+      await db.update(onlineSlotsTable).set({ deleteColumn: 1 }).where(and(inArray(onlineSlotsTable.id, slotIds), eq(onlineSlotsTable.deleteColumn, 0)));
     }
 
-    // 3. Delete the session — ON DELETE CASCADE removes the slots
-    await db.delete(onlineSlotSessionsTable).where(eq(onlineSlotSessionsTable.id, id));
+    // Soft-delete the session
+    await db.update(onlineSlotSessionsTable).set({ deleteColumn: 1 }).where(and(eq(onlineSlotSessionsTable.id, id), eq(onlineSlotSessionsTable.deleteColumn, 0)));
     res.status(204).send();
   } catch (err: any) {
     console.error("[DELETE session] error:", err?.message ?? err);
@@ -286,7 +292,7 @@ router.get("/available", async (_req, res) => {
   const activeSessions = await db
     .select()
     .from(onlineSlotSessionsTable)
-    .where(gte(onlineSlotSessionsTable.date, dateStr))
+    .where(and(gte(onlineSlotSessionsTable.date, dateStr), eq(onlineSlotSessionsTable.deleteColumn, 0)))
     .orderBy(asc(onlineSlotSessionsTable.date), asc(onlineSlotSessionsTable.startTime));
 
   const byDate: Record<string, any[]> = {};
@@ -301,13 +307,13 @@ router.get("/available", async (_req, res) => {
     })
     .from(onlineSlotsTable)
     .innerJoin(onlineSlotSessionsTable, eq(onlineSlotsTable.sessionId, onlineSlotSessionsTable.id))
-    .where(gte(onlineSlotsTable.date, dateStr))
+    .where(and(gte(onlineSlotsTable.date, dateStr), eq(onlineSlotsTable.deleteColumn, 0), eq(onlineSlotSessionsTable.deleteColumn, 0)))
     .orderBy(asc(onlineSlotsTable.startTime), asc(onlineSlotsTable.id));
 
   const offlineAppts = await db
     .select()
     .from(appointmentsTable)
-    .where(and(gte(appointmentsTable.date, dateStr), ne(appointmentsTable.status, "cancelled")));
+    .where(and(gte(appointmentsTable.date, dateStr), ne(appointmentsTable.status, "cancelled"), eq(appointmentsTable.deleteColumn, 0)));
 
   function to12Hour(t: string): string {
     const [h, m] = t.split(":").map(Number);

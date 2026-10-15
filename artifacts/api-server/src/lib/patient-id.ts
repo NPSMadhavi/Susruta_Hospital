@@ -1,5 +1,5 @@
 import { db, siteSettingsTable, patientsTable, type Patient } from "@workspace/db";
-import { eq, sql, or, desc } from "drizzle-orm";
+import { eq, sql, or, desc, and } from "drizzle-orm";
 
 export function getNextPrefix(prefix: string): string | null {
   const chars = (prefix || "A").toUpperCase().trim().split("");
@@ -168,7 +168,7 @@ export async function findExistingPatientByPhoneOrEmail(
   const [existing] = await db
     .select()
     .from(patientsTable)
-    .where(or(...conditions))
+    .where(and(eq(patientsTable.deleteColumn, 0), or(...conditions)))
     .limit(1);
 
   return existing ?? null;
@@ -200,7 +200,7 @@ export async function searchPatients(query: string): Promise<Patient[]> {
   const results = await db
     .select()
     .from(patientsTable)
-    .where(or(...conditions))
+    .where(and(eq(patientsTable.deleteColumn, 0), or(...conditions)))
     .orderBy(desc(patientsTable.createdAt))
     .limit(25);
 

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, siteSettingsTable, medicineOrdersTable, medicineOrderItemsTable, patientsTable } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requirePharmacy, createPharmacySession, deletePharmacySession, verifyPharmacySession } from "../lib/pharmacy-auth";
 import { getSmtpConfig } from "../lib/email";
@@ -22,24 +22,38 @@ export function notifyPharmacySse(event: string, data: unknown) {
 
 // ── POST /api/pharmacy/login ──────────────────────────────────
 router.post("/login", verifyRecaptcha("pharmacy_login"), async (req, res) => {
-  const { password } = req.body;
-  if (!password) { res.status(400).json({ error: "password_required" }); return; }
+  try {
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { password } = body || {};
+    if (!password) { res.status(400).json({ error: "password_required", message: "Password is required." }); return; }
 
-  const [settings] = await db.select().from(siteSettingsTable);
-  if (!settings?.pharmacyPasswordHash) {
-    res.status(403).json({ error: "not_configured", message: "Pharmacy portal not yet configured. Contact admin." });
-    return;
+    const [settings] = await db.select().from(siteSettingsTable);
+    if (!settings?.pharmacyPasswordHash) {
+      res.status(403).json({ error: "not_configured", message: "Pharmacy portal not yet configured. Contact admin." });
+      return;
+    }
+
+    const valid = await bcrypt.compare(password, settings.pharmacyPasswordHash);
+    if (!valid) { res.status(401).json({ error: "invalid_password", message: "Incorrect password." }); return; }
+
+    const token = await createPharmacySession();
+    res.cookie("pharmacy_session", token, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("[Pharmacy Login Error]:", err);
+    res.status(500).json({
+      error: "login_error",
+      message: err?.message || "An unexpected error occurred during pharmacy login.",
+    });
   }
-
-  const valid = await bcrypt.compare(password, settings.pharmacyPasswordHash);
-  if (!valid) { res.status(401).json({ error: "invalid_password", message: "Incorrect password." }); return; }
-
-  const token = await createPharmacySession();
-  res.cookie("pharmacy_session", token, {
-    httpOnly: true, secure: process.env.NODE_ENV === "production",
-    sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-  res.json({ success: true });
 });
 
 // ── POST /api/pharmacy/logout ─────────────────────────────────
@@ -80,12 +94,19 @@ router.get("/orders", requirePharmacy, async (_req, res) => {
   const rows = await db
     .select({ order: medicineOrdersTable, patient: patientsTable })
     .from(medicineOrdersTable)
-    .innerJoin(patientsTable, eq(medicineOrdersTable.patientId, patientsTable.id))
+    .innerJoin(patientsTable, and(
+      eq(medicineOrdersTable.patientId, patientsTable.id),
+      eq(patientsTable.deleteColumn, 0)
+    ))
+    .where(eq(medicineOrdersTable.deleteColumn, 0))
     .orderBy(desc(medicineOrdersTable.createdAt));
 
   const orderIds = rows.map(r => r.order.id);
   const allItems = orderIds.length > 0
-    ? await db.select().from(medicineOrderItemsTable).where(inArray(medicineOrderItemsTable.orderId, orderIds))
+    ? await db.select().from(medicineOrderItemsTable).where(and(
+        inArray(medicineOrderItemsTable.orderId, orderIds),
+        eq(medicineOrderItemsTable.deleteColumn, 0)
+      ))
     : [];
 
   // Build items map
@@ -125,7 +146,7 @@ router.patch("/orders/:id/availability", requirePharmacy, async (req, res) => {
   const parsed = AvailBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "validation_error" }); return; }
 
-  const [order] = await db.select().from(medicineOrdersTable).where(eq(medicineOrdersTable.id, id));
+  const [order] = await db.select().from(medicineOrdersTable).where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)));
   if (!order) { res.status(404).json({ error: "not_found" }); return; }
 
   const { items, notes } = parsed.data;
@@ -135,18 +156,18 @@ router.patch("/orders/:id/availability", requirePharmacy, async (req, res) => {
   for (const item of items) {
     await db.update(medicineOrderItemsTable)
       .set({ available: item.available })
-      .where(eq(medicineOrderItemsTable.id, item.id));
+      .where(and(eq(medicineOrderItemsTable.id, item.id), eq(medicineOrderItemsTable.deleteColumn, 0)));
   }
 
   const newStatus = hasUnavailable ? "partial_approval_needed" : "payment_requested";
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: newStatus, pharmacistNotes: notes ?? order.pharmacistNotes, updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
 
   // If partial, email patient
   if (hasUnavailable) {
-    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, order.patientId));
+    const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, order.patientId), eq(patientsTable.deleteColumn, 0)));
     if (patient && patient.email) {
       sendPartialEmail(patient.email, patient.name, id).catch(() => {});
     }
@@ -161,12 +182,12 @@ router.patch("/orders/:id/availability", requirePharmacy, async (req, res) => {
 // ── PATCH /api/pharmacy/orders/:id/request-payment ───────────
 router.patch("/orders/:id/request-payment", requirePharmacy, async (req, res) => {
   const id = parseInt(req.params.id);
-  const [order] = await db.select().from(medicineOrdersTable).where(eq(medicineOrdersTable.id, id));
+  const [order] = await db.select().from(medicineOrdersTable).where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)));
   if (!order) { res.status(404).json({ error: "not_found" }); return; }
 
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: "payment_requested", updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
 
   notifyPharmacySse("order_updated", { id, status: "payment_requested" });
@@ -178,7 +199,7 @@ router.patch("/orders/:id/payment-confirmed", requirePharmacy, async (req, res) 
   const id = parseInt(req.params.id);
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: "payment_confirmed", updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   notifyPharmacySse("order_updated", { id, status: "payment_confirmed" });
@@ -195,7 +216,7 @@ router.patch("/orders/:id/shipping", requirePharmacy, async (req, res) => {
 
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: "shipped", trackingNumber: parsed.data.trackingNumber, updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
 

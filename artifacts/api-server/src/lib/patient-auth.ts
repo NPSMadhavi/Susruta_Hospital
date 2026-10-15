@@ -1,5 +1,5 @@
 import { db, patientSessionsTable, patientsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import type { Request, Response, NextFunction } from "express";
@@ -24,7 +24,10 @@ export async function verifyPatientSession(token: string) {
     .select({ session: patientSessionsTable, patient: patientsTable })
     .from(patientSessionsTable)
     .innerJoin(patientsTable, eq(patientSessionsTable.patientId, patientsTable.id))
-    .where(eq(patientSessionsTable.sessionToken, token));
+    .where(and(
+      eq(patientSessionsTable.sessionToken, token),
+      eq(patientsTable.deleteColumn, 0)
+    ));
 
   if (!session || session.session.expiresAt < new Date()) return null;
   return session.patient;

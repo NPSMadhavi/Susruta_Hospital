@@ -13,6 +13,7 @@ export const donationsTable = pgTable("donations", {
   lastSixDigits: varchar("last_six_digits", { length: 6 }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   thankYouSent: boolean("thank_you_sent").notNull().default(false),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { type Response } from "express";
 import { db, prescriptionsTable, onlineAppointmentsTable, onlineSlotsTable, appointmentsTable, patientsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { generatePrescriptionPdf, type PrescriptionPdfData } from "./prescription-pdf";
 
 export function getUploadsDirs(): string[] {
@@ -118,10 +118,22 @@ export async function streamPrescriptionDownload({
           rx: prescriptionsTable,
         })
         .from(onlineAppointmentsTable)
-        .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-        .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-        .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-        .where(eq(onlineAppointmentsTable.id, id));
+        .innerJoin(onlineSlotsTable, and(
+          eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+          eq(onlineSlotsTable.deleteColumn, 0)
+        ))
+        .innerJoin(patientsTable, and(
+          eq(onlineAppointmentsTable.patientId, patientsTable.id),
+          eq(patientsTable.deleteColumn, 0)
+        ))
+        .leftJoin(prescriptionsTable, and(
+          eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+          eq(prescriptionsTable.deleteColumn, 0)
+        ))
+        .where(and(
+          eq(onlineAppointmentsTable.id, id),
+          eq(onlineAppointmentsTable.deleteColumn, 0)
+        ));
 
       if (row) {
         onlineAppt = row.appt;
@@ -137,9 +149,18 @@ export async function streamPrescriptionDownload({
           rx: prescriptionsTable,
         })
         .from(appointmentsTable)
-        .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
-        .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
-        .where(eq(appointmentsTable.id, id));
+        .leftJoin(patientsTable, and(
+          eq(appointmentsTable.patientId, patientsTable.id),
+          eq(patientsTable.deleteColumn, 0)
+        ))
+        .leftJoin(prescriptionsTable, and(
+          eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+          eq(prescriptionsTable.deleteColumn, 0)
+        ))
+        .where(and(
+          eq(appointmentsTable.id, id),
+          eq(appointmentsTable.deleteColumn, 0)
+        ));
 
       if (row) {
         offlineAppt = row.appt;
@@ -154,7 +175,10 @@ export async function streamPrescriptionDownload({
       const [pRow] = await db
         .select()
         .from(prescriptionsTable)
-        .where(eq(prescriptionsTable.id, numId));
+        .where(and(
+          eq(prescriptionsTable.id, numId),
+          eq(prescriptionsTable.deleteColumn, 0)
+        ));
 
       if (pRow) {
         rx = pRow;
@@ -163,7 +187,10 @@ export async function streamPrescriptionDownload({
         const [oRow] = await db
           .select()
           .from(prescriptionsTable)
-          .where(eq(prescriptionsTable.onlineAppointmentId, numId));
+          .where(and(
+            eq(prescriptionsTable.onlineAppointmentId, numId),
+            eq(prescriptionsTable.deleteColumn, 0)
+          ));
         if (oRow) {
           rx = oRow;
         } else {
@@ -171,7 +198,10 @@ export async function streamPrescriptionDownload({
           const [offRow] = await db
             .select()
             .from(prescriptionsTable)
-            .where(eq(prescriptionsTable.appointmentId, numId));
+            .where(and(
+              eq(prescriptionsTable.appointmentId, numId),
+              eq(prescriptionsTable.deleteColumn, 0)
+            ));
           if (offRow) rx = offRow;
         }
       }
@@ -188,9 +218,18 @@ export async function streamPrescriptionDownload({
           patient: patientsTable,
         })
         .from(onlineAppointmentsTable)
-        .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-        .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-        .where(eq(onlineAppointmentsTable.id, rx.onlineAppointmentId));
+        .innerJoin(onlineSlotsTable, and(
+          eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+          eq(onlineSlotsTable.deleteColumn, 0)
+        ))
+        .innerJoin(patientsTable, and(
+          eq(onlineAppointmentsTable.patientId, patientsTable.id),
+          eq(patientsTable.deleteColumn, 0)
+        ))
+        .where(and(
+          eq(onlineAppointmentsTable.id, rx.onlineAppointmentId),
+          eq(onlineAppointmentsTable.deleteColumn, 0)
+        ));
 
       if (row) {
         onlineAppt = row.appt;
@@ -204,8 +243,14 @@ export async function streamPrescriptionDownload({
           patient: patientsTable,
         })
         .from(appointmentsTable)
-        .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
-        .where(eq(appointmentsTable.id, rx.appointmentId));
+        .leftJoin(patientsTable, and(
+          eq(appointmentsTable.patientId, patientsTable.id),
+          eq(patientsTable.deleteColumn, 0)
+        ))
+        .where(and(
+          eq(appointmentsTable.id, rx.appointmentId),
+          eq(appointmentsTable.deleteColumn, 0)
+        ));
 
       if (row) {
         offlineAppt = row.appt;

@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, timestamp, integer } from "drizzle-orm/pg-core";
 
 export const medicinesTable = pgTable("medicines", {
   id: serial("id").primaryKey(),
@@ -9,6 +9,7 @@ export const medicinesTable = pgTable("medicines", {
   formulation: varchar("formulation", { length: 100 }),
   properties: text("properties"),
   indications: text("indications"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

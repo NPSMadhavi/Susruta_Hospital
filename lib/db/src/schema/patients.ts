@@ -21,6 +21,7 @@ export const patientsTable = pgTable("patients", {
   verificationReminderPendingAt: timestamp("verification_reminder_pending_at"),
   verificationReminderPendingTokenId: integer("verification_reminder_pending_token_id"),
   verificationReminderDispatchStartedAt: timestamp("verification_reminder_dispatch_started_at"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

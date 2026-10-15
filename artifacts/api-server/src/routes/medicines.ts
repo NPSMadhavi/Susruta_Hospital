@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, medicinesTable } from "@workspace/db";
-import { eq, desc, or, ilike, sql } from "drizzle-orm";
+import { eq, desc, or, ilike, sql, and } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 
 const router = Router();
@@ -18,10 +18,12 @@ async function ensureTableExists() {
         formulation VARCHAR(100),
         properties TEXT,
         indications TEXT,
+        delete_column INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
       ALTER TABLE medicines ADD COLUMN IF NOT EXISTS indications TEXT;
+      ALTER TABLE medicines ADD COLUMN IF NOT EXISTS delete_column INTEGER NOT NULL DEFAULT 0;
     `);
   } catch (err) {
     console.error("⚠️ Failed to ensure medicines table exists:", err);
@@ -75,13 +77,16 @@ router.get("/", async (req, res) => {
         .select()
         .from(medicinesTable)
         .where(
-          or(
-            ilike(medicinesTable.medicineName, q),
-            ilike(medicinesTable.medicineId, q),
-            ilike(medicinesTable.dosage, q),
-            ilike(medicinesTable.formulation, q),
-            ilike(medicinesTable.properties, q),
-            ilike(medicinesTable.indications, q)
+          and(
+            eq(medicinesTable.deleteColumn, 0),
+            or(
+              ilike(medicinesTable.medicineName, q),
+              ilike(medicinesTable.medicineId, q),
+              ilike(medicinesTable.dosage, q),
+              ilike(medicinesTable.formulation, q),
+              ilike(medicinesTable.properties, q),
+              ilike(medicinesTable.indications, q)
+            )
           )
         )
         .orderBy(desc(medicinesTable.id));
@@ -89,6 +94,7 @@ router.get("/", async (req, res) => {
       medicines = await db
         .select()
         .from(medicinesTable)
+        .where(eq(medicinesTable.deleteColumn, 0))
         .orderBy(desc(medicinesTable.id));
     }
 
@@ -253,7 +259,7 @@ router.put("/:id", requireAdmin, async (req, res) => {
         indications: indications !== undefined ? (indications?.trim() || null) : undefined,
         updatedAt: new Date(),
       })
-      .where(eq(medicinesTable.id, id))
+      .where(and(eq(medicinesTable.id, id), eq(medicinesTable.deleteColumn, 0)))
       .returning();
 
     if (!updated) {
@@ -296,7 +302,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
     const [updated] = await db
       .update(medicinesTable)
       .set(updates)
-      .where(eq(medicinesTable.id, id))
+      .where(and(eq(medicinesTable.id, id), eq(medicinesTable.deleteColumn, 0)))
       .returning();
 
     if (!updated) {
@@ -326,8 +332,9 @@ router.delete("/:id", requireAdmin, async (req, res) => {
     }
 
     const [deleted] = await db
-      .delete(medicinesTable)
-      .where(eq(medicinesTable.id, id))
+      .update(medicinesTable)
+      .set({ deleteColumn: 1, updatedAt: new Date() })
+      .where(and(eq(medicinesTable.id, id), eq(medicinesTable.deleteColumn, 0)))
       .returning();
 
     if (!deleted) {

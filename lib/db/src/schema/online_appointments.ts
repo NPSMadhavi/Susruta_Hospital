@@ -23,6 +23,7 @@ export const onlineAppointmentsTable = pgTable("online_appointments", {
   livekitRoomName: varchar("livekit_room_name", { length: 255 }),
   // Pre-generated guest token for caregiver sharing
   guestToken: text("guest_token"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

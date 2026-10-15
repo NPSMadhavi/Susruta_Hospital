@@ -229,6 +229,27 @@ const handleSubscribe = async (req: any, res: any) => {
 
   const existing = await db.select().from(subscribersTable).where(eq(subscribersTable.email, email));
   if (existing.length > 0) {
+    if (existing[0].deleteColumn === 1) {
+      const [sub] = await db
+        .update(subscribersTable)
+        .set({
+          deleteColumn: 0,
+          unsubscribed: false,
+          unsubscribedAt: null,
+          unsubscribeReason: null,
+          name: subscriberName,
+          phone: subscriberPhone,
+          country: country ?? null,
+          subscribedAt: new Date(),
+        })
+        .where(eq(subscribersTable.id, existing[0].id))
+        .returning();
+      const serialized = { ...sub, subscribedAt: sub.subscribedAt.toISOString() };
+      notifyNewSubscriber(serialized);
+      sendSubscriptionConfirmation({ to: email, name: subscriberName }).catch(() => {});
+      res.status(201).json({ id: sub.id, message: "Subscribed successfully." });
+      return;
+    }
     res.status(200).json({ already_subscribed: true, message: "You are already subscribed! We will notify you when our services go live." });
     return;
   }
@@ -237,7 +258,8 @@ const handleSubscribe = async (req: any, res: any) => {
     name: subscriberName,
     phone: subscriberPhone,
     email,
-    country: country ?? null
+    country: country ?? null,
+    deleteColumn: 0,
   }).returning();
   const serialized = { ...sub, subscribedAt: sub.subscribedAt.toISOString() };
 
@@ -253,14 +275,22 @@ router.post("/subscribe", verifyRecaptcha("newsletter_subscribe"), handleSubscri
 
 // ── Admin: List ──────────────────────────────────────────────
 router.get("/", requireAdmin, async (_req, res) => {
-  const subs = await db.select().from(subscribersTable).orderBy(desc(subscribersTable.subscribedAt));
+  const subs = await db
+    .select()
+    .from(subscribersTable)
+    .where(eq(subscribersTable.deleteColumn, 0))
+    .orderBy(desc(subscribersTable.subscribedAt));
   res.json(subs.map((s) => ({ ...s, subscribedAt: s.subscribedAt.toISOString() })));
 });
 
 // ── Admin: Delete ────────────────────────────────────────────
 router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(subscribersTable).where(eq(subscribersTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db
+    .update(subscribersTable)
+    .set({ deleteColumn: 1 })
+    .where(and(eq(subscribersTable.id, id), eq(subscribersTable.deleteColumn, 0)));
   res.status(204).send();
 });
 
@@ -278,7 +308,7 @@ router.post("/broadcast", requireAdmin, async (req, res) => {
   const subs = await db
     .select()
     .from(subscribersTable)
-    .where(ne(subscribersTable.unsubscribed, true))
+    .where(and(ne(subscribersTable.unsubscribed, true), eq(subscribersTable.deleteColumn, 0)))
     .orderBy(desc(subscribersTable.subscribedAt));
   if (subs.length === 0) {
     res.status(400).json({ error: "no_subscribers", message: "No active subscribers to send to." });

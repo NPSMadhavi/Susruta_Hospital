@@ -14,6 +14,7 @@ export const prescriptionsTable = pgTable("prescriptions", {
   photoObjectPath: text("photo_object_path"),
   // Optional notes visible to patient
   notes: text("notes"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

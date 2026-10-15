@@ -9,6 +9,7 @@ export const medicineOrderItemsTable = pgTable("medicine_order_items", {
   qty: integer("qty").notNull().default(1),
   // null = not yet reviewed, true = available, false = not available
   available: boolean("available"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

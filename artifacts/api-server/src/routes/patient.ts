@@ -200,6 +200,10 @@ router.post("/auth/register", verifyRecaptcha("patient_register"), async (req, r
   const [existingEmail] = await db.select().from(patientsTable)
     .where(sql`lower(${patientsTable.email}) = ${email}`);
   if (existingEmail) {
+    if (existingEmail.deleteColumn === 1) {
+      res.status(403).json({ error: "account_deactivated", message: "This account has been deactivated. Please contact hospital support." });
+      return;
+    }
     res.status(409).json({ error: "email_taken", message: "An account with this email already exists. Please sign in." });
     return;
   }
@@ -207,6 +211,10 @@ router.post("/auth/register", verifyRecaptcha("patient_register"), async (req, r
   if (phone) {
     const [existingPhone] = await db.select().from(patientsTable).where(eq(patientsTable.phone, phone));
     if (existingPhone) {
+      if (existingPhone.deleteColumn === 1) {
+        res.status(403).json({ error: "account_deactivated", message: "This account has been deactivated. Please contact hospital support." });
+        return;
+      }
       res.status(409).json({ error: "phone_taken", message: "An account with this phone number already exists. Please sign in." });
       return;
     }
@@ -260,7 +268,7 @@ router.post("/auth/login", verifyRecaptcha("patient_login"), async (req, res) =>
   const email = parsed.data.email.toLowerCase().trim();
 
   const [patient] = await db.select().from(patientsTable)
-    .where(sql`lower(${patientsTable.email}) = ${email}`);
+    .where(and(eq(patientsTable.deleteColumn, 0), sql`lower(${patientsTable.email}) = ${email}`));
   if (!patient || !patient.passwordHash) {
     res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password." });
     return;
@@ -314,7 +322,7 @@ router.get("/auth/verify", async (req, res) => {
   if (!row) {
     const [existingToken] = await db.select().from(loginTokensTable).where(eq(loginTokensTable.token, token));
     if (existingToken) {
-      const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.id, existingToken.patientId));
+      const [existingPatient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, existingToken.patientId), eq(patientsTable.deleteColumn, 0)));
       if (existingPatient?.emailVerified) {
         const sessionToken = await createPatientSession(existingPatient.id);
         res.cookie("patient_session", sessionToken, cookieOpts());
@@ -405,7 +413,7 @@ router.post("/auth/forgot-password", verifyRecaptcha("patient_forgot_password"),
 
   const normalizedEmail = email.toLowerCase().trim();
   const [patient] = await db.select().from(patientsTable)
-    .where(sql`lower(${patientsTable.email}) = ${normalizedEmail}`);
+    .where(and(eq(patientsTable.deleteColumn, 0), sql`lower(${patientsTable.email}) = ${normalizedEmail}`));
 
   // Always respond success to prevent email enumeration
   if (!patient) {
@@ -450,7 +458,7 @@ router.post("/auth/reset-password", verifyRecaptcha("patient_reset_password"), a
   await db.update(patientsTable).set({ passwordHash }).where(eq(patientsTable.id, row.patientId));
   await db.update(loginTokensTable).set({ used: true }).where(eq(loginTokensTable.token, token));
 
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, row.patientId));
+  const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, row.patientId), eq(patientsTable.deleteColumn, 0)));
   const sessionToken = await createPatientSession(row.patientId);
   res.cookie("patient_session", sessionToken, cookieOpts());
   res.json({ success: true, patient: patient ? serializePatient(patient) : null });
@@ -861,12 +869,23 @@ export function notifyPatientAppointmentUpdated(patientId: number) {
 // ── My Appointments ───────────────────────────────────────────
 router.get("/appointments", requirePatient, async (req, res) => {
   const patient = (req as any).patient;
-  const conditions = [eq(appointmentsTable.patientId, patient.id)];
+  const conditions = [
+    and(
+      eq(appointmentsTable.patientId, patient.id),
+      eq(appointmentsTable.deleteColumn, 0)
+    )
+  ];
   if (patient.email) {
-    conditions.push(sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`);
+    conditions.push(and(
+      sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`,
+      eq(appointmentsTable.deleteColumn, 0)
+    ));
   }
   if (patient.phone) {
-    conditions.push(eq(appointmentsTable.patientPhone, patient.phone));
+    conditions.push(and(
+      eq(appointmentsTable.patientPhone, patient.phone),
+      eq(appointmentsTable.deleteColumn, 0)
+    ));
   }
 
   const rows = await db
@@ -875,7 +894,10 @@ router.get("/appointments", requirePatient, async (req, res) => {
       prescription: prescriptionsTable,
     })
     .from(appointmentsTable)
-    .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
+    .leftJoin(prescriptionsTable, and(
+      eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+      eq(prescriptionsTable.deleteColumn, 0)
+    ))
     .where(or(...conditions))
     .orderBy(desc(appointmentsTable.date));
 
@@ -935,9 +957,19 @@ router.get("/prescriptions/appointment/:type/:id", requirePatient, async (req: a
         prescription: prescriptionsTable,
       })
       .from(onlineAppointmentsTable)
-      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-      .where(and(eq(onlineAppointmentsTable.id, apptId), eq(onlineAppointmentsTable.patientId, patient.id)));
+      .innerJoin(onlineSlotsTable, and(
+        eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+        eq(onlineSlotsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(
+        eq(onlineAppointmentsTable.id, apptId),
+        eq(onlineAppointmentsTable.patientId, patient.id),
+        eq(onlineAppointmentsTable.deleteColumn, 0)
+      ));
 
     if (!row) {
       res.status(404).json({ error: "not_found", message: "Consultation not found or unauthorized." });
@@ -959,12 +991,23 @@ router.get("/prescriptions/appointment/:type/:id", requirePatient, async (req: a
     });
   } else {
     // Offline hospital appointment
-    const conditions = [eq(appointmentsTable.patientId, patient.id)];
+    const conditions = [
+      and(
+        eq(appointmentsTable.patientId, patient.id),
+        eq(appointmentsTable.deleteColumn, 0)
+      )
+    ];
     if (patient.email) {
-      conditions.push(sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`);
+      conditions.push(and(
+        sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`,
+        eq(appointmentsTable.deleteColumn, 0)
+      ));
     }
     if (patient.phone) {
-      conditions.push(eq(appointmentsTable.patientPhone, patient.phone));
+      conditions.push(and(
+        eq(appointmentsTable.patientPhone, patient.phone),
+        eq(appointmentsTable.deleteColumn, 0)
+      ));
     }
 
     const [row] = await db
@@ -973,8 +1016,11 @@ router.get("/prescriptions/appointment/:type/:id", requirePatient, async (req: a
         prescription: prescriptionsTable,
       })
       .from(appointmentsTable)
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
-      .where(and(eq(appointmentsTable.id, apptId), or(...conditions)));
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(eq(appointmentsTable.id, apptId), eq(appointmentsTable.deleteColumn, 0), or(...conditions)));
 
     if (!row) {
       res.status(404).json({ error: "not_found", message: "Consultation not found or unauthorized." });
@@ -1077,10 +1123,18 @@ router.post("/appointments", requirePatient, async (req, res) => {
 
   // Check capacity for session (offline + online)
   const existingOffline = await db.select().from(appointmentsTable).where(
-    and(eq(appointmentsTable.date, date), ne(appointmentsTable.status, "cancelled"))
+    and(
+      eq(appointmentsTable.date, date),
+      ne(appointmentsTable.status, "cancelled"),
+      eq(appointmentsTable.deleteColumn, 0)
+    )
   );
   const existingOnlineSlots = await db.select().from(onlineSlotsTable).where(
-    and(eq(onlineSlotsTable.date, date), eq(onlineSlotsTable.isBooked, true))
+    and(
+      eq(onlineSlotsTable.date, date),
+      eq(onlineSlotsTable.isBooked, true),
+      eq(onlineSlotsTable.deleteColumn, 0)
+    )
   );
 
   if (isMorning) {
@@ -1130,7 +1184,12 @@ router.post("/appointments", requirePatient, async (req, res) => {
   }
 
   const existing = await db.select().from(appointmentsTable).where(
-    and(eq(appointmentsTable.date, date), eq(appointmentsTable.timeSlot, timeSlot), eq(appointmentsTable.status, "confirmed"))
+    and(
+      eq(appointmentsTable.date, date),
+      eq(appointmentsTable.timeSlot, timeSlot),
+      eq(appointmentsTable.status, "confirmed"),
+      eq(appointmentsTable.deleteColumn, 0)
+    )
   );
   if (existing.length > 0) {
     res.status(409).json({ error: "slot_unavailable", message: "This time slot is already taken" });
@@ -1204,7 +1263,11 @@ router.patch("/appointments/:id/confirm-followup", requirePatient, async (req, r
   const patient = (req as any).patient;
   const id = parseInt(req.params.id);
   const [appt] = await db.select().from(appointmentsTable).where(
-    and(eq(appointmentsTable.id, id), eq(appointmentsTable.patientId, patient.id))
+    and(
+      eq(appointmentsTable.id, id),
+      eq(appointmentsTable.patientId, patient.id),
+      eq(appointmentsTable.deleteColumn, 0)
+    )
   );
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
 
@@ -1223,7 +1286,11 @@ router.patch("/appointments/:id/choose-reschedule", requirePatient, async (req, 
   if (!chosenDate) { res.status(400).json({ error: "missing_date" }); return; }
 
   const [appt] = await db.select().from(appointmentsTable).where(
-    and(eq(appointmentsTable.id, id), eq(appointmentsTable.patientId, patient.id))
+    and(
+      eq(appointmentsTable.id, id),
+      eq(appointmentsTable.patientId, patient.id),
+      eq(appointmentsTable.deleteColumn, 0)
+    )
   );
   if (!appt || appt.status !== "reschedule_proposed") {
     res.status(400).json({ error: "invalid_state" }); return;
@@ -1246,7 +1313,10 @@ router.get("/documents", requirePatient, async (req: any, res) => {
   const docs = await db
     .select()
     .from(patientDocumentsTable)
-    .where(eq(patientDocumentsTable.patientId, patient.id))
+    .where(and(
+      eq(patientDocumentsTable.patientId, patient.id),
+      eq(patientDocumentsTable.deleteColumn, 0)
+    ))
     .orderBy(desc(patientDocumentsTable.createdAt));
   res.json(docs.map(d => ({
     id: d.id,
@@ -1270,6 +1340,14 @@ router.post("/documents", requirePatient, async (req: any, res) => {
     .from(patientDocumentsTable)
     .where(and(eq(patientDocumentsTable.patientId, patient.id), eq(patientDocumentsTable.objectPath, objectPath)));
   if (existing) {
+    if (existing.deleteColumn === 1) {
+      const [reactivated] = await db.update(patientDocumentsTable)
+        .set({ deleteColumn: 0, name, contentType, size })
+        .where(eq(patientDocumentsTable.id, existing.id))
+        .returning();
+      res.json({ id: reactivated.id, name: reactivated.name, objectPath: reactivated.objectPath, contentType: reactivated.contentType, size: reactivated.size, createdAt: reactivated.createdAt?.toISOString() ?? null });
+      return;
+    }
     res.json({ id: existing.id, name: existing.name, objectPath: existing.objectPath, contentType: existing.contentType, size: existing.size, createdAt: existing.createdAt?.toISOString() ?? null });
     return;
   }
@@ -1290,7 +1368,11 @@ router.delete("/documents/:id", requirePatient, async (req: any, res) => {
   const [doc] = await db
     .select()
     .from(patientDocumentsTable)
-    .where(and(eq(patientDocumentsTable.id, id), eq(patientDocumentsTable.patientId, patient.id)));
+    .where(and(
+      eq(patientDocumentsTable.id, id),
+      eq(patientDocumentsTable.patientId, patient.id),
+      eq(patientDocumentsTable.deleteColumn, 0)
+    ));
   if (!doc) { res.status(404).json({ error: "not_found" }); return; }
   await db.transaction(async (tx) => {
     // Remove this file from every appointment belonging to this patient.
@@ -1302,7 +1384,7 @@ router.delete("/documents/:id", requirePatient, async (req: any, res) => {
         where document->>'objectPath' is distinct from ${doc.objectPath}
       ), '[]'::json)`,
     }).where(eq(onlineAppointmentsTable.patientId, patient.id));
-    await tx.delete(patientDocumentsTable).where(and(
+    await tx.update(patientDocumentsTable).set({ deleteColumn: 1 }).where(and(
       eq(patientDocumentsTable.patientId, patient.id),
       eq(patientDocumentsTable.objectPath, doc.objectPath),
     ));

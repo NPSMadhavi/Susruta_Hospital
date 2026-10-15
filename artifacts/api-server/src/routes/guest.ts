@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, onlineAppointmentsTable, patientsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { addGuestSseClient, getGuestWaitingCount } from "../lib/guestSse";
 import { setPermission, getPermissions } from "../lib/permissionStore";
 import { broadcastPermissionUpdate } from "../lib/appointmentSse";
@@ -25,8 +25,14 @@ router.get("/status/:apptId", async (req, res) => {
       patientName: patientsTable.name,
     })
     .from(onlineAppointmentsTable)
-    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-    .where(eq(onlineAppointmentsTable.id, apptId));
+    .innerJoin(patientsTable, and(
+      eq(onlineAppointmentsTable.patientId, patientsTable.id),
+      eq(patientsTable.deleteColumn, 0)
+    ))
+    .where(and(
+      eq(onlineAppointmentsTable.id, apptId),
+      eq(onlineAppointmentsTable.deleteColumn, 0)
+    ));
 
   if (rows.length === 0) { res.status(404).json({ error: "not_found" }); return; }
 

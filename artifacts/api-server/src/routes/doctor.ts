@@ -27,29 +27,52 @@ const SESSION_DAYS = 7;
 
 // ── POST /api/doctor/login ────────────────────────────────────
 router.post("/login", verifyRecaptcha("doctor_login"), async (req, res) => {
-  const { password } = req.body;
-  if (!password) { res.status(400).json({ error: "password_required" }); return; }
+  try {
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { password } = body || {};
+    if (!password) {
+      res.status(400).json({ error: "password_required", message: "Password is required." });
+      return;
+    }
 
-  const [settings] = await db.select().from(siteSettingsTable);
-  if (!settings?.doctorPasswordHash) {
-    res.status(401).json({ error: "not_configured", message: "Doctor portal is not yet configured. Ask the admin to set the doctor password in Settings." });
-    return;
+    const [settings] = await db.select().from(siteSettingsTable);
+    if (!settings?.doctorPasswordHash) {
+      res.status(401).json({
+        error: "not_configured",
+        message: "Doctor portal is not yet configured. Ask the admin to set the doctor password in Settings.",
+      });
+      return;
+    }
+
+    const ok = await bcrypt.compare(password, settings.doctorPasswordHash);
+    if (!ok) {
+      res.status(401).json({ error: "invalid_password", message: "Incorrect password." });
+      return;
+    }
+
+    const token = randomBytes(48).toString("hex");
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+    await db.insert(doctorSessionsTable).values({ sessionToken: token, expiresAt });
+
+    res.cookie(COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
+    });
+    res.json({ ok: true, success: true });
+  } catch (err: any) {
+    console.error("[Doctor Login Error]:", err);
+    res.status(500).json({
+      error: "login_error",
+      message: err?.message || "An unexpected error occurred during doctor login.",
+    });
   }
-
-  const ok = await bcrypt.compare(password, settings.doctorPasswordHash);
-  if (!ok) { res.status(401).json({ error: "invalid_password" }); return; }
-
-  const token = randomBytes(48).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.insert(doctorSessionsTable).values({ sessionToken: token, expiresAt });
-
-  res.cookie(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
-  });
-  res.json({ ok: true });
 });
 
 // ── POST /api/doctor/logout ───────────────────────────────────
@@ -82,11 +105,21 @@ router.get("/appointments", requireDoctor, async (_req, res) => {
         prescription: prescriptionsTable,
       })
       .from(onlineAppointmentsTable)
-      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-      .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .innerJoin(onlineSlotsTable, and(
+        eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+        eq(onlineSlotsTable.deleteColumn, 0)
+      ))
+      .innerJoin(patientsTable, and(
+        eq(onlineAppointmentsTable.patientId, patientsTable.id),
+        eq(patientsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(eq(onlineAppointmentsTable.deleteColumn, 0))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
-    db.select().from(patientDocumentsTable),
+    db.select().from(patientDocumentsTable).where(eq(patientDocumentsTable.deleteColumn, 0)),
   ]);
 
   res.json(rows.map((r) => ({
@@ -175,10 +208,22 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
         prescription: prescriptionsTable,
       })
       .from(onlineAppointmentsTable)
-      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-      .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-      .where(inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"]))
+      .innerJoin(onlineSlotsTable, and(
+        eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+        eq(onlineSlotsTable.deleteColumn, 0)
+      ))
+      .innerJoin(patientsTable, and(
+        eq(onlineAppointmentsTable.patientId, patientsTable.id),
+        eq(patientsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(
+        eq(onlineAppointmentsTable.deleteColumn, 0),
+        inArray(onlineAppointmentsTable.status, ["pending", "confirmed", "completed"])
+      ))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
     db
       .select({
@@ -187,11 +232,20 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
         prescription: prescriptionsTable,
       })
       .from(appointmentsTable)
-      .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
-      .where(inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"]))
+      .leftJoin(patientsTable, and(
+        eq(appointmentsTable.patientId, patientsTable.id),
+        eq(patientsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(
+        eq(appointmentsTable.deleteColumn, 0),
+        inArray(appointmentsTable.status, ["confirmed", "arrived", "reschedule_accepted", "completed"])
+      ))
       .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt)),
-    db.select().from(patientDocumentsTable),
+    db.select().from(patientDocumentsTable).where(eq(patientDocumentsTable.deleteColumn, 0)),
   ]);
 
   const online = onlineRows.map((r) => ({
@@ -272,7 +326,7 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
 router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
 
-  const [appt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
+  const [appt] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
 
   const [updated] = await db
@@ -292,7 +346,7 @@ router.put("/offline-appointments/:id/prescription", requireDoctor, async (req, 
   const [existing] = await db
     .select()
     .from(prescriptionsTable)
-    .where(eq(prescriptionsTable.appointmentId, id));
+    .where(and(eq(prescriptionsTable.appointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
 
   let rx;
   if (existing) {
@@ -333,13 +387,13 @@ router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) 
   const [updated] = await db
     .update(appointmentsTable)
     .set({ notes })
-    .where(eq(appointmentsTable.id, id))
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
 
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
 
   // Also update or insert in prescriptionsTable if present
-  const [existingRx] = await db.select().from(prescriptionsTable).where(eq(prescriptionsTable.appointmentId, id));
+  const [existingRx] = await db.select().from(prescriptionsTable).where(and(eq(prescriptionsTable.appointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
   if (existingRx) {
     await db.update(prescriptionsTable).set({ notes, updatedAt: new Date() }).where(eq(prescriptionsTable.appointmentId, id));
   } else {
@@ -357,7 +411,7 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
   const [appt] = await db
     .select({ appt: onlineAppointmentsTable })
     .from(onlineAppointmentsTable)
-    .where(eq(onlineAppointmentsTable.id, id))
+    .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.deleteColumn, 0)))
     .then(r => r.map(x => x.appt));
 
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
@@ -388,8 +442,8 @@ function isRealClinicalNotes(notes: string | null | undefined): boolean {
 // ── GET /api/doctor/patients — All registered patients with docs + appt history ──
 router.get("/patients", requireDoctor, async (_req, res) => {
   const [patients, docs, onlineRows, offlineRows] = await Promise.all([
-    db.select().from(patientsTable).orderBy(patientsTable.name),
-    db.select().from(patientDocumentsTable),
+    db.select().from(patientsTable).where(eq(patientsTable.deleteColumn, 0)).orderBy(patientsTable.name),
+    db.select().from(patientDocumentsTable).where(eq(patientDocumentsTable.deleteColumn, 0)),
     db
       .select({
         appt: onlineAppointmentsTable,
@@ -397,8 +451,15 @@ router.get("/patients", requireDoctor, async (_req, res) => {
         prescription: prescriptionsTable,
       })
       .from(onlineAppointmentsTable)
-      .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .innerJoin(onlineSlotsTable, and(
+        eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+        eq(onlineSlotsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(eq(onlineAppointmentsTable.deleteColumn, 0))
       .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
     db
       .select({
@@ -406,7 +467,11 @@ router.get("/patients", requireDoctor, async (_req, res) => {
         prescription: prescriptionsTable,
       })
       .from(appointmentsTable)
-      .leftJoin(prescriptionsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(eq(appointmentsTable.deleteColumn, 0))
       .orderBy(desc(appointmentsTable.date)),
   ]);
 
@@ -507,7 +572,7 @@ router.get("/donations/sse", requireDoctor, (req, res) => {
 router.get("/donations", requireDoctor, async (req, res) => {
   try {
     const { month, year } = req.query;
-    let query = db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+    let query = db.select().from(donationsTable).where(eq(donationsTable.deleteColumn, 0)).orderBy(desc(donationsTable.createdAt));
 
     if (month && year) {
       const y = parseInt(year as string);
@@ -516,7 +581,7 @@ router.get("/donations", requireDoctor, async (req, res) => {
         const from = new Date(y, m - 1, 1);
         const to = new Date(y, m, 1);
         query = db.select().from(donationsTable)
-          .where(and(gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
           .orderBy(desc(donationsTable.createdAt)) as any;
       }
     }
@@ -533,7 +598,7 @@ router.get("/donations", requireDoctor, async (req, res) => {
 router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
-  const [row] = await db.select().from(donationsTable).where(eq(donationsTable.id, id));
+  const [row] = await db.select().from(donationsTable).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   if (!row) { res.status(404).json({ error: "not_found" }); return; }
   if (!row.patientEmail) { res.status(400).json({ error: "no_email", message: "No email address on record for this donation." }); return; }
   if (row.thankYouSent) { res.json({ success: true, skipped: true }); return; }
@@ -550,7 +615,7 @@ router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
       lastSixDigits: row.lastSixDigits || "",
       donationDate,
     });
-    await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
+    await db.update(donationsTable).set({ thankYouSent: true }).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
     broadcastDonationUpdate({ id, status: row.status, thankYouSent: true });
     res.json({ success: true });
   } catch (err) {
@@ -567,7 +632,7 @@ router.patch("/donations/:id/verify", requireDoctor, async (req, res) => {
   const newStatus = verified ? "verified" : "pending";
   await db.update(donationsTable)
     .set({ status: newStatus })
-    .where(eq(donationsTable.id, id));
+    .where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   broadcastDonationUpdate({ id, status: newStatus });
   res.json({ success: true });
 });

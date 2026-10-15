@@ -76,25 +76,25 @@ router.post("/", requirePatient, async (req: any, res) => {
   }
 
   const existing = await db.select().from(onlineAppointmentsTable)
-    .where(and(eq(onlineAppointmentsTable.slotId, slotId), eq(onlineAppointmentsTable.patientId, patient.id)));
+    .where(and(eq(onlineAppointmentsTable.slotId, slotId), eq(onlineAppointmentsTable.patientId, patient.id), eq(onlineAppointmentsTable.deleteColumn, 0)));
   if (existing.length > 0) { res.status(409).json({ error: "already_booked" }); return; }
 
   // Commit the booking and its document library entries together.
   const appt = await db.transaction(async (tx) => {
     const [claimedSlot] = await tx.update(onlineSlotsTable).set({ isBooked: true })
-      .where(and(eq(onlineSlotsTable.id, slotId), eq(onlineSlotsTable.isBooked, false)))
+      .where(and(eq(onlineSlotsTable.id, slotId), eq(onlineSlotsTable.isBooked, false), eq(onlineSlotsTable.deleteColumn, 0)))
       .returning();
     if (!claimedSlot) return null;
 
     const [created] = await tx.insert(onlineAppointmentsTable)
-      .values({ slotId, patientId: patient.id, reason: reason ?? null, documents: documents as DocumentFile[], status: "pending" })
+      .values({ slotId, patientId: patient.id, reason: reason ?? null, documents: documents as DocumentFile[], status: "pending", deleteColumn: 0 })
       .returning();
 
     for (const document of documents) {
       const [saved] = await tx.select({ id: patientDocumentsTable.id }).from(patientDocumentsTable)
-        .where(and(eq(patientDocumentsTable.patientId, patient.id), eq(patientDocumentsTable.objectPath, document.objectPath)));
+        .where(and(eq(patientDocumentsTable.patientId, patient.id), eq(patientDocumentsTable.objectPath, document.objectPath), eq(patientDocumentsTable.deleteColumn, 0)));
       if (!saved) {
-        await tx.insert(patientDocumentsTable).values({ ...document, patientId: patient.id });
+        await tx.insert(patientDocumentsTable).values({ ...document, patientId: patient.id, deleteColumn: 0 });
       }
     }
     return created;
@@ -158,9 +158,9 @@ router.get("/mine", requirePatient, async (req: any, res) => {
       prescription: prescriptionsTable,
     })
     .from(onlineAppointmentsTable)
-    .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-    .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
-    .where(eq(onlineAppointmentsTable.patientId, patient.id))
+    .innerJoin(onlineSlotsTable, and(eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id), eq(onlineSlotsTable.deleteColumn, 0)))
+    .leftJoin(prescriptionsTable, and(eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id), eq(prescriptionsTable.deleteColumn, 0)))
+    .where(and(eq(onlineAppointmentsTable.patientId, patient.id), eq(onlineAppointmentsTable.deleteColumn, 0)))
     .orderBy(desc(onlineSlotsTable.date));
 
   res.json(rows.map((r) => {
@@ -284,9 +284,10 @@ router.get("/admin", requireAdmin, async (_req, res) => {
       prescription: prescriptionsTable,
     })
     .from(onlineAppointmentsTable)
-    .innerJoin(onlineSlotsTable, eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id))
-    .innerJoin(patientsTable, eq(onlineAppointmentsTable.patientId, patientsTable.id))
-    .leftJoin(prescriptionsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+    .innerJoin(onlineSlotsTable, and(eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id), eq(onlineSlotsTable.deleteColumn, 0)))
+    .innerJoin(patientsTable, and(eq(onlineAppointmentsTable.patientId, patientsTable.id), eq(patientsTable.deleteColumn, 0)))
+    .leftJoin(prescriptionsTable, and(eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id), eq(prescriptionsTable.deleteColumn, 0)))
+    .where(eq(onlineAppointmentsTable.deleteColumn, 0))
     .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime);
 
   res.json(rows.map((r) => ({
@@ -677,12 +678,12 @@ async function handleCompleteAppointment(req: any, res: any) {
 router.patch("/admin/:id/complete", requireAdmin, handleCompleteAppointment);
 router.post("/admin/:id/complete", requireAdmin, handleCompleteAppointment);
 
-// ── DELETE /api/online-appointments/admin/:id — Admin hard-deletes ──────
+// ── DELETE /api/online-appointments/admin/:id — Admin soft-deletes ──────
 router.delete("/admin/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
 
-  const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  const [appt] = await db.select().from(onlineAppointmentsTable).where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.deleteColumn, 0)));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
 
   // Close any live room first (best effort)
@@ -691,10 +692,10 @@ router.delete("/admin/:id", requireAdmin, async (req, res) => {
     roomService.deleteRoom(appt.livekitRoomName).catch(() => {});
   }
 
-  // Delete prescription, free the slot, then the appointment
-  await db.delete(prescriptionsTable).where(eq(prescriptionsTable.onlineAppointmentId, id));
+  // Soft-delete prescription, free the slot, then soft-delete the appointment
+  await db.update(prescriptionsTable).set({ deleteColumn: 1 }).where(and(eq(prescriptionsTable.onlineAppointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
   await db.update(onlineSlotsTable).set({ isBooked: false }).where(eq(onlineSlotsTable.id, appt.slotId));
-  await db.delete(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
+  await db.update(onlineAppointmentsTable).set({ deleteColumn: 1 }).where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.deleteColumn, 0)));
 
   res.json({ ok: true });
 });

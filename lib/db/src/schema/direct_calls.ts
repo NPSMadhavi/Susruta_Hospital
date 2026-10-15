@@ -12,6 +12,7 @@ export const directCallsTable = pgTable("direct_calls", {
   startedAt: timestamp("started_at").notNull().defaultNow(),
   patientJoinedAt: timestamp("patient_joined_at"),
   endedAt: timestamp("ended_at"),
+  deleteColumn: integer("delete_column").notNull().default(0),
 });
 
 export type DirectCall = typeof directCallsTable.$inferSelect;

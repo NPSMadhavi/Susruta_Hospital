@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, medicineOrdersTable, medicineOrderItemsTable, patientsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requirePatient } from "../lib/patient-auth";
 import { notifyPharmacySse } from "./pharmacy";
@@ -66,14 +66,20 @@ router.get("/mine", requirePatient, async (req: any, res) => {
   const orders = await db
     .select()
     .from(medicineOrdersTable)
-    .where(eq(medicineOrdersTable.patientId, patient.id))
+    .where(and(
+      eq(medicineOrdersTable.patientId, patient.id),
+      eq(medicineOrdersTable.deleteColumn, 0)
+    ))
     .orderBy(desc(medicineOrdersTable.createdAt));
 
   const result = await Promise.all(orders.map(async order => {
     const items = await db
       .select()
       .from(medicineOrderItemsTable)
-      .where(eq(medicineOrderItemsTable.orderId, order.id));
+      .where(and(
+        eq(medicineOrderItemsTable.orderId, order.id),
+        eq(medicineOrderItemsTable.deleteColumn, 0)
+      ));
 
     return {
       id: order.id,
@@ -106,7 +112,7 @@ router.patch("/:id/approve-partial", requirePatient, async (req: any, res) => {
   const id = parseInt(req.params.id);
 
   const [order] = await db.select().from(medicineOrdersTable)
-    .where(eq(medicineOrdersTable.id, id));
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)));
   if (!order) { res.status(404).json({ error: "not_found" }); return; }
   if (order.patientId !== patient.id) { res.status(403).json({ error: "forbidden" }); return; }
   if (order.status !== "partial_approval_needed") {
@@ -115,7 +121,7 @@ router.patch("/:id/approve-partial", requirePatient, async (req: any, res) => {
 
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: "payment_requested", updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
 
   notifyPharmacySse("order_updated", { id, status: "payment_requested" });
@@ -129,7 +135,7 @@ router.patch("/:id/payment-done", requirePatient, async (req: any, res) => {
   const id = parseInt(req.params.id);
 
   const [order] = await db.select().from(medicineOrdersTable)
-    .where(eq(medicineOrdersTable.id, id));
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)));
   if (!order) { res.status(404).json({ error: "not_found" }); return; }
   if (order.patientId !== patient.id) { res.status(403).json({ error: "forbidden" }); return; }
   if (order.status !== "payment_requested") {
@@ -138,7 +144,7 @@ router.patch("/:id/payment-done", requirePatient, async (req: any, res) => {
 
   const [updated] = await db.update(medicineOrdersTable)
     .set({ status: "payment_done", updatedAt: new Date() })
-    .where(eq(medicineOrdersTable.id, id))
+    .where(and(eq(medicineOrdersTable.id, id), eq(medicineOrdersTable.deleteColumn, 0)))
     .returning();
 
   notifyPharmacySse("order_updated", { id, status: "payment_done", patientName: patient.name });

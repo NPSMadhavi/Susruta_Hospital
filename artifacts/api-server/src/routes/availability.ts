@@ -21,8 +21,10 @@ async function ensureCustomDayTimingsTable() {
         evening_end VARCHAR(10) NOT NULL DEFAULT '10:00 PM',
         slot_interval_minutes INTEGER NOT NULL DEFAULT 30,
         note TEXT,
+        delete_column INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+      ALTER TABLE public.custom_day_timings ADD COLUMN IF NOT EXISTS delete_column INTEGER NOT NULL DEFAULT 0;
     `);
   } catch (err: any) {
     console.error("⚠️ Failed to ensure custom_day_timings table:", err.message);
@@ -93,11 +95,11 @@ router.get("/", async (req, res) => {
   const openMonthRecord = await db
     .select()
     .from(openMonthsTable)
-    .where(eq(openMonthsTable.month, month));
+    .where(and(eq(openMonthsTable.month, month), eq(openMonthsTable.deleteColumn, 0)));
 
   const isOpen = openMonthRecord.length > 0 ? openMonthRecord[0].isOpen : true;
 
-  const blocked = await db.select().from(blockedDatesTable);
+  const blocked = await db.select().from(blockedDatesTable).where(eq(blockedDatesTable.deleteColumn, 0));
   const blockedSet = new Set(blocked.map((b) => b.date));
 
   const allDays = getDaysInMonth(year, monthNum);
@@ -121,7 +123,7 @@ router.get("/slots", async (req, res) => {
     return;
   }
 
-  const blocked = await db.select().from(blockedDatesTable).where(eq(blockedDatesTable.date, date));
+  const blocked = await db.select().from(blockedDatesTable).where(and(eq(blockedDatesTable.date, date), eq(blockedDatesTable.deleteColumn, 0)));
   if (blocked.length > 0) {
     const allSlots = [...MORNING_SLOTS, ...EVENING_SLOTS];
     res.json(allSlots.map((t) => ({ time: t, available: false })));
@@ -131,12 +133,12 @@ router.get("/slots", async (req, res) => {
   const [customTiming] = await db
     .select()
     .from(customDayTimingsTable)
-    .where(eq(customDayTimingsTable.date, date));
+    .where(and(eq(customDayTimingsTable.date, date), eq(customDayTimingsTable.deleteColumn, 0)));
 
   const onlineSessions = await db
     .select()
     .from(onlineSlotSessionsTable)
-    .where(eq(onlineSlotSessionsTable.date, date));
+    .where(and(eq(onlineSlotSessionsTable.date, date), eq(onlineSlotSessionsTable.deleteColumn, 0)));
 
   let allSlots: string[] = [];
 
@@ -182,7 +184,7 @@ router.get("/slots", async (req, res) => {
   const bookedAppts = await db
     .select()
     .from(appointmentsTable)
-    .where(and(eq(appointmentsTable.date, date), eq(appointmentsTable.status, "confirmed")));
+    .where(and(eq(appointmentsTable.date, date), eq(appointmentsTable.status, "confirmed"), eq(appointmentsTable.deleteColumn, 0)));
 
   const bookedSlots = new Set(bookedAppts.map((a) => a.timeSlot));
 
@@ -195,6 +197,7 @@ router.get("/custom-timings", async (_req, res) => {
   const timings = await db
     .select()
     .from(customDayTimingsTable)
+    .where(eq(customDayTimingsTable.deleteColumn, 0))
     .orderBy(customDayTimingsTable.date);
   res.json(
     timings.map((t) => ({
@@ -242,6 +245,7 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
         eveningEnd,
         slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
         note: note || null,
+        deleteColumn: 0,
       })
       .where(eq(customDayTimingsTable.date, date))
       .returning();
@@ -260,6 +264,7 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
         eveningEnd,
         slotIntervalMinutes: Number(slotIntervalMinutes) || 30,
         note: note || null,
+        deleteColumn: 0,
       })
       .returning();
 
@@ -282,13 +287,14 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
 router.delete("/custom-timings/:id", requireAdmin, async (req, res) => {
   await ensureCustomDayTimingsTable();
   const id = parseInt(req.params.id, 10);
-  await db.delete(customDayTimingsTable).where(eq(customDayTimingsTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db.update(customDayTimingsTable).set({ deleteColumn: 1 }).where(and(eq(customDayTimingsTable.id, id), eq(customDayTimingsTable.deleteColumn, 0)));
   res.status(204).send();
 });
 
 // ── BLOCKED DATES ───────────────────────────────────────────
 router.get("/blocked-dates", requireAdmin, async (_req, res) => {
-  const blocked = await db.select().from(blockedDatesTable).orderBy(blockedDatesTable.date);
+  const blocked = await db.select().from(blockedDatesTable).where(eq(blockedDatesTable.deleteColumn, 0)).orderBy(blockedDatesTable.date);
   res.json(blocked.map((b) => ({ ...b, createdAt: b.createdAt.toISOString() })));
 });
 
@@ -300,25 +306,31 @@ router.post("/blocked-dates", requireAdmin, async (req, res) => {
   }
   const [existing] = await db.select().from(blockedDatesTable).where(eq(blockedDatesTable.date, date));
   if (existing) {
-    res.json({ ...existing, createdAt: existing.createdAt.toISOString() });
+    const [updated] = await db
+      .update(blockedDatesTable)
+      .set({ reason: reason ?? null, deleteColumn: 0 })
+      .where(eq(blockedDatesTable.date, date))
+      .returning();
+    res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
     return;
   }
   const [blocked] = await db
     .insert(blockedDatesTable)
-    .values({ date, reason: reason ?? null })
+    .values({ date, reason: reason ?? null, deleteColumn: 0 })
     .returning();
   res.status(201).json({ ...blocked, createdAt: blocked.createdAt.toISOString() });
 });
 
 router.delete("/blocked-dates/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(blockedDatesTable).where(eq(blockedDatesTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db.update(blockedDatesTable).set({ deleteColumn: 1 }).where(and(eq(blockedDatesTable.id, id), eq(blockedDatesTable.deleteColumn, 0)));
   res.status(204).send();
 });
 
 // ── OPEN MONTHS ─────────────────────────────────────────────
 router.get("/months", async (_req, res) => {
-  const months = await db.select().from(openMonthsTable).orderBy(openMonthsTable.month);
+  const months = await db.select().from(openMonthsTable).where(eq(openMonthsTable.deleteColumn, 0)).orderBy(openMonthsTable.month);
   res.json(months.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })));
 });
 
@@ -334,7 +346,7 @@ router.post("/months", requireAdmin, async (req, res) => {
   if (existing) {
     const [updated] = await db
       .update(openMonthsTable)
-      .set({ isOpen: targetIsOpen })
+      .set({ isOpen: targetIsOpen, deleteColumn: 0 })
       .where(eq(openMonthsTable.month, month))
       .returning();
     res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
@@ -343,14 +355,15 @@ router.post("/months", requireAdmin, async (req, res) => {
 
   const [record] = await db
     .insert(openMonthsTable)
-    .values({ month, isOpen: targetIsOpen })
+    .values({ month, isOpen: targetIsOpen, deleteColumn: 0 })
     .returning();
   res.status(201).json({ ...record, createdAt: record.createdAt.toISOString() });
 });
 
 router.delete("/months/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(openMonthsTable).where(eq(openMonthsTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db.update(openMonthsTable).set({ deleteColumn: 1 }).where(and(eq(openMonthsTable.id, id), eq(openMonthsTable.deleteColumn, 0)));
   res.status(204).send();
 });
 

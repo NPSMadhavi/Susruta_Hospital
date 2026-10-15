@@ -270,12 +270,7 @@ const scrollTo = (
       ))}
 
       <div className="mt-2 flex gap-2">
-        <a
-          href="/portal"
-          className="flex-1 px-4 py-3 rounded-xl border border-[#D95B2F]/30 text-[#D95B2F] font-bold text-center"
-        >
-          Login
-        </a>
+        
 
         <a
           href={isBookingDisabled ? `tel:${clinicPhone}` : "/portal"}
@@ -389,7 +384,7 @@ const scrollTo = (
 
               <li className="flex gap-3 items-start">
                 <Clock className="shrink-0 mt-0.5 text-[#E8A87C]" size={15} />
-                <span>{settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
+                <span>Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM</span>
               </li>
             </ul>
           </div>

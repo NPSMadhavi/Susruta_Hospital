@@ -74,7 +74,15 @@ function GuestCountBadge({ apptId }: { apptId: number }) {
 
 async function apiFetch(path: string, opts: RequestInit = {}) {
   try {
-    const res = await fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...opts.headers }, ...opts });
+    const { headers: customHeaders, ...restOpts } = opts;
+    const res = await fetch(`${API}${path}`, {
+      credentials: "include",
+      ...restOpts,
+      headers: {
+        "Content-Type": "application/json",
+        ...((customHeaders as Record<string, string>) || {}),
+      },
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || `API Error (${res.status})`);
     return data;

@@ -14,6 +14,7 @@ export const medicineOrdersTable = pgTable("medicine_orders", {
   phone: varchar("phone", { length: 20 }).notNull(),
   trackingNumber: varchar("tracking_number", { length: 255 }),
   pharmacistNotes: text("pharmacist_notes"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

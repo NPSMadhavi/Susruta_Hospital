@@ -8,10 +8,14 @@ import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function doctorFetch(path: string, opts: RequestInit = {}) {
+  const { headers: customHeaders, ...restOpts } = opts;
   const r = await fetch(`${BASE}/api/doctor${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...opts.headers },
-    ...opts,
+    ...restOpts,
+    headers: {
+      "Content-Type": "application/json",
+      ...((customHeaders as Record<string, string>) || {}),
+    },
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw data;
@@ -46,10 +50,12 @@ export default function DoctorLogin() {
         setError("Doctor portal is not yet configured. Please ask the admin to set the doctor password in Settings.");
       } else if (err?.error === "invalid_password") {
         setError("Incorrect password. Please try again.");
-      } else if (err?.error === "recaptcha_failed") {
+      } else if (err?.error === "password_required") {
+        setError("Please enter the doctor portal password.");
+      } else if (err?.error === "recaptcha_failed" || err?.error === "recaptcha_error") {
         setError(err?.message || "Security verification failed. Please try again.");
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(err?.message || "Something went wrong. Please try again.");
       }
     } finally {
       setLoading(false);

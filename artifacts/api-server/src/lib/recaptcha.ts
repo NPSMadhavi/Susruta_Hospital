@@ -64,7 +64,7 @@ export async function verifyRecaptchaToken(
   }
 
   const isProd = process.env.NODE_ENV === "production";
-  const secretKey = process.env.RECAPTCHA_SECRET_KEY || (!isProd ? "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" : "");
+  const secretKey = (process.env.RECAPTCHA_SECRET_KEY || (!isProd ? "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" : "")).trim();
 
   // 3. Secret Key Configuration Check
   if (!secretKey) {
@@ -208,8 +208,12 @@ export function verifyRecaptcha(expectedAction: string, options?: { minScore?: n
         req.body?.recaptchaToken ||
         req.body?.captchaToken;
 
+      const rawForwarded = req.headers["x-forwarded-for"];
+      const forwardedStr = Array.isArray(rawForwarded)
+        ? rawForwarded[0]
+        : (typeof rawForwarded === "string" ? rawForwarded : "");
       const clientIp =
-        ((req.headers?.["x-forwarded-for"] as string) || "").split(",")[0]?.trim() ||
+        forwardedStr.split(",")[0]?.trim() ||
         req.ip ||
         req.socket?.remoteAddress;
 

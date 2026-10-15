@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, timestamp, boolean, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, boolean, text, integer } from "drizzle-orm/pg-core";
 
 export const subscribersTable = pgTable("subscribers", {
   id: serial("id").primaryKey(),
@@ -11,6 +11,7 @@ export const subscribersTable = pgTable("subscribers", {
   unsubscribed: boolean("unsubscribed").notNull().default(false),
   unsubscribedAt: timestamp("unsubscribed_at"),
   unsubscribeReason: text("unsubscribe_reason"),
+  deleteColumn: integer("delete_column").notNull().default(0),
 });
 
 export type Subscriber = typeof subscribersTable.$inferSelect;

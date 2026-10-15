@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { randomBytes } from "crypto";
-import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable } from "@workspace/db";
+import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable, prescriptionsTable } from "@workspace/db";
 import { eq, and, desc, ne, sql } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
@@ -166,7 +166,8 @@ router.get("/offline/slots-status", async (req, res) => {
     .where(
       and(
         eq(appointmentsTable.date, date),
-        ne(appointmentsTable.status, "cancelled")
+        ne(appointmentsTable.status, "cancelled"),
+        eq(appointmentsTable.deleteColumn, 0)
       )
     );
 
@@ -176,7 +177,8 @@ router.get("/offline/slots-status", async (req, res) => {
     .where(
       and(
         eq(onlineSlotsTable.date, date),
-        eq(onlineSlotsTable.isBooked, true)
+        eq(onlineSlotsTable.isBooked, true),
+        eq(onlineSlotsTable.deleteColumn, 0)
       )
     );
 
@@ -388,7 +390,8 @@ async function getNextDailyToken(date: string): Promise<string> {
     .where(
       and(
         eq(appointmentsTable.date, date),
-        ne(appointmentsTable.status, "cancelled")
+        ne(appointmentsTable.status, "cancelled"),
+        eq(appointmentsTable.deleteColumn, 0)
       )
     );
 
@@ -727,7 +730,8 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
       .where(
         and(
           eq(appointmentsTable.date, data.date),
-          ne(appointmentsTable.status, "cancelled")
+          ne(appointmentsTable.status, "cancelled"),
+          eq(appointmentsTable.deleteColumn, 0)
         )
       );
 
@@ -758,7 +762,8 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
       .where(
         and(
           eq(appointmentsTable.date, data.date),
-          ne(appointmentsTable.status, "cancelled")
+          ne(appointmentsTable.status, "cancelled"),
+          eq(appointmentsTable.deleteColumn, 0)
         )
       );
     const booked = existing.filter((a) =>
@@ -782,7 +787,8 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
         and(
           eq(appointmentsTable.date, data.date),
           eq(appointmentsTable.timeSlot, data.timeSlot),
-          eq(appointmentsTable.status, "confirmed")
+          eq(appointmentsTable.status, "confirmed"),
+          eq(appointmentsTable.deleteColumn, 0)
         )
       );
 
@@ -842,6 +848,7 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
       notes: notesPayload,
       status: "pending",
       patientId,
+      deleteColumn: 0,
     })
     .returning();
 
@@ -895,7 +902,7 @@ router.get("/", requireAdmin, async (req, res) => {
 
   const { status, date, month } = req.query as Record<string, string>;
 
-  const conditions = [];
+  const conditions = [eq(appointmentsTable.deleteColumn, 0)];
   if (status) conditions.push(eq(appointmentsTable.status, status));
   if (date) conditions.push(eq(appointmentsTable.date, date));
 
@@ -923,7 +930,7 @@ router.get("/", requireAdmin, async (req, res) => {
     })
     .from(appointmentsTable)
     .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(appointmentsTable.createdAt));
 
   for (const a of appts) {
@@ -971,7 +978,7 @@ async function getFullAppointment(id: number) {
     })
     .from(appointmentsTable)
     .leftJoin(patientsTable, eq(appointmentsTable.patientId, patientsTable.id))
-    .where(eq(appointmentsTable.id, id));
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)));
 
   if (!appt) return null;
 
@@ -1008,7 +1015,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
 
-  const [updated] = await db.update(appointmentsTable).set(updates).where(eq(appointmentsTable.id, id)).returning();
+  const [updated] = await db.update(appointmentsTable).set(updates).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0))).returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
@@ -1022,7 +1029,7 @@ router.patch("/:id/arrive", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   const [updated] = await db.update(appointmentsTable)
     .set({ arrivedAt: new Date(), status: "arrived" })
-    .where(eq(appointmentsTable.id, id))
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   if (updated.patientId) {
@@ -1041,7 +1048,7 @@ router.patch("/:id/pay", requireAdmin, async (req, res) => {
     return;
   }
 
-  const [appt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
+  const [appt] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
 
   let notesObj: any = {};
@@ -1076,7 +1083,7 @@ router.patch("/:id/pay", requireAdmin, async (req, res) => {
       status: "completed",
       notes: JSON.stringify(notesObj),
     })
-    .where(eq(appointmentsTable.id, id))
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
 
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
@@ -1096,7 +1103,7 @@ router.patch("/:id/reschedule", requireAdmin, async (req, res) => {
   }
   const [updated] = await db.update(appointmentsTable)
     .set({ rescheduleDates: JSON.stringify(dates), status: "reschedule_proposed" })
-    .where(eq(appointmentsTable.id, id))
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   if (updated.patientId) {
@@ -1113,7 +1120,7 @@ router.patch("/:id/followup", requireAdmin, async (req, res) => {
   if (!followUpDate) { res.status(400).json({ error: "missing_date" }); return; }
   const [updated] = await db.update(appointmentsTable)
     .set({ followUpDate, followUpConfirmed: false })
-    .where(eq(appointmentsTable.id, id))
+    .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   if (updated.patientId) {
@@ -1126,8 +1133,14 @@ router.patch("/:id/followup", requireAdmin, async (req, res) => {
 // ── Admin: Delete ─────────────────────────────────────────────
 router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  const [appt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
-  await db.delete(appointmentsTable).where(eq(appointmentsTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  const [appt] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)));
+  if (!appt) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  await db.update(prescriptionsTable).set({ deleteColumn: 1 }).where(and(eq(prescriptionsTable.appointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
+  await db.update(appointmentsTable).set({ deleteColumn: 1 }).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)));
   if (appt?.patientId) {
     notifyPatientAppointmentUpdated(appt.patientId);
   }
@@ -1150,10 +1163,10 @@ async function resolveQrRecord(rawToken: string) {
   let candidateAppt: any = null;
   const numId = parseInt(tokenStr, 10);
   if (!isNaN(numId) && numId > 0) {
-    [candidateAppt] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, numId));
+    [candidateAppt] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, numId), eq(appointmentsTable.deleteColumn, 0)));
   }
   if (!candidateAppt) {
-    const [byNotes] = await db.select().from(appointmentsTable).where(sql`notes LIKE '%' || ${tokenStr} || '%'`);
+    const [byNotes] = await db.select().from(appointmentsTable).where(and(sql`notes LIKE '%' || ${tokenStr} || '%'`, eq(appointmentsTable.deleteColumn, 0)));
     candidateAppt = byNotes;
   }
 
@@ -1205,8 +1218,8 @@ router.get([
     return;
   }
 
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, qrRecord.patientId));
-  const [appointment] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, qrRecord.appointmentId));
+  const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, qrRecord.patientId), eq(patientsTable.deleteColumn, 0)));
+  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
 
   if (!patient || !appointment) {
     res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
@@ -1273,10 +1286,11 @@ router.post([
     objectPath: String(objectPath).trim(),
     contentType: String(contentType || "application/octet-stream").trim(),
     size: Number(size) || 0,
+    deleteColumn: 0,
   }).returning();
 
   // Also record metadata in appointment.notes
-  const [appointment] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, qrRecord.appointmentId));
+  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
   if (appointment) {
     let parsedNotes: any = {};
     try {

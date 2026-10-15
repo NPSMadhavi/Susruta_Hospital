@@ -24,10 +24,14 @@ import { useToast } from "@/hooks/use-toast";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function doctorFetch(path: string, opts: RequestInit = {}) {
+  const { headers: customHeaders, ...restOpts } = opts;
   const r = await fetch(`${BASE}/api/doctor${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...opts.headers },
-    ...opts,
+    ...restOpts,
+    headers: {
+      "Content-Type": "application/json",
+      ...((customHeaders as Record<string, string>) || {}),
+    },
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw data;

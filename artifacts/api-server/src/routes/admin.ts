@@ -282,6 +282,7 @@ router.get("/patients", requireAdmin, async (_req, res) => {
         createdAt: patientsTable.createdAt,
       })
       .from(patientsTable)
+      .where(eq(patientsTable.deleteColumn, 0))
       .orderBy(desc(patientsTable.createdAt));
     res.json(patients);
   } catch (err) {
@@ -322,7 +323,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
   const gender = parsed.data.gender !== undefined ? (parsed.data.gender?.trim() || null) : undefined;
 
   try {
-    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
+    const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, id), eq(patientsTable.deleteColumn, 0)));
     if (!patient) { res.status(404).json({ error: "not_found", message: "Patient not found." }); return; }
 
     const emailChanged = email
@@ -336,6 +337,7 @@ router.patch("/patients/:id", requireAdmin, async (req, res) => {
         .where(and(
           sql`lower(${patientsTable.email}) = ${email}`,
           ne(patientsTable.id, id),
+          eq(patientsTable.deleteColumn, 0),
         ))
         .limit(1);
       if (duplicate) {
@@ -529,7 +531,7 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
 
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, id));
+  const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, id), eq(patientsTable.deleteColumn, 0)));
   if (!patient) { res.status(404).json({ error: "not_found" }); return; }
 
   const patientEmail = patient.email ? normalizeVerificationEmail(patient.email) : null;
@@ -537,61 +539,79 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
 
   // Find all patient record IDs matching ID, email, or phone
   const matchingPatients = await db.select({ id: patientsTable.id }).from(patientsTable).where(
-    or(
-      eq(patientsTable.id, id),
-      ...(patientEmail ? [eq(patientsTable.email, patientEmail)] : []),
-      ...(patientPhone ? [eq(patientsTable.phone, patientPhone)] : [])
+    and(
+      eq(patientsTable.deleteColumn, 0),
+      or(
+        eq(patientsTable.id, id),
+        ...(patientEmail ? [eq(patientsTable.email, patientEmail)] : []),
+        ...(patientPhone ? [eq(patientsTable.phone, patientPhone)] : [])
+      )
     )
   );
   const allPatientIds = Array.from(new Set(matchingPatients.map(p => p.id)));
 
   // Find all online appointments matching patient IDs
   const onlineAppts = await db.select({ id: onlineAppointmentsTable.id }).from(onlineAppointmentsTable).where(
-    inArray(onlineAppointmentsTable.patientId, allPatientIds)
+    and(
+      inArray(onlineAppointmentsTable.patientId, allPatientIds),
+      eq(onlineAppointmentsTable.deleteColumn, 0)
+    )
   );
   const onlineApptIds = onlineAppts.map(a => a.id);
 
   // Find all physical appointments matching patient IDs, email, or phone
   const physicalAppts = await db.select({ id: appointmentsTable.id }).from(appointmentsTable).where(
-    or(
-      inArray(appointmentsTable.patientId, allPatientIds),
-      ...(patientEmail ? [eq(appointmentsTable.patientEmail, patientEmail)] : []),
-      ...(patientPhone ? [eq(appointmentsTable.patientPhone, patientPhone)] : [])
+    and(
+      eq(appointmentsTable.deleteColumn, 0),
+      or(
+        inArray(appointmentsTable.patientId, allPatientIds),
+        ...(patientEmail ? [eq(appointmentsTable.patientEmail, patientEmail)] : []),
+        ...(patientPhone ? [eq(appointmentsTable.patientPhone, patientPhone)] : [])
+      )
     )
   );
   const physicalApptIds = physicalAppts.map(a => a.id);
 
-  // Delete prescriptions tied to online appointments
+  // Soft-delete prescriptions tied to online appointments or physical appointments
   if (onlineApptIds.length > 0) {
-    await db.delete(prescriptionsTable).where(inArray(prescriptionsTable.onlineAppointmentId, onlineApptIds));
+    await db.update(prescriptionsTable).set({ deleteColumn: 1 }).where(and(inArray(prescriptionsTable.onlineAppointmentId, onlineApptIds), eq(prescriptionsTable.deleteColumn, 0)));
+  }
+  if (physicalApptIds.length > 0) {
+    await db.update(prescriptionsTable).set({ deleteColumn: 1 }).where(and(inArray(prescriptionsTable.appointmentId, physicalApptIds), eq(prescriptionsTable.deleteColumn, 0)));
   }
 
-  // Delete medicine orders and items
+  // Soft-delete medicine orders and items
   const medicineOrders = await db.select({ id: medicineOrdersTable.id }).from(medicineOrdersTable).where(
-    or(
-      inArray(medicineOrdersTable.patientId, allPatientIds),
-      ...(onlineApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, onlineApptIds)] : []),
-      ...(physicalApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, physicalApptIds)] : [])
+    and(
+      eq(medicineOrdersTable.deleteColumn, 0),
+      or(
+        inArray(medicineOrdersTable.patientId, allPatientIds),
+        ...(onlineApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, onlineApptIds)] : []),
+        ...(physicalApptIds.length > 0 ? [inArray(medicineOrdersTable.appointmentId, physicalApptIds)] : [])
+      )
     )
   );
   if (medicineOrders.length > 0) {
     const orderIds = medicineOrders.map(o => o.id);
-    await db.delete(medicineOrderItemsTable).where(inArray(medicineOrderItemsTable.orderId, orderIds));
-    await db.delete(medicineOrdersTable).where(inArray(medicineOrdersTable.id, orderIds));
+    await db.update(medicineOrderItemsTable).set({ deleteColumn: 1 }).where(and(inArray(medicineOrderItemsTable.orderId, orderIds), eq(medicineOrderItemsTable.deleteColumn, 0)));
+    await db.update(medicineOrdersTable).set({ deleteColumn: 1 }).where(and(inArray(medicineOrdersTable.id, orderIds), eq(medicineOrdersTable.deleteColumn, 0)));
   }
 
-  // Delete patient documents
-  await db.delete(patientDocumentsTable).where(inArray(patientDocumentsTable.patientId, allPatientIds));
+  // Soft-delete patient documents
+  await db.update(patientDocumentsTable).set({ deleteColumn: 1 }).where(and(inArray(patientDocumentsTable.patientId, allPatientIds), eq(patientDocumentsTable.deleteColumn, 0)));
 
-  // Delete donations
-  await db.delete(donationsTable).where(
-    or(
-      inArray(donationsTable.patientId, allPatientIds),
-      ...(patientEmail ? [eq(donationsTable.patientEmail, patientEmail)] : [])
+  // Soft-delete donations
+  await db.update(donationsTable).set({ deleteColumn: 1 }).where(
+    and(
+      eq(donationsTable.deleteColumn, 0),
+      or(
+        inArray(donationsTable.patientId, allPatientIds),
+        ...(patientEmail ? [eq(donationsTable.patientEmail, patientEmail)] : [])
+      )
     )
   );
 
-  // Delete patient OTPs
+  // Delete transient OTPs
   await db.delete(patientOtpsTable).where(
     or(
       inArray(patientOtpsTable.patientId, allPatientIds),
@@ -600,32 +620,30 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
     )
   );
 
-  // Delete direct calls
-  await db.delete(directCallsTable).where(inArray(directCallsTable.patientId, allPatientIds));
+  // Soft-delete direct calls
+  await db.update(directCallsTable).set({ deleteColumn: 1 }).where(and(inArray(directCallsTable.patientId, allPatientIds), eq(directCallsTable.deleteColumn, 0)));
 
-  // Delete online appointments
+  // Soft-delete online appointments
   if (onlineApptIds.length > 0) {
-    await db.delete(onlineAppointmentsTable).where(inArray(onlineAppointmentsTable.id, onlineApptIds));
+    await db.update(onlineAppointmentsTable).set({ deleteColumn: 1 }).where(and(inArray(onlineAppointmentsTable.id, onlineApptIds), eq(onlineAppointmentsTable.deleteColumn, 0)));
   }
 
-  // Delete physical appointments
+  // Soft-delete physical appointments
   if (physicalApptIds.length > 0) {
-    await db.delete(appointmentsTable).where(inArray(appointmentsTable.id, physicalApptIds));
+    await db.update(appointmentsTable).set({ deleteColumn: 1 }).where(and(inArray(appointmentsTable.id, physicalApptIds), eq(appointmentsTable.deleteColumn, 0)));
   }
 
-  // Delete login tokens
+  // Delete transient login tokens & sessions
   await db.delete(loginTokensTable).where(
     or(
       inArray(loginTokensTable.patientId, allPatientIds),
       ...(patientEmail ? [eq(loginTokensTable.verificationEmail, patientEmail)] : [])
     )
   );
-
-  // Delete patient sessions
   await db.delete(patientSessionsTable).where(inArray(patientSessionsTable.patientId, allPatientIds));
 
-  // Delete patient record(s)
-  await db.delete(patientsTable).where(inArray(patientsTable.id, allPatientIds));
+  // Soft-delete patient record(s)
+  await db.update(patientsTable).set({ deleteColumn: 1 }).where(and(inArray(patientsTable.id, allPatientIds), eq(patientsTable.deleteColumn, 0)));
 
   res.json({ success: true });
 });
@@ -648,7 +666,7 @@ router.get("/donations/sse", requireAdmin, (req, res) => {
 router.get("/donations", requireAdmin, async (req, res) => {
   try {
     const { month, year } = req.query;
-    let query = db.select().from(donationsTable).orderBy(desc(donationsTable.createdAt));
+    let query = db.select().from(donationsTable).where(eq(donationsTable.deleteColumn, 0)).orderBy(desc(donationsTable.createdAt));
 
     if (month && year) {
       const y = parseInt(year as string);
@@ -657,7 +675,7 @@ router.get("/donations", requireAdmin, async (req, res) => {
         const from = new Date(y, m - 1, 1);
         const to = new Date(y, m, 1);
         query = db.select().from(donationsTable)
-          .where(and(gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
           .orderBy(desc(donationsTable.createdAt)) as any;
       }
     }
@@ -678,7 +696,7 @@ router.patch("/donations/:id/verify", requireAdmin, async (req, res) => {
   const newStatus = verified ? "verified" : "pending";
   await db.update(donationsTable)
     .set({ status: newStatus })
-    .where(eq(donationsTable.id, id));
+    .where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   broadcastDonationUpdate({ id, status: newStatus });
   res.json({ success: true });
 });
@@ -688,7 +706,7 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
 
-  const [donation] = await db.select().from(donationsTable).where(eq(donationsTable.id, id));
+  const [donation] = await db.select().from(donationsTable).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   if (!donation) { res.status(404).json({ error: "not_found" }); return; }
   if (!donation.patientEmail) { res.status(400).json({ error: "no_email" }); return; }
 
@@ -704,7 +722,7 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
       lastSixDigits: donation.lastSixDigits,
       donationDate,
     });
-    await db.update(donationsTable).set({ thankYouSent: true }).where(eq(donationsTable.id, id));
+    await db.update(donationsTable).set({ thankYouSent: true }).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
     broadcastDonationUpdate({ id, status: donation.status, thankYouSent: true });
     res.json({ success: true });
   } catch (err) {

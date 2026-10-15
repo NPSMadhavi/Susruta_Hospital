@@ -9,6 +9,7 @@ export const onlineSlotSessionsTable = pgTable("online_slot_sessions", {
   endTime: varchar("end_time", { length: 5 }).notNull(),     // "HH:MM"
   intervalMinutes: integer("interval_minutes").notNull(),     // 15 or 30
   maxBookings: integer("max_bookings"),                       // auto-computed but stored
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -20,6 +21,7 @@ export const onlineSlotsTable = pgTable("online_slots", {
   startTime: varchar("start_time", { length: 5 }).notNull(), // "HH:MM"
   endTime: varchar("end_time", { length: 5 }).notNull(),     // "HH:MM"
   isBooked: boolean("is_booked").notNull().default(false),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -25,9 +25,10 @@ export const appointmentsTable = pgTable("appointments", {
   // Follow-up
   followUpDate: varchar("follow_up_date", { length: 10 }),
   followUpConfirmed: boolean("follow_up_confirmed").notNull().default(false),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertAppointmentSchema = createInsertSchema(appointmentsTable).omit({ id: true, createdAt: true });
+export const insertAppointmentSchema = createInsertSchema(appointmentsTable).omit({ id: true, createdAt: true, deleteColumn: true });
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointmentsTable.$inferSelect;

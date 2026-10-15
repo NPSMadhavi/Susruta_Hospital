@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, testimonialsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 
 const router = Router();
@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
   const testimonials = await db
     .select()
     .from(testimonialsTable)
-    .where(eq(testimonialsTable.isPublished, true))
+    .where(and(eq(testimonialsTable.isPublished, true), eq(testimonialsTable.deleteColumn, 0)))
     .orderBy(testimonialsTable.createdAt);
   res.json(testimonials.map((t) => ({ ...t, createdAt: t.createdAt.toISOString() })));
 });
@@ -29,6 +29,7 @@ router.post("/", requireAdmin, async (req, res) => {
       contentTe: contentTe ?? null,
       rating: Number(rating),
       isPublished: isPublished ?? true,
+      deleteColumn: 0,
     })
     .returning();
   res.status(201).json({ ...testimonial, createdAt: testimonial.createdAt.toISOString() });
@@ -38,6 +39,7 @@ router.get("/all", requireAdmin, async (req, res) => {
   const testimonials = await db
     .select()
     .from(testimonialsTable)
+    .where(eq(testimonialsTable.deleteColumn, 0))
     .orderBy(testimonialsTable.createdAt);
   res.json(testimonials.map((t) => ({ ...t, createdAt: t.createdAt.toISOString() })));
 });
@@ -56,7 +58,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   const [updated] = await db
     .update(testimonialsTable)
     .set(updates)
-    .where(eq(testimonialsTable.id, id))
+    .where(and(eq(testimonialsTable.id, id), eq(testimonialsTable.deleteColumn, 0)))
     .returning();
 
   if (!updated) {
@@ -68,7 +70,11 @@ router.patch("/:id", requireAdmin, async (req, res) => {
 
 router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(testimonialsTable).where(eq(testimonialsTable.id, id));
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+  await db
+    .update(testimonialsTable)
+    .set({ deleteColumn: 1 })
+    .where(and(eq(testimonialsTable.id, id), eq(testimonialsTable.deleteColumn, 0)));
   res.status(204).send();
 });
 

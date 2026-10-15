@@ -13,9 +13,10 @@ export const customDayTimingsTable = pgTable("custom_day_timings", {
   eveningEnd: varchar("evening_end", { length: 10 }).notNull().default("10:00 PM"),
   slotIntervalMinutes: integer("slot_interval_minutes").notNull().default(30),
   note: text("note"),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertCustomDayTimingSchema = createInsertSchema(customDayTimingsTable).omit({ id: true, createdAt: true });
+export const insertCustomDayTimingSchema = createInsertSchema(customDayTimingsTable).omit({ id: true, createdAt: true, deleteColumn: true });
 export type InsertCustomDayTiming = z.infer<typeof insertCustomDayTimingSchema>;
 export type CustomDayTiming = typeof customDayTimingsTable.$inferSelect;

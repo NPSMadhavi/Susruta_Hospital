@@ -8,6 +8,7 @@ export const patientDocumentsTable = pgTable("patient_documents", {
   objectPath: text("object_path").notNull(),
   contentType: varchar("content_type", { length: 100 }).notNull(),
   size: integer("size").notNull(),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

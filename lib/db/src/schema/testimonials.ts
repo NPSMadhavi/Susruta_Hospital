@@ -10,9 +10,10 @@ export const testimonialsTable = pgTable("testimonials", {
   contentTe: text("content_te"),
   rating: integer("rating").notNull().default(5),
   isPublished: boolean("is_published").notNull().default(true),
+  deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertTestimonialSchema = createInsertSchema(testimonialsTable).omit({ id: true, createdAt: true });
+export const insertTestimonialSchema = createInsertSchema(testimonialsTable).omit({ id: true, createdAt: true, deleteColumn: true });
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
 export type Testimonial = typeof testimonialsTable.$inferSelect;
