@@ -65,6 +65,8 @@ type OnlineAppt = {
   slotId: number;
   patient: PatientInfo;
   prescription: Prescription | null;
+  hasPrescription?: boolean;
+  prescriptionType?: "digital" | "uploaded" | null;
 };
 
 type OfflineAppt = {
@@ -81,6 +83,8 @@ type OfflineAppt = {
   patient: PatientInfo;
   prescription: Prescription | null;
   notes: string | null;
+  hasPrescription?: boolean;
+  prescriptionType?: "digital" | "uploaded" | null;
 };
 
 type AnyAppt = OnlineAppt | OfflineAppt;
@@ -283,6 +287,27 @@ export function parseMedicinesFromNotes(rawNotes: string | null | undefined): Me
 
 function isRealClinicalNotes(notes: string | null | undefined): boolean {
   return !!cleanDoctorNotes(notes);
+}
+
+export function isAppointmentPrescriptionComplete(a: AnyAppt | { prescription?: Prescription | null; hasPrescription?: boolean; notes?: string | null }): boolean {
+  if (a.hasPrescription !== undefined) {
+    return a.hasPrescription;
+  }
+  if (a.prescription?.photoObjectPath && typeof a.prescription.photoObjectPath === "string" && a.prescription.photoObjectPath.trim().length > 0) {
+    return true;
+  }
+  const notes = a.prescription?.notes ?? (a as any).notes;
+  if (notes) {
+    const digital = extractDigitalPrescriptionData(notes);
+    if (digital && (digital.diagnosis || digital.notes || (digital.formulationRows && digital.formulationRows.length > 0))) {
+      return true;
+    }
+    const meds = parseMedicinesFromNotes(notes);
+    if (meds.length > 0) return true;
+    const cleaned = cleanDoctorNotes(notes);
+    if (cleaned) return true;
+  }
+  return false;
 }
 function fmtDateFull(iso: string) {
   if (!iso) return "—";
@@ -2738,11 +2763,21 @@ export default function DoctorPortal() {
   }
 
   function handlePrescriptionUploaded(apptId: number, rx: Prescription) {
-    setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
-    setOffline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx } : a));
+    const isComplete = Boolean(
+      (rx.photoObjectPath && rx.photoObjectPath.trim().length > 0) ||
+      (rx.notes && (
+        extractDigitalPrescriptionData(rx.notes) ||
+        parseMedicinesFromNotes(rx.notes).length > 0 ||
+        cleanDoctorNotes(rx.notes)
+      ))
+    );
+    const pType = rx.photoObjectPath ? "uploaded" : (isComplete ? "digital" : null);
+
+    setOnline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx, hasPrescription: isComplete, prescriptionType: pType } : a));
+    setOffline(prev => prev.map(a => a.id === apptId ? { ...a, prescription: rx, hasPrescription: isComplete, prescriptionType: pType } : a));
     setRegisteredPatients(prev => prev.map(p => ({
       ...p,
-      appointments: p.appointments.map(a => a.id === apptId ? { ...a, prescription: rx } : a),
+      appointments: p.appointments.map(a => a.id === apptId ? { ...a, prescription: rx, hasPrescription: isComplete, prescriptionType: pType } : a),
     })));
   }
 
@@ -2802,8 +2837,8 @@ export default function DoctorPortal() {
   const upcomingOnline = useMemo(() => online.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date)), [online]);
   const upcomingOffline = useMemo(() => offline.filter(a => isUpcoming(a.date, a.status)).sort((a, b) => a.date.localeCompare(b.date)), [offline]);
   const rxNeeded = useMemo(() => {
-    const onlineNeedingRx = online.filter(a => a.status === "completed" && !a.joinEnabled && !a.prescription?.photoObjectPath);
-    const offlineNeedingRx = offline.filter(a => a.status === "completed" && !a.prescription?.photoObjectPath);
+    const onlineNeedingRx = online.filter(a => a.status === "completed" && !a.joinEnabled && !isAppointmentPrescriptionComplete(a));
+    const offlineNeedingRx = offline.filter(a => a.status === "completed" && !isAppointmentPrescriptionComplete(a));
     return [...onlineNeedingRx, ...offlineNeedingRx].sort((a, b) => b.date.localeCompare(a.date));
   }, [online, offline]);
 
@@ -4289,13 +4324,11 @@ export default function DoctorPortal() {
                     patientName={selectedAppt.patient.name}
                     initialNotes={cleanDoctorNotes(selectedAppt.prescription?.notes ?? (selectedAppt as OfflineAppt).notes)}
                     onSaved={newNotes => {
-                      if (selectedAppt.type === "online") {
-                        handlePrescriptionUploaded(selectedAppt.id, {
-                          photoObjectPath: selectedAppt.prescription?.photoObjectPath ?? null,
-                          notes: newNotes,
-                          updatedAt: new Date().toISOString(),
-                        });
-                      }
+                      handlePrescriptionUploaded(selectedAppt.id, {
+                        photoObjectPath: selectedAppt.prescription?.photoObjectPath ?? null,
+                        notes: newNotes,
+                        updatedAt: new Date().toISOString(),
+                      });
                     }}
                   />
                 </div>

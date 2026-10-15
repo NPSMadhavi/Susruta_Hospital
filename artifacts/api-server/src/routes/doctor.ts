@@ -197,6 +197,62 @@ export function extractClinicalNotes(notes: string | null | undefined): string |
   return trimmed;
 }
 
+export function isRealClinicalNotes(notes: string | null | undefined): boolean {
+  if (!notes || typeof notes !== "string") return false;
+  const trimmed = notes.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("{") && (trimmed.includes('"token"') || trimmed.includes('"amount"') || trimmed.includes('"paymentMode"'))) {
+    return false;
+  }
+  return true;
+}
+
+export function isPrescriptionComplete(
+  photoObjectPath: string | null | undefined,
+  notes: string | null | undefined
+): boolean {
+  if (photoObjectPath && typeof photoObjectPath === "string" && photoObjectPath.trim().length > 0) {
+    return true;
+  }
+  if (!notes || typeof notes !== "string") {
+    return false;
+  }
+  const trimmed = notes.trim();
+  if (!trimmed) return false;
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      // Exclude tokens/payments without actual prescription data
+      if (parsed.token || parsed.amount || parsed.paymentMode) {
+        const hasExplicitRx = Boolean(
+          parsed.digitalPrescription === true ||
+          (parsed.diagnosis && typeof parsed.diagnosis === "string" && parsed.diagnosis.trim().length > 0) ||
+          (Array.isArray(parsed.formulationRows) && parsed.formulationRows.length > 0) ||
+          (typeof parsed.notes === "string" && parsed.notes.trim().length > 0)
+        );
+        if (!hasExplicitRx) return false;
+      }
+      if (parsed.digitalPrescription === true) return true;
+      if (parsed.diagnosis && typeof parsed.diagnosis === "string" && parsed.diagnosis.trim().length > 0) return true;
+      if (Array.isArray(parsed.formulationRows) && parsed.formulationRows.length > 0) return true;
+      if (typeof parsed.notes === "string" && parsed.notes.trim().length > 0) return true;
+    } catch {
+      // not JSON, fallback to text checks
+    }
+  }
+
+  if (trimmed.includes("DOCTOR NOTES:") || trimmed.includes("AYURVEDIC MEDICINAL FORMULATIONS:") || /^Diagnosis:/i.test(trimmed)) {
+    return true;
+  }
+
+  if (isRealClinicalNotes(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
 // ── GET /api/doctor/all-appointments — Both types ────────────
 router.get("/all-appointments", requireDoctor, async (_req, res) => {
   const [onlineRows, offlineRows, allPatientDocs] = await Promise.all([
@@ -248,42 +304,55 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
     db.select().from(patientDocumentsTable).where(eq(patientDocumentsTable.deleteColumn, 0)),
   ]);
 
-  const online = onlineRows.map((r) => ({
-    id: r.appt.id,
-    type: "online" as const,
-    status: r.appt.status,
-    reason: r.appt.reason ?? null,
-    documents: r.appt.documents,
-    patientDocs: allPatientDocs
-      .filter(d => d.patientId === r.patient.id)
-      .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
-    joinEnabled: r.appt.joinEnabled,
-    createdAt: r.appt.createdAt.toISOString(),
-    date: r.slot.date,
-    timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
-    slotId: r.slot.id,
-    patient: {
-      id: r.patient.id,
-      patientCode: r.patient.patientCode ?? `A${String(r.patient.id).padStart(3, "0")}`,
-      name: r.patient.name,
-      email: r.patient.email,
-      phone: r.patient.phone ?? null,
-      age: r.patient.age ?? null,
-      gender: r.patient.gender ?? null,
-    },
-    prescription: r.prescription ? {
-      id: r.prescription.id,
-      photoObjectPath: r.prescription.photoObjectPath ?? null,
-      notes: r.prescription.notes ?? extractClinicalNotes(r.prescription.notes),
-      updatedAt: r.prescription.updatedAt.toISOString(),
-    } : null,
-  }));
+  const online = onlineRows.map((r) => {
+    const photoPath = r.prescription?.photoObjectPath ?? null;
+    const rxNotes = r.prescription?.notes ?? null;
+    const rxComplete = isPrescriptionComplete(photoPath, rxNotes);
+    const rxType = photoPath ? "uploaded" : (rxComplete ? "digital" : null);
+
+    return {
+      id: r.appt.id,
+      type: "online" as const,
+      status: r.appt.status,
+      reason: r.appt.reason ?? null,
+      documents: r.appt.documents,
+      patientDocs: allPatientDocs
+        .filter(d => d.patientId === r.patient.id)
+        .map(d => ({ id: d.id, name: d.name, objectPath: d.objectPath, contentType: d.contentType, size: d.size })),
+      joinEnabled: r.appt.joinEnabled,
+      createdAt: r.appt.createdAt.toISOString(),
+      date: r.slot.date,
+      timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
+      slotId: r.slot.id,
+      patient: {
+        id: r.patient.id,
+        patientCode: r.patient.patientCode ?? `A${String(r.patient.id).padStart(3, "0")}`,
+        name: r.patient.name,
+        email: r.patient.email,
+        phone: r.patient.phone ?? null,
+        age: r.patient.age ?? null,
+        gender: r.patient.gender ?? null,
+      },
+      prescription: r.prescription ? {
+        id: r.prescription.id,
+        photoObjectPath: photoPath,
+        notes: rxNotes ?? extractClinicalNotes(rxNotes),
+        updatedAt: r.prescription.updatedAt.toISOString(),
+      } : null,
+      hasPrescription: rxComplete,
+      prescriptionType: rxType,
+    };
+  });
 
   const offline = offlineRows.map((r) => {
     const pCode = r.patient?.patientCode || (r.appt.patientId ? `P${String(r.appt.patientId).padStart(3, "0")}` : `P${String(r.appt.id).padStart(3, "0")}`);
     const patId = r.patient?.id;
-    const rawNotes = r.prescription?.notes ?? r.appt.notes ?? null;
-    const clinicalNotes = extractClinicalNotes(rawNotes);
+    const photoPath = r.prescription?.photoObjectPath ?? null;
+    const rxNotes = r.prescription?.notes ?? null;
+    const clinicalNotes = extractClinicalNotes(rxNotes ?? r.appt.notes);
+    const rxComplete = isPrescriptionComplete(photoPath, rxNotes);
+    const rxType = photoPath ? "uploaded" : (rxComplete ? "digital" : null);
+
     return {
       id: r.appt.id,
       type: "offline" as const,
@@ -306,20 +375,138 @@ router.get("/all-appointments", requireDoctor, async (_req, res) => {
       },
       prescription: r.prescription ? {
         id: r.prescription.id,
-        photoObjectPath: r.prescription.photoObjectPath ?? null,
+        photoObjectPath: photoPath,
         notes: r.prescription.notes ?? clinicalNotes,
         updatedAt: r.prescription.updatedAt.toISOString(),
-      } : ((rawNotes || clinicalNotes) ? {
-        id: r.appt.id,
-        photoObjectPath: null,
-        notes: rawNotes ?? clinicalNotes,
-        updatedAt: r.appt.createdAt?.toISOString() ?? new Date().toISOString(),
-      } : null),
-      notes: rawNotes ?? clinicalNotes,
+      } : null,
+      notes: r.prescription?.notes ?? clinicalNotes ?? null,
+      hasPrescription: rxComplete,
+      prescriptionType: rxType,
     };
   });
 
-  res.json({ online, offline });
+  const rxNeeded = [
+    ...online.filter(a => a.status === "completed" && !a.joinEnabled && !a.hasPrescription),
+    ...offline.filter(a => a.status === "completed" && !a.hasPrescription),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  res.json({ online, offline, rxNeeded });
+});
+
+// ── GET /api/doctor/rx-needed — Dedicated pending prescriptions query ──────
+router.get("/rx-needed", requireDoctor, async (_req, res) => {
+  const [onlineRows, offlineRows] = await Promise.all([
+    db
+      .select({
+        appt: onlineAppointmentsTable,
+        slot: onlineSlotsTable,
+        patient: patientsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(onlineAppointmentsTable)
+      .innerJoin(onlineSlotsTable, and(
+        eq(onlineAppointmentsTable.slotId, onlineSlotsTable.id),
+        eq(onlineSlotsTable.deleteColumn, 0)
+      ))
+      .innerJoin(patientsTable, and(
+        eq(onlineAppointmentsTable.patientId, patientsTable.id),
+        eq(patientsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(
+        eq(onlineAppointmentsTable.deleteColumn, 0),
+        eq(onlineAppointmentsTable.status, "completed")
+      ))
+      .orderBy(desc(onlineSlotsTable.date), onlineSlotsTable.startTime),
+    db
+      .select({
+        appt: appointmentsTable,
+        patient: patientsTable,
+        prescription: prescriptionsTable,
+      })
+      .from(appointmentsTable)
+      .leftJoin(patientsTable, and(
+        eq(appointmentsTable.patientId, patientsTable.id),
+        eq(patientsTable.deleteColumn, 0)
+      ))
+      .leftJoin(prescriptionsTable, and(
+        eq(prescriptionsTable.appointmentId, appointmentsTable.id),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ))
+      .where(and(
+        eq(appointmentsTable.deleteColumn, 0),
+        eq(appointmentsTable.status, "completed")
+      ))
+      .orderBy(desc(appointmentsTable.date), desc(appointmentsTable.createdAt)),
+  ]);
+
+  const online = onlineRows
+    .filter(r => !isPrescriptionComplete(r.prescription?.photoObjectPath, r.prescription?.notes))
+    .map(r => ({
+      id: r.appt.id,
+      type: "online" as const,
+      status: r.appt.status,
+      date: r.slot.date,
+      timeLabel: `${fmtTime(r.slot.startTime)} – ${fmtTime(r.slot.endTime)}`,
+      patient: {
+        id: r.patient.id,
+        patientCode: r.patient.patientCode ?? `A${String(r.patient.id).padStart(3, "0")}`,
+        name: r.patient.name,
+        email: r.patient.email,
+        phone: r.patient.phone ?? null,
+      },
+      hasPrescription: false,
+    }));
+
+  const offline = offlineRows
+    .filter(r => !isPrescriptionComplete(r.prescription?.photoObjectPath, r.prescription?.notes))
+    .map(r => {
+      const pCode = r.patient?.patientCode || (r.appt.patientId ? `P${String(r.appt.patientId).padStart(3, "0")}` : `P${String(r.appt.id).padStart(3, "0")}`);
+      return {
+        id: r.appt.id,
+        type: "offline" as const,
+        status: r.appt.status,
+        date: r.appt.date,
+        timeLabel: r.appt.timeSlot,
+        patient: {
+          id: r.patient?.id ?? r.appt.patientId ?? null,
+          patientCode: pCode,
+          name: r.appt.patientName,
+          email: r.appt.patientEmail ?? null,
+          phone: r.appt.patientPhone,
+        },
+        hasPrescription: false,
+      };
+    });
+
+  const rxNeeded = [...online, ...offline].sort((a, b) => b.date.localeCompare(a.date));
+  res.json({ rxNeeded, count: rxNeeded.length });
+});
+
+// ── DELETE prescription endpoints ────────────────────────────
+router.delete("/offline-appointments/:id/prescription", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  await db.update(prescriptionsTable)
+    .set({ deleteColumn: 1, updatedAt: new Date() })
+    .where(and(eq(prescriptionsTable.appointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
+
+  res.json({ ok: true });
+});
+
+router.delete("/online-appointments/:id/prescription", requireDoctor, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+  await db.update(prescriptionsTable)
+    .set({ deleteColumn: 1, updatedAt: new Date() })
+    .where(and(eq(prescriptionsTable.onlineAppointmentId, id), eq(prescriptionsTable.deleteColumn, 0)));
+
+  res.json({ ok: true });
 });
 
 // ── PATCH /api/doctor/offline-appointments/:id/done ───────────
@@ -428,16 +615,6 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
 
   res.json({ ok: true });
 });
-
-function isRealClinicalNotes(notes: string | null | undefined): boolean {
-  if (!notes || typeof notes !== "string") return false;
-  const trimmed = notes.trim();
-  if (!trimmed) return false;
-  if (trimmed.startsWith("{") && (trimmed.includes('"token"') || trimmed.includes('"amount"') || trimmed.includes('"paymentMode"'))) {
-    return false;
-  }
-  return true;
-}
 
 // ── GET /api/doctor/patients — All registered patients with docs + appt history ──
 router.get("/patients", requireDoctor, async (_req, res) => {
