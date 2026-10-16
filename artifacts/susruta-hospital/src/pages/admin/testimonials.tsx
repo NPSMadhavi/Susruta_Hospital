@@ -546,22 +546,22 @@ export default function AdminTestimonials() {
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-14 text-center">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider w-14 text-center">
                     #
                   </th>
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider min-w-[200px]">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider min-w-[200px]">
                     Patient
                   </th>
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-36">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider w-36">
                     Rating
                   </th>
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider min-w-[320px]">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider min-w-[320px]">
                     Review Content
                   </th>
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-32 text-center">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider w-32 text-center">
                     Status
                   </th>
-                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-44 text-right pr-6">
+                  <th className="px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider w-44 text-right pr-6">
                     Actions
                   </th>
                 </tr>
@@ -592,13 +592,13 @@ export default function AdminTestimonials() {
                             <p className="font-bold text-foreground text-sm leading-snug">
                               {t.patientName}
                             </p>
-                            {t.patientLocation ? (
+                            {/* {t.patientLocation ? (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {t.patientLocation}
                               </p>
                             ) : (
                               <span className="text-[11px] text-muted-foreground/50">—</span>
-                            )}
+                            )} */}
                           </div>
                         </div>
                       </td>

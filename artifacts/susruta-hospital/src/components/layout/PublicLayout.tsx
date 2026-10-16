@@ -384,7 +384,7 @@ const scrollTo = (
 
               <li className="flex gap-3 items-start">
                 <Clock className="shrink-0 mt-0.5 text-[#E8A87C]" size={15} />
-                <span>Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM</span>
+                <span>{settings?.workingHours || "Mon–Sat: 10AM–1PM, 6PM–10PM | Sun: 10AM–1PM"}</span>
               </li>
             </ul>
           </div>

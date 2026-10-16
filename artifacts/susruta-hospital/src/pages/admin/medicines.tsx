@@ -528,8 +528,8 @@ export default function AdminMedicines() {
         {/* ── TOTAL MEDICINES STAT CARD (when medicines exist or loading) ────────────────── */}
         {medicines.length > 0 && (
           <div className="bg-white rounded-2xl border border-[#EDEFEB] p-4 w-full sm:w-48 shadow-sm">
-            <p className="text-[11px] font-bold text-[#8E938B] tracking-wider uppercase mb-1">
-              TOTAL MEDICINES
+            <p className="text-sm font-bold text-[#8E938B] tracking-wider mb-1">
+              Total Medicines
             </p>
             <p className="text-2xl font-extrabold text-[#1B3227]">
               {medicines.length}

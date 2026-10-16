@@ -1978,22 +1978,74 @@ function DigitalPrescriptionForm({
                         {/* Duration */}
                         <div className="py-3 px-2 border-l border-[#E2E4DE]">
                           <input
-                            type="text"
+                            type="number"
+                            min="1"
+                            step="1"
                             value={row.duration}
-                            onChange={e => updateRow(row.id, "duration", e.target.value)}
-                            placeholder="eg: 5 Days"
-                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                            onChange={e => {
+                              const value = e.target.value;
+
+                              if (value === "") {
+                                updateRow(row.id, "duration", "");
+                                return;
+                              }
+
+                              // Do not allow leading zero
+                              if (value.length > 1 && value.startsWith("0")) {
+                                return;
+                              }
+
+                              const numberValue = Number(value);
+
+                              if (numberValue >= 1) {
+                                updateRow(row.id, "duration", value);
+                              }
+                            }}
+                            onKeyDown={e => {
+                              if (["-", "+", "e", "E", "."].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onWheel={e => e.currentTarget.blur()}
+                            placeholder="eg: 5"
+                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           />
                         </div>
 
                         {/* Quantity */}
                         <div className="py-3 px-2 border-l border-[#E2E4DE]">
                           <input
-                            type="text"
+                            type="number"
+                            min="1"
+                            step="1"
                             value={row.quantity}
-                            onChange={e => updateRow(row.id, "quantity", e.target.value)}
-                            placeholder="eg: 10 Tablets"
-                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                            onChange={e => {
+                              const value = e.target.value;
+
+                              if (value === "") {
+                                updateRow(row.id, "quantity", "");
+                                return;
+                              }
+
+                              // Do not allow leading zero
+                              if (value.length > 1 && value.startsWith("0")) {
+                                return;
+                              }
+
+                              const numberValue = Number(value);
+
+                              if (numberValue >= 1) {
+                                updateRow(row.id, "quantity", value);
+                              }
+                            }}
+                            onKeyDown={e => {
+                              if (["-", "+", "e", "E", "."].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onWheel={e => e.currentTarget.blur()}
+                            placeholder="eg: 10"
+                            className="w-full px-2 py-2 text-center text-xs font-bold text-[#1E293B] border border-[#CBD5E1] rounded-xl bg-white placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           />
                         </div>
 

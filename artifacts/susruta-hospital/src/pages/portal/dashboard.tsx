@@ -1712,7 +1712,7 @@ export default function PatientDashboard() {
                         {doc.contentType.startsWith("image/") ? <ImageIcon size={17} /> : <FileText size={17} />}
                       </div>
                       <div className="min-w-0">
-                        <p title={doc.name} className="truncate text-[16px] font-bold leading-4 text-[#172238]">{doc.name}</p>
+                        <p title={doc.name} className="truncate text-[16px] font-bold leading-6 text-[#172238]">{doc.name}</p>
                         <p className="mt-1 text-[12px] leading-3 text-[#7c8ca4]">Uploaded: <span className="text-[#27364c]">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" }) : "Date unavailable"}</span></p>
                       </div>
                     </div>
@@ -1781,7 +1781,11 @@ export default function PatientDashboard() {
           description={
             confirmDeleteDoc ? (
               <p>
-                Are you sure you want to remove <strong className="text-gray-900">"{confirmDeleteDoc.name}"</strong>? This document will be permanently deleted from your medical records.
+                Are you sure you want to remove{" "}
+                <strong className="text-gray-900 break-words [overflow-wrap:anywhere]">
+                  "{confirmDeleteDoc.name}"
+                </strong>
+                ? This document will be permanently deleted from your medical records.
               </p>
             ) : null
           }

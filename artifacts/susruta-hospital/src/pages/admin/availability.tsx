@@ -397,14 +397,14 @@ export default function AdminAvailability() {
                         <button
                           type="button"
                           onClick={() => handleEditCustomTiming(c)}
-                          className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                          className="px-4 py-1.5 rounded-xl border border-[#EDEFEB] text-xs font-bold font-sans text-blue-600 bg-white hover:bg-blue-100 transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteCustomTiming(c.id)}
-                          className="text-xs font-semibold text-[#D95B2F] hover:underline cursor-pointer"
+                          className="px-4 py-1.5 rounded-xl border border-[#EDEFEB] text-xs font-bold font-sans text-[#D95B2F] bg-white hover:bg-[#D95B2F]/10 transition-colors"
                         >
                           Remove
                         </button>
@@ -486,7 +486,7 @@ export default function AdminAvailability() {
                         <button
                           type="button"
                           onClick={() => handleUnblockDate(b.id)}
-                          className="text-xs font-semibold text-[#D95B2F] hover:underline cursor-pointer"
+                          className="px-4 py-1.5 rounded-xl border border-[#EDEFEB] text-xs font-bold font-sans text-[#D95B2F] bg-white hover:bg-[#D95B2F]/10 transition-colors"
                         >
                           Unblock
                         </button>
