@@ -24,6 +24,7 @@ export interface PrescriptionPdfData {
     };
     duration?: string;
     quantity?: string;
+    medicalNotes?: string;
     notes?: string;
   }>;
   medicines?: Array<{
@@ -279,7 +280,8 @@ export function generatePrescriptionPdf(data: PrescriptionPdfData): Buffer {
   if (data.formulationRows && data.formulationRows.length > 0) {
     data.formulationRows.forEach((r, idx) => {
       const primaryMed = r.medicines?.[0] || { name: "", dosage: "" };
-      if (!primaryMed.name && !primaryMed.dosage && !r.notes) return;
+      const medNotes = r.medicalNotes || r.notes || "";
+      if (!primaryMed.name && !primaryMed.dosage && !medNotes) return;
       allMedNames.push(primaryMed.name);
       const timing = formatTiming(r.timing);
       normalizedRows.push({
@@ -291,7 +293,7 @@ export function generatePrescriptionPdf(data: PrescriptionPdfData): Buffer {
         timingRelation: timing.relation,
         duration: r.duration ? `${r.duration} Days` : "-",
         quantity: r.quantity || "-",
-        note: r.notes || "",
+        note: medNotes,
       });
     });
   } else if (data.medicines && data.medicines.length > 0) {
@@ -383,32 +385,50 @@ export function generatePrescriptionPdf(data: PrescriptionPdfData): Buffer {
     doc.text(r.quantity, cellX + cols[5].width / 2, currentY + 8, { align: "center" });
 
     currentY += rowHeight;
+
+    // Medicine-specific Medical Notes directly below this medicine row
+    const rawNote = cleanMedicineNotes(r.note, allMedNames);
+    const noteBullets = rawNote
+      ? rawNote
+          .split("\n")
+          .map(l => l.trim())
+          .filter(l => l.length > 0)
+          .map(l => {
+            const hasBullet = l.startsWith("•") || l.startsWith("-") || l.startsWith("*");
+            return hasBullet ? l.replace(/^[•\-\*]\s*/, "").trim() : l;
+          })
+          .filter(l => l.length > 0)
+      : [];
+
+    if (noteBullets.length > 0) {
+      const bulletLineHeight = 4.2;
+      const noteBoxHeight = 5 + noteBullets.length * bulletLineHeight;
+
+      doc.setFillColor(250, 249, 245); // #FAF9F5
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.rect(marginX, currentY, contentWidth, noteBoxHeight, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text("Medical Notes", marginX + 3, currentY + 3.8);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(30, 41, 59);
+
+      let bulletY = currentY + 7.5;
+      for (const bullet of noteBullets) {
+        doc.text(`•  ${bullet}`, marginX + 4, bulletY);
+        bulletY += bulletLineHeight;
+      }
+
+      currentY += noteBoxHeight;
+    }
   }
 
   currentY += 6;
-
-  // ── 5. MEDICINE NOTES (NO MEDICINE NAME PREFIX) ───────────────────────
-  const notesList = normalizedRows
-    .map(r => cleanMedicineNotes(r.note, allMedNames))
-    .filter(n => n.length > 0);
-
-  if (notesList.length > 0) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
-    doc.text("MEDICINE NOTES", marginX, currentY);
-    currentY += 4.5;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(51, 65, 85);
-
-    for (const note of notesList) {
-      doc.text(`•  ${note}`, marginX + 3, currentY);
-      currentY += 4.5;
-    }
-    currentY += 3;
-  }
 
   // ── 6. GENERAL DOCTOR NOTES / ADVICE ──────────────────────────────────
   if (data.doctorNotes && data.doctorNotes.trim()) {

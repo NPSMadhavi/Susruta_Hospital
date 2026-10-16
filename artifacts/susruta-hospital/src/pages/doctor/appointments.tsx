@@ -196,7 +196,13 @@ export function extractDigitalPrescriptionData(rawNotes: string | null | undefin
         return {
           diagnosis: parsed.diagnosis || "",
           notes: parsed.notes || "",
-          formulationRows: Array.isArray(parsed.formulationRows) ? parsed.formulationRows : [],
+          formulationRows: Array.isArray(parsed.formulationRows)
+            ? parsed.formulationRows.map((r: any) => ({
+                ...r,
+                medicalNotes: (r.medicalNotes ?? r.notes ?? "") || "",
+                notes: (r.medicalNotes ?? r.notes ?? "") || "",
+              }))
+            : [],
         };
       }
     } catch {}
@@ -599,6 +605,7 @@ function UploadDocumentModal({ apptId, onUploaded, onClose }: { apptId: number; 
       setUploading(false);
     }
   }
+  
 
   return (
     <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1386,6 +1393,7 @@ function DigitalPrescriptionForm({
     },
     duration: "",
     quantity: "",
+    medicalNotes: "",
     notes: "",
   });
 
@@ -1400,6 +1408,7 @@ function DigitalPrescriptionForm({
     };
     duration: string;
     quantity: string;
+    medicalNotes: string;
     notes: string;
   }[]>([createEmptyRow()]);
 
@@ -1446,9 +1455,15 @@ function DigitalPrescriptionForm({
     setFormulationRows(prev => prev.filter(r => r.id !== rowId));
   };
 
-  const updateRow = (rowId: string, key: "toBeTaken" | "duration" | "quantity" | "notes", val: string) => {
+  const updateRow = (rowId: string, key: "toBeTaken" | "duration" | "quantity" | "notes" | "medicalNotes", val: string) => {
     setFormulationRows(prev =>
-      prev.map(r => (r.id === rowId ? { ...r, [key]: val } : r))
+      prev.map(r => {
+        if (r.id !== rowId) return r;
+        if (key === "medicalNotes" || key === "notes") {
+          return { ...r, medicalNotes: val, notes: val };
+        }
+        return { ...r, [key]: val };
+      })
     );
   };
 
@@ -1564,7 +1579,54 @@ function DigitalPrescriptionForm({
   }, [formulationRows]);
 
 
-  const handleSave = async (shouldPrint = false) => {
+  const handlePreview = () => {
+    if (formulationRows.length > 0 && !hasValidDosageTiming) {
+      setErr("Dosage Timing & Food Association is mandatory. Please select Before or After for at least one meal slot per medicine.");
+      return;
+    }
+    setErr("");
+
+    const diagClean = diagnosis.trim();
+    const existingNotesWithoutDiag = doctorNotes.replace(/^Diagnosis:\s*[^\n]+\n*/i, "").trim();
+
+    const normalizedFormulationRows = formulationRows.map(r => ({
+      ...r,
+      medicalNotes: (r.medicalNotes ?? r.notes ?? "") || "",
+      notes: (r.medicalNotes ?? r.notes ?? "") || "",
+    }));
+
+    const mappedMeds: MedicineItem[] = formulationRows.flatMap(row =>
+      row.medicines
+        .filter(m => m.name && m.name.trim().length > 0)
+        .map(m => ({
+          id: `${row.id}_${m.id}`,
+          name: m.name ? `${m.name}${m.dosage ? ` (${m.dosage})` : ""}` : "",
+          morningBefore: row.timing.morning.mealRelation === "before",
+          morningAfter: row.timing.morning.mealRelation === "after",
+          afternoonBefore: row.timing.afternoon.mealRelation === "before",
+          afternoonAfter: row.timing.afternoon.mealRelation === "after",
+          nightBefore: row.timing.night.mealRelation === "before",
+          nightAfter: row.timing.night.mealRelation === "after",
+          duration: row.duration || "-",
+        }))
+    );
+
+    setPrintData({
+      patientName: patientName || "-",
+      patientCode: patientCode || "-",
+      age: initAge || "",
+      gender: initGender || "",
+      ageGender: displayAgeGender,
+      consultDate: consultDateStr,
+      diagnosis: diagClean || "-",
+      formulationRows: normalizedFormulationRows,
+      medicines: mappedMeds,
+      doctorNotes: existingNotesWithoutDiag,
+      signedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleSave = async () => {
     if (formulationRows.length > 0 && !hasValidDosageTiming) {
       setErr("Dosage Timing & Food Association is mandatory. Please select Before or After for at least one meal slot per medicine.");
       return;
@@ -1574,11 +1636,17 @@ function DigitalPrescriptionForm({
       const diagClean = diagnosis.trim();
       const existingNotesWithoutDiag = doctorNotes.replace(/^Diagnosis:\s*[^\n]+\n*/i, "").trim();
 
+      const normalizedFormulationRows = formulationRows.map(r => ({
+        ...r,
+        medicalNotes: (r.medicalNotes ?? r.notes ?? "") || "",
+        notes: (r.medicalNotes ?? r.notes ?? "") || "",
+      }));
+
       const rxPayload = {
         digitalPrescription: true,
         diagnosis: diagClean,
         notes: existingNotesWithoutDiag,
-        formulationRows: formulationRows,
+        formulationRows: normalizedFormulationRows,
       };
       const notesToSave = JSON.stringify(rxPayload);
 
@@ -1609,40 +1677,7 @@ function DigitalPrescriptionForm({
         updatedAt: savedData?.updatedAt || new Date().toISOString()
       };
       onSaved(rxObj);
-
-      if (shouldPrint) {
-        const mappedMeds: MedicineItem[] = formulationRows.flatMap(row =>
-          row.medicines
-            .filter(m => m.name && m.name.trim().length > 0)
-            .map(m => ({
-              id: `${row.id}_${m.id}`,
-              name: m.name ? `${m.name}${m.dosage ? ` (${m.dosage})` : ""}` : "",
-              morningBefore: row.timing.morning.mealRelation === "before",
-              morningAfter: row.timing.morning.mealRelation === "after",
-              afternoonBefore: row.timing.afternoon.mealRelation === "before",
-              afternoonAfter: row.timing.afternoon.mealRelation === "after",
-              nightBefore: row.timing.night.mealRelation === "before",
-              nightAfter: row.timing.night.mealRelation === "after",
-              duration: row.duration || "-",
-            }))
-        );
-
-        setPrintData({
-          patientName: patientName || "-",
-          patientCode: patientCode || "-",
-          age: initAge || "",
-          gender: initGender || "",
-          ageGender: displayAgeGender,
-          consultDate: consultDateStr,
-          diagnosis: diagClean || "-",
-          formulationRows: formulationRows,
-          medicines: mappedMeds,
-          doctorNotes: existingNotesWithoutDiag,
-          signedAt: new Date().toISOString(),
-        });
-      } else {
-        onClose();
-      }
+      onClose();
     } catch (e: any) {
       setErr(e.message || "Failed to save prescription.");
     } finally {
@@ -1654,7 +1689,7 @@ function DigitalPrescriptionForm({
     return (
       <PrintPrescriptionModal
         data={printData}
-        onClose={onClose}
+        onClose={() => setPrintData(null)}
       />
     );
   }
@@ -2062,17 +2097,17 @@ function DigitalPrescriptionForm({
                         </div>
                       </div>
 
-                      {/* Medicine Notes Strip */}
+                      {/* Medical Notes Strip */}
                       <div className="px-4 py-2.5 bg-[#FAF8F5]/60 border-t border-[#EAE5DC]">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-[#475569] mb-1">
                           <FileEdit size={13} className="text-[#64748B]" />
-                          <span>Medicine Notes</span>
+                          <span>Medical Notes</span>
                         </div>
                         <textarea
-                          value={row.notes}
-                          onChange={e => updateRow(row.id, "notes", e.target.value)}
+                          value={row.medicalNotes ?? row.notes ?? ""}
+                          onChange={e => updateRow(row.id, "medicalNotes", e.target.value)}
                           rows={2}
-                          placeholder="Enter notes (optional - e.g. bullet points, instructions, or multi-line notes)"
+                          placeholder="Enter medical notes (optional - e.g. bullet points, instructions, or multi-line notes)"
                           className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] bg-white transition-all shadow-2xs resize-y min-h-[60px]"
                         />
                       </div>
@@ -2309,17 +2344,17 @@ function DigitalPrescriptionForm({
                       </div>
                     </div>
 
-                    {/* Medicine Notes Strip */}
+                    {/* Medical Notes Strip */}
                     <div className="pt-1">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-[#475569] mb-1">
                         <FileEdit size={13} className="text-[#64748B]" />
-                        <span>Medicine Notes</span>
+                        <span>Medical Notes</span>
                       </div>
                       <textarea
-                        value={row.notes}
-                        onChange={e => updateRow(row.id, "notes", e.target.value)}
+                        value={row.medicalNotes ?? row.notes ?? ""}
+                        onChange={e => updateRow(row.id, "medicalNotes", e.target.value)}
                         rows={2}
-                        placeholder="Enter notes (optional - e.g. bullet points, instructions, or multi-line notes)"
+                        placeholder="Enter medical notes (optional - e.g. bullet points, instructions, or multi-line notes)"
                         className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] bg-white transition-all shadow-2xs resize-y min-h-[60px]"
                       />
                     </div>
@@ -2339,25 +2374,30 @@ function DigitalPrescriptionForm({
 
       {/* Footer Bar */}
       <div className="bg-[#EFECE6] px-6 py-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-[#E5E0D8] shrink-0 relative z-10">
-        {/* <button
+        <button
           type="button"
-          onClick={() => handleSave(false)}
-          disabled={saving}
-          className="px-6 py-2.5 rounded-xl bg-white border border-[#DDD7CE] hover:bg-slate-50 text-[#475569] text-xs font-bold transition-all shadow-2xs cursor-pointer text-center"
+          onClick={handlePreview}
+          disabled={!hasValidMedicine || saving}
+          className={cn(
+            "px-5 py-2.5 rounded-xl border border-[#CBD5E1] bg-white text-[#42493E] hover:bg-[#F7F5F0] hover:text-[#1E293B] text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center justify-center gap-1.5",
+            (!hasValidMedicine || saving) && "opacity-50 cursor-not-allowed pointer-events-none"
+          )}
         >
-          {saving ? "Saving..." : "Save Draft"}
-        </button> */}
+          <Eye size={14} className="text-[#8C7E72]" />
+          <span>Preview</span>
+        </button>
 
         <button
           type="button"
-          onClick={() => handleSave(true)}
+          onClick={handleSave}
           disabled={!hasValidMedicine || saving}
           className={cn(
             "px-6 py-2.5 rounded-xl bg-[#D95B2F] text-white text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center justify-center gap-2",
             (!hasValidMedicine || saving) ? "opacity-50 cursor-not-allowed pointer-events-none" : "hover:bg-[#c04e26]"
           )}
         >
-          {saving ? "Saving..." : "Preview"}
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          <span>{saving ? "Saving..." : "Save"}</span>
         </button>
       </div>
     </div>
@@ -2938,32 +2978,37 @@ export default function DoctorPortal() {
 
   // Handle switching sections strictly reset selection if section is empty
   function selectSection(s: Section) {
-    setSection(s);
-    setPreviewDoc(null);
-    if (s === "online") {
-      const first = upcomingOnline[0];
-      setSelectedApptId(first ? first.id : null);
-      setSelectedPatientId(null);
-    } else if (s === "offline") {
-      const first = upcomingOffline[0];
-      setSelectedApptId(first ? first.id : null);
-      setSelectedPatientId(null);
-    } else if (s === "rxneeded") {
-      const first = rxNeeded[0];
-      setSelectedApptId(first ? first.id : null);
-      setSelectedPatientId(null);
-    } else if (s === "patients") {
-      setLastSeenPatientCount(registeredPatients.length);
-      localStorage.setItem("doctor_last_seen_patient_count", registeredPatients.length.toString());
-      const first = filteredPatients[0] || registeredPatients[0];
-      setSelectedPatientId(first ? first.id : null);
-      setSelectedApptId(null);
-    } else if (s === "donations") {
-      setSelectedApptId(null);
-      setSelectedPatientId(null);
-      loadDonations();
-    }
+  setSection(s);
+  setPreviewDoc(null);
+
+  if (s === "online") {
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+
+  } else if (s === "offline") {
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+
+  } else if (s === "rxneeded") {
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+
+  } else if (s === "patients") {
+    setLastSeenPatientCount(registeredPatients.length);
+    localStorage.setItem(
+      "doctor_last_seen_patient_count",
+      registeredPatients.length.toString()
+    );
+
+    setSelectedPatientId(null);
+    setSelectedApptId(null);
+
+  } else if (s === "donations") {
+    setSelectedApptId(null);
+    setSelectedPatientId(null);
+    loadDonations();
   }
+}
 
   // Find currently selected appointment STRICTLY bound to the current active section
   const selectedAppt: AnyAppt | null = useMemo(() => {
@@ -3732,7 +3777,7 @@ export default function DoctorPortal() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <FileText size={16} className="text-[#64748b]" />
-                    <h2 className="text-sm font-bold text-[#64748b]">
+                    <h2 className="text-md font-bold text-[#64748b]">
                       Medical Documents ({selectedPatient.documents.length})
                     </h2>
                   </div>
@@ -3971,7 +4016,7 @@ export default function DoctorPortal() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <FlaskConical size={16} className="text-[#64748b]" />
-                        <h2 className="text-sm font-bold text-[#64748b]">
+                        <h2 className="text-md font-bold text-[#64748b]">
                           Prescription History ({rxDocs.length})
                         </h2>
                       </div>
@@ -4068,7 +4113,7 @@ export default function DoctorPortal() {
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <Calendar size={16} className="text-[#64748b]" />
-                      <h2 className="text-sm font-bold text-[#64748b]">
+                      <h2 className="text-md font-bold text-[#64748b]">
                         Consultation History ({sortedAppts.length})
                       </h2>
                     </div>
@@ -4114,7 +4159,7 @@ export default function DoctorPortal() {
               })()}
 
               {/* 4. DOCTOR NOTE'S HISTORY */}
-              {(() => {
+              {/* {(() => {
                 const sortedAppts = [...selectedPatient.appointments].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
                 const notesWithData = sortedAppts
                   .map(a => {
@@ -4132,7 +4177,7 @@ export default function DoctorPortal() {
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <FileEdit size={16} className="text-[#64748b]" />
-                      <h2 className="text-sm font-bold text-[#64748b]">
+                      <h2 className="text-md font-bold text-[#64748b]">
                         Doctor Note's History ({notesWithData.length})
                       </h2>
                     </div>
@@ -4163,7 +4208,7 @@ export default function DoctorPortal() {
                     )}
                   </section>
                 );
-              })()}
+              })()} */}
 
             </div>
           ) : selectedAppt ? (

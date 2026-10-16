@@ -16,6 +16,7 @@ if (fs.existsSync(rootEnv)) {
 
 import app from "./app";
 import { startVerificationReminderWorker } from "./lib/verification-reminders";
+import { ensureWebsiteVisitorsTable } from "./migrations/create_website_visitors";
 
 /**
  * ------------------------------------------------------------
@@ -86,4 +87,5 @@ app.listen(port, "0.0.0.0", () => {
   );
 
   startVerificationReminderWorker();
+  ensureWebsiteVisitorsTable().catch(() => {});
 });

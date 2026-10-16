@@ -35,6 +35,19 @@ export function parseConsultDateTime(rawDate?: string) {
   return { date: datePart || "-", time: timePart };
 }
 
+export function parseNotesToBullets(rawNotes: string | null | undefined): string[] {
+  if (!rawNotes || typeof rawNotes !== "string") return [];
+  return rawNotes
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => {
+      const hasBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*");
+      return hasBullet ? line.replace(/^[•\-\*]\s*/, "").trim() : line;
+    })
+    .filter(line => line.length > 0);
+}
+
 export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData }) {
   const patientName = data.patientName || "-";
   const patientCode = data.patientCode || "-";
@@ -104,7 +117,8 @@ export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData
           timing: normalizeTimingObj(r.timing),
           duration: r.duration || "-",
           quantity: r.quantity || "-",
-          notes: r.notes || "",
+          medicalNotes: (r.medicalNotes ?? r.notes ?? "") || "",
+          notes: (r.medicalNotes ?? r.notes ?? "") || "",
         }));
       }
     }
@@ -137,7 +151,8 @@ export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData
             timing: normalizeTimingObj(tObj),
             duration: m.duration || "-",
             quantity: "-",
-            notes: "",
+            medicalNotes: (m.medicalNotes || m.notes || ""),
+            notes: (m.medicalNotes || m.notes || ""),
           };
         });
       }
@@ -196,33 +211,78 @@ export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData
             {/* Main Top Prescription Content */}
             <div className="prescription-main-content relative z-10 w-full flex flex-col">
               {/* Hospital Header on EVERY page */}
-              <div className="flex flex-row items-start justify-between gap-4">
-                <div>
+              <div className="flex flex-row items-start gap-4 w-full">
+
+                {/* LEFT - Hospital Information */}
+                <div className="flex-1 min-w-0">
+
                   <div className="flex items-center gap-2 mb-1.5">
-                    <img src={HOSPITAL_LOGO_DATA_URL} alt="" className="w-10 h-10 object-contain shrink-0" crossOrigin="anonymous" />
-                    <h1 className="font-extrabold text-2xl tracking-wider text-[#2A4365]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                    <img
+                      src={HOSPITAL_LOGO_DATA_URL}
+                      alt=""
+                      className="w-10 h-10 object-contain shrink-0"
+                      crossOrigin="anonymous"
+                    />
+
+                    <h1
+                      className="font-extrabold text-2xl tracking-wider text-[#2A4365]"
+                      style={{ fontFamily: "'DM Sans', sans-serif" }}
+                    >
                       SUSRUTA HOSPITAL
                     </h1>
                   </div>
+
+                  {/* Tagline */}
+                  <div className="inline-block bg-[#3C4C8C] text-white rounded-sm px-4 py-2 mt-2 mb-2">
+                    <p className="text-[10px] font-bold leading-none whitespace-nowrap">
+                      An Exclusive Ayurvedic Medical Care
+                    </p>
+                  </div>
+
+                  {/* Address */}
                   <p className="text-xs text-[#64748B] font-medium leading-relaxed">
-                    119, Ramulavari North Mada Street, Tirupati - 517507 | Ph: 9492068180 / 0877-2220663
+                    119, Ramulavari North Mada Street, Tirupati - 517 507
                   </p>
-                  <p className="text-[11px] font-semibold text-[#64748B] mt-0.5">
-                    Govt. Regd No: <span className="font-extrabold text-[#D95B2F]">AYUR-TPT-2024</span> • ISO 9001:2015 Certified
+
+                  {/* Appointment */}
+                  <p className="text-[10px] font-semibold text-[#555] leading-tight mt-2 whitespace-nowrap">
+                    <span className="text-[#2B2220]">
+                      For Appointment :
+                    </span>{" "}
+                    9492068180, 0877-2220663{" "}
+                    <span className="font-normal">
+                      (Call during working hours only)
+                    </span>
                   </p>
+
+                  {/* Consulting Hours - ONE LINE */}
+                  <p className="text-[10px] font-semibold text-[#555] leading-tight mt-1.5 whitespace-nowrap">
+                    <span className="text-[#2B2220]">
+                      Consulting Hours :
+                    </span>{" "}
+                    Week Days - Morning : 10-00 AM to 01.30 PM - Evening : 06-00 PM to
+                    10-00 PM - Sunday : 10-00 AM to 01.00 PM
+                  </p>
+
                 </div>
 
-                <div className="text-right shrink-0">
-                  <h3 className="font-extrabold text-[#1E293B] text-base leading-tight">
+                {/* RIGHT - Doctor Information */}
+                <div className="w-[285px] shrink-0 text-right pt-1">
+
+                  <h3 className="font-extrabold text-[#1E293B] text-base leading-tight whitespace-nowrap">
                     Dr. P. Murali Krishna
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D.
+
+                  <p className="text-[10px] text-slate-500 font-medium mt-1 leading-tight whitespace-nowrap">
+                    B.A.M.S. (Gold Medalist), M.D. (Ay), Ph.D.,FRAV. D.Yoga
                   </p>
-                  <p className="text-xs text-slate-400 font-medium">
-                    Former Principal, S.V. Ayurvedic College
+
+                  <p className="text-[10px] text-[#D95B2F] font-medium mt-1 whitespace-nowrap">
+                    Consultant Ayurvedic Specialist
                   </p>
+
                 </div>
+
               </div>
 
               {/* Header Divider line on EVERY page */}
@@ -464,195 +524,210 @@ export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData
                     {pageData.rows.map((row, rIdx) => {
                       const globalIdx = pageData.startIndex + rIdx;
                       const isLastItem = rIdx === pageData.rows.length - 1;
+                      const bulletPoints = parseNotesToBullets(row.medicalNotes ?? row.notes);
+                      const hasNotes = bulletPoints.length > 0;
 
                       return (
-                        <tr key={row.id || globalIdx} className="bg-white break-inside-avoid" style={{ pageBreakInside: "avoid" }}>
-                          {/* S.NO */}
-                          <td
-                            className="text-center font-bold text-slate-500 text-sm"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "8px 2px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            {String(globalIdx + 1).padStart(2, "0")}
-                          </td>
+                        <React.Fragment key={row.id || globalIdx}>
+                          <tr className="bg-white break-inside-avoid" style={{ pageBreakInside: "avoid" }}>
+                            {/* S.NO */}
+                            <td
+                              className="text-center font-bold text-slate-500 text-sm"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "8px 2px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              {String(globalIdx + 1).padStart(2, "0")}
+                            </td>
 
-                          {/* Medicine & Formulation */}
-                          <td
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "8px 6px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            <div className="space-y-1">
-                              {row.medicines.length > 1 && (
-                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF5F2] border border-[#FDCFBF] text-[#D95B2F] text-[9px] font-bold mb-0.5 shadow-2xs w-fit">
-                                  <Users size={10} />
-                                  <span>Combined Set</span>
-                                </div>
-                              )}
-                              {row.medicines.map((m) => (
-                                <div key={m.id}>
-                                  <div className="font-bold text-xs text-[#1E293B] leading-snug break-words" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                    {m.name}
+                            {/* Medicine & Formulation */}
+                            <td
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "8px 6px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              <div className="space-y-1">
+                                {row.medicines.length > 1 && (
+                                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF5F2] border border-[#FDCFBF] text-[#D95B2F] text-[9px] font-bold mb-0.5 shadow-2xs w-fit whitespace-nowrap">
+                                    <Users size={10} className="shrink-0" />
+                                    <span className="whitespace-nowrap">Combined Set</span>
                                   </div>
-                                  {m.dosage && (
-                                    <div className="text-[11px] font-semibold text-[#D95B2F] mt-0.5 leading-snug break-words">
-                                      {m.dosage}
+                                )}
+                                {row.medicines.map((m) => (
+                                  <div key={m.id}>
+                                    <div className="font-bold text-xs text-[#1E293B] leading-snug break-words" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                                      {m.name}
                                     </div>
-                                  )}
+                                    {m.dosage && (
+                                      <div className="text-[11px] font-semibold text-[#D95B2F] mt-0.5 leading-snug break-words">
+                                        {m.dosage}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+
+                            {/* To Be Taken */}
+                            <td
+                              className="text-center font-semibold text-xs text-[#475569]"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "8px 4px",
+                                verticalAlign: "middle",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {row.toBeTaken || "-"}
+                            </td>
+
+                            {/* Breakfast */}
+                            <td
+                              className="text-center"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "6px 2px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              <div className="flex flex-col items-center justify-center gap-1 mx-auto">
+                                <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
+                                  {row.timing.breakfast.count}
+                                </span>
+                                {row.timing.breakfast.count === "1" && row.timing.breakfast.mealRelation ? (
+                                  <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
+                                    <span>{row.timing.breakfast.mealRelation === "before" ? "Before" : "After"}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+
+                            {/* Lunch */}
+                            <td
+                              className="text-center"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "6px 2px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              <div className="flex flex-col items-center justify-center gap-1 mx-auto">
+                                <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
+                                  {row.timing.lunch.count}
+                                </span>
+                                {row.timing.lunch.count === "1" && row.timing.lunch.mealRelation ? (
+                                  <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
+                                    <span>{row.timing.lunch.mealRelation === "before" ? "Before" : "After"}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+
+                            {/* Dinner */}
+                            <td
+                              className="text-center"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "6px 2px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              <div className="flex flex-col items-center justify-center gap-1 mx-auto">
+                                <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
+                                  {row.timing.dinner.count}
+                                </span>
+                                {row.timing.dinner.count === "1" && row.timing.dinner.mealRelation ? (
+                                  <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
+                                    <span>{row.timing.dinner.mealRelation === "before" ? "Before" : "After"}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+
+                            {/* Duration */}
+                            <td
+                              className="text-center font-extrabold text-xs text-[#1E293B]"
+                              style={{
+                                borderRight: "1px solid #DFD9CE",
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "8px 4px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              {row.duration || "-"} Days
+                            </td>
+
+                            {/* Quantity */}
+                            <td
+                              className="text-center font-bold text-xs text-[#1E293B]"
+                              style={{
+                                borderBottom: hasNotes ? "1px solid #DFD9CE" : (isLastItem ? "none" : "1px solid #DFD9CE"),
+                                padding: "8px 4px",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              {row.quantity || "-"}
+                            </td>
+                          </tr>
+
+                          {/* Medicine-specific Medical Notes row */}
+                          {hasNotes && (
+                            <tr key={`${row.id || globalIdx}-medical-notes`} className="bg-[#FAF9F5] break-inside-avoid" style={{ pageBreakInside: "avoid" }}>
+                              <td
+                                colSpan={8}
+                                style={{
+                                  borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
+                                  padding: "6px 12px 7px 12px",
+                                  textAlign: "left",
+                                  backgroundColor: "#FAF9F5",
+                                }}
+                              >
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#475569] tracking-wider mb-1">
+                                  <FileEdit size={11} className="text-[#64748B]" />
+                                  <span>Medical Notes</span>
                                 </div>
-                              ))}
-                            </div>
-                          </td>
-
-                          {/* To Be Taken */}
-                          <td
-                            className="text-center font-semibold text-xs text-[#475569]"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "8px 4px",
-                              verticalAlign: "middle",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {row.toBeTaken || "-"}
-                          </td>
-
-                          {/* Breakfast */}
-                          <td
-                            className="text-center"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "6px 2px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            <div className="flex flex-col items-center justify-center gap-1 mx-auto">
-                              <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
-                                {row.timing.breakfast.count}
-                              </span>
-                              {row.timing.breakfast.count === "1" && row.timing.breakfast.mealRelation ? (
-                                <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
-                                  
-                                  <span>{row.timing.breakfast.mealRelation === "before" ? "Before" : "After"}</span>
+                                <div className="text-[11px] text-[#1E293B] font-medium leading-relaxed space-y-0.5 pl-0.5">
+                                  {bulletPoints.map((point, pIdx) => (
+                                    <div key={pIdx} className="flex items-start gap-1.5 leading-snug">
+                                      <span className="text-[#1E293B] font-bold text-xs leading-none mt-0.5 select-none">•</span>
+                                      <span className="break-words">{point}</span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ) : null}
-                            </div>
-                          </td>
-
-                          {/* Lunch */}
-                          <td
-                            className="text-center"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "6px 2px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            <div className="flex flex-col items-center justify-center gap-1 mx-auto">
-                              <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
-                                {row.timing.lunch.count}
-                              </span>
-                              {row.timing.lunch.count === "1" && row.timing.lunch.mealRelation ? (
-                                <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
-                                  
-                                  <span>{row.timing.lunch.mealRelation === "before" ? "Before" : "After"}</span>
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
-
-                          {/* Dinner */}
-                          <td
-                            className="text-center"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "6px 2px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            <div className="flex flex-col items-center justify-center gap-1 mx-auto">
-                              <span className="w-5 h-5 border border-slate-200 rounded text-[10px] font-bold text-[#1E293B] bg-[#FAF9F5] inline-flex items-center justify-center">
-                                {row.timing.dinner.count}
-                              </span>
-                              {row.timing.dinner.count === "1" && row.timing.dinner.mealRelation ? (
-                                <div className="bg-[#D95B2F] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold inline-flex items-center justify-center gap-0.5 shadow-2xs whitespace-nowrap">
-                                  
-                                  <span>{row.timing.dinner.mealRelation === "before" ? "Before" : "After"}</span>
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
-
-                          {/* Duration */}
-                          <td
-                            className="text-center font-extrabold text-xs text-[#1E293B]"
-                            style={{
-                              borderRight: "1px solid #DFD9CE",
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "8px 4px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            {row.duration || "-"} Days
-                          </td>
-
-                          {/* Quantity */}
-                          <td
-                            className="text-center font-bold text-xs text-[#1E293B]"
-                            style={{
-                              borderBottom: isLastItem ? "none" : "1px solid #DFD9CE",
-                              padding: "8px 4px",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            {row.quantity || "-"}
-                          </td>
-                        </tr>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                 </table>
               )}
 
-              {/* Medicine Notes & Special Instructions outside the table */}
+              {/* Doctor Notes & Special Instructions outside the table (Final Page only, if present) */}
               {(() => {
-                const rowsWithNotes = pageData.rows.filter(r => r.notes && r.notes.trim());
                 const hasDoctorNotes = isFinalPage && Boolean(data.doctorNotes && data.doctorNotes.trim());
-                if (rowsWithNotes.length === 0 && !hasDoctorNotes) return null;
+                if (!hasDoctorNotes) return null;
 
                 return (
                   <div className="mt-3.5 p-3 border border-[#DFD9CE] rounded-lg bg-[#FAF9F5] text-left">
                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#475569] tracking-wider mb-1.5">
                       <FileEdit size={11} className="text-[#64748B]" />
-                      <span>Medicine Notes & Special Instructions</span>
+                      <span>Doctor Notes & Special Instructions</span>
                     </div>
 
-                    <div className="text-[11px] text-[#1E293B] space-y-1.5 leading-relaxed">
-                      {rowsWithNotes.map((r, rIdx) => {
-                        return (
-                          <div key={r.id || rIdx}>
-                            <span>{r.notes.trim()}</span>
-                          </div>
-                        );
-                      })}
-
-                      {hasDoctorNotes && (
-                        <div className={rowsWithNotes.length > 0 ? "pt-1.5 border-t border-[#EAE5DC]" : ""}>
-                          <strong className="text-[#475569]">Doctor Notes: </strong>
-                          <span>{data.doctorNotes?.trim()}</span>
-                        </div>
-                      )}
+                    <div className="text-[11px] text-[#1E293B] leading-relaxed">
+                      <span>{data.doctorNotes?.trim()}</span>
                     </div>
                   </div>
                 );
@@ -680,7 +755,7 @@ export function DigitalPrescriptionPages({ data }: { data: PrintPrescriptionData
                   Dr. P. Murali Krishna
                 </p>
                 <p className="text-[9.5px] text-[#64748B] font-medium mt-0.5 leading-tight">
-                  Ayurvedic Physician
+                  Consultant Ayurvedic Specialist
                 </p>
                 <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 leading-tight">
                   Digitally Signed & Timestamped: {format(data.signedAt ? new Date(data.signedAt) : new Date(), "dd-MM-yyyy HH:mm")} IST

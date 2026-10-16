@@ -2,13 +2,14 @@ import React from "react";
 import { useLanguage } from "@/store/use-language";
 import { t as tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { Menu, X, Phone, Clock, MapPin, Send, CheckCircle2 } from "lucide-react";
+import { Menu, X, Phone, Clock, MapPin, Send, CheckCircle2, Users, UsersRound, TrendingUp, ArrowUpRight } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useGetSettings } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 // import { BookingLoginModal } from "@/components/BookingLoginModal";
 import { patientApi } from "@/lib/patient-api";
 import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
+import { useVisitorTracking, fetchPublicVisitorStats } from "@/lib/visitor-tracking";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -27,6 +28,18 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const [subLoading, setSubLoading] = React.useState(false);
   const [subSuccess, setSubSuccess] = React.useState(false);
   const [subError, setSubError] = React.useState("");
+  const [visitorStats, setVisitorStats] = React.useState<{ totalUniqueVisitors: number; todayVisitors: number } | null>(null);
+
+  // Automatically track visitor and maintain heartbeat on public pages
+  useVisitorTracking();
+
+  React.useEffect(() => {
+    let isMounted = true;
+    fetchPublicVisitorStats().then((data) => {
+      if (isMounted) setVisitorStats(data);
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
 
   async function handleSubscribe(e: React.FormEvent) {
     e.preventDefault();
@@ -449,6 +462,47 @@ const scrollTo = (
                 <RecaptchaLegalNotice className="text-[11px] text-[#0A2B21]/60 mt-1" />
               </form>
             )}
+
+            {/* Public Visitor Counter Card — Matched to reference */}
+            <div className="mt-5 pt-4 border-t border-[#0A2B21]/10">
+              <div
+                className="w-full bg-gradient-to-br from-[#FFFFFF] via-[#F9FCFA] to-[#EDF7F1] border-[1.5px] border-[#CDE5D4] rounded-[22px] sm:rounded-[26px] p-3 sm:p-4 shadow-[0_2px_14px_rgba(20,60,35,0.04)] flex items-center justify-between"
+                role="status"
+                aria-label="Website visitor statistics"
+              >
+                {/* 1. Left Icon Section */}
+                <div
+                  className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-[#D95B2F]/10 flex items-center justify-center shrink-0"
+                  aria-hidden="true"
+                >
+                  <UsersRound className="w-5 h-5 sm:w-6 sm:h-6 text-[#D95B2F]" />
+                </div>
+
+                {/* 2. First Vertical Divider */}
+                {/* <div className="w-[1.5px] h-10 sm:h-11 bg-[#3A6B53]/25 mx-2 sm:mx-3 shrink-0" aria-hidden="true" /> */}
+
+                {/* 3. Center Section: Visitors & Number */}
+                <div className="flex flex-col justify-center min-w-0 pr-1">
+                  <span className="text-[13px] sm:text-[15px] font-semibold text-[#254637] leading-none mb-1 font-sans">
+                    Visitors
+                  </span>
+                  <span className="text-2xl sm:text-[32px] font-bold font-sans text-[#062D1E] leading-none tracking-tight">
+                    {visitorStats !== null ? visitorStats.totalUniqueVisitors.toLocaleString() : "—"}
+                  </span>
+                </div>
+
+                {/* 4. Second Vertical Divider */}
+                <div className="w-[1.5px] h-7 sm:h-8 bg-[#3A6B53]/25 mx-2 sm:mx-3 shrink-0" aria-hidden="true" />
+
+                {/* 5. Right Section: Trend Icon & +X today */}
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 text-[#D95B2F]">
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 stroke-[2.3]" aria-hidden="true" />
+                  <span className="text-[13px] sm:text-[15px] font-bold font-sans whitespace-nowrap">
+                    +{visitorStats !== null ? visitorStats.todayVisitors.toLocaleString() : "0"} today
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

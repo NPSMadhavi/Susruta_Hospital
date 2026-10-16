@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart, BriefcaseMedical } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart, BriefcaseMedical, Activity } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 
@@ -108,6 +108,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/donations", icon: <Heart size={18}/>, label: "Donations" },
     { href: "/admin/testimonials", icon: <MessageSquare size={18}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={18}/>, label: "Subscribers" },
+    { href: "/admin/visitors", icon: <Activity size={18}/>, label: "Visitors" },
     { href: "/admin/settings", icon: <Settings size={18}/>, label: "Settings" },
   ];
 

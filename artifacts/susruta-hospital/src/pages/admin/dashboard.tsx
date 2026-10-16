@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { useListAppointments } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Users, Calendar as CalendarIcon, Clock, Video, ArrowRight } from "lucide-react";
+import { Users, Calendar as CalendarIcon, Clock, Video, ArrowRight, Activity, Globe } from "lucide-react";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -15,6 +15,42 @@ export default function AdminDashboard() {
   const PAGE_SIZE = 10;
 
   const [onlineError, setOnlineError] = useState<string | null>(null);
+
+  // Visitor statistics state
+  const [visitorStats, setVisitorStats] = useState<{
+    liveVisitors: number;
+    todayVisitors: number;
+    totalUniqueVisitors: number;
+  }>({
+    liveVisitors: 0,
+    todayVisitors: 0,
+    totalUniqueVisitors: 0,
+  });
+  const [visitorLoading, setVisitorLoading] = useState(true);
+
+  const fetchVisitorStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/admin/visitors/stats`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setVisitorStats({
+          liveVisitors: Number(data.liveVisitors) || 0,
+          todayVisitors: Number(data.todayVisitors) || 0,
+          totalUniqueVisitors: Number(data.totalUniqueVisitors) || 0,
+        });
+      }
+    } catch {
+      // Non-blocking fail-safe
+    } finally {
+      setVisitorLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVisitorStats();
+    const interval = setInterval(fetchVisitorStats, 30000);
+    return () => clearInterval(interval);
+  }, [fetchVisitorStats]);
 
   useEffect(() => {
     fetch(`${BASE}/api/online-appointments/admin`, { credentials: "include" })
@@ -85,6 +121,7 @@ export default function AdminDashboard() {
         <h1 className="text-3xl font-sans font-bold text-foreground">Overview</h1>
         <p className="text-muted-foreground">Welcome to Susruta Hospital Admin Panel.</p>
       </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">

@@ -182,12 +182,14 @@ function AppointmentActions({
         type="button"
         onClick={() => onViewPrescription(item)}
         aria-label={"View prescription for " + fmtDateShort(item.date)}
-        className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-[#D95B2F] bg-white px-3 py-1.5 text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs"
+        className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-gray bg-white px-3 py-2 text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs"
       >
-        <FileText size={12} /> View Prescription
+        <Eye size={12} /> View Prescription
       </button>
     )}
-    <button onClick={() => dialogRef.current?.showModal()} aria-label={"View documents for " + fmtDateShort(item.date)} className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-[#D95B2F] px-3 py-1.5 text-[12px] font-medium leading-3 text-white hover:bg-[#c94e25]"><Eye size={12} /> View Documents</button>
+    <button onClick={() => dialogRef.current?.showModal()} aria-label={"View documents for " + fmtDateShort(item.date)} 
+    className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-gray bg-white px-3 py-2 text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs">
+      <Eye size={12} /> View Documents</button>
     <dialog ref={dialogRef} aria-label="Appointment documents" className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-5 text-sm shadow-xl backdrop:bg-black/40">
       <div className="mb-4 flex items-center justify-between gap-4"><h3 className="font-bold text-[#20392b]">Documents · {fmtDateShort(item.date)}</h3><button onClick={() => dialogRef.current?.close()} aria-label="Close documents" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X size={18} /></button></div>
       {online?.documents?.length ? <div className="space-y-2">{online.documents.map((doc, index) => <button key={index} type="button" onClick={() => setPreviewDocument(doc)} className="flex w-full text-left items-center gap-2 rounded-lg border border-[#eee8e3] p-3 text-[#d95b2f] hover:bg-orange-50"><FileText size={16} className="shrink-0" /><span className="break-all">{doc.name}</span></button>)}</div> : <p className="py-4 text-gray-500">No documents attached to this appointment.</p>}
@@ -1458,7 +1460,7 @@ export default function PatientDashboard() {
                             <button
                               type="button"
                               onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
-                              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50"
                             >
                               <Eye size={12} /> View
                             </button>
@@ -1481,7 +1483,7 @@ export default function PatientDashboard() {
                                 time: appt.timeLabel,
                                 prescription: appt.prescription,
                               })}
-                              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50"
                             >
                               <Eye size={12} /> View
                             </button>

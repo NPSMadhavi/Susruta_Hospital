@@ -22,4 +22,5 @@ export * from "./patient_otps";
 export * from "./custom_day_timings";
 export * from "./offline_qr_tokens";
 export * from "./medicines";
+export * from "./website_visitors";
 

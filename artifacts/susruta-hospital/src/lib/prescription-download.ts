@@ -24,7 +24,8 @@ export interface PrintPrescriptionData {
     };
     duration: string;
     quantity: string;
-    notes: string;
+    medicalNotes?: string;
+    notes?: string;
   }[];
   medicines?: any[];
   doctorNotes?: string;

@@ -24,6 +24,7 @@ import AdminOnlineAppointments from "./pages/admin/online-appointments";
 import AdminPatients from "./pages/admin/patients";
 import AdminDonations from "./pages/admin/donations";
 import AdminMedicines from "./pages/admin/medicines";
+import AdminVisitors from "./pages/admin/visitors";
 
 // Patient Portal Pages
 import PortalLogin from "./pages/portal/login";
@@ -106,6 +107,7 @@ function Router() {
       <Route path="/admin/patients" component={AdminPatients} />
       <Route path="/admin/medicines" component={AdminMedicines} />
       <Route path="/admin/donations" component={AdminDonations} />
+      <Route path="/admin/visitors" component={AdminVisitors} />
       <Route path="/admin/settings" component={AdminSettings} />
 
       <Route component={NotFound} />

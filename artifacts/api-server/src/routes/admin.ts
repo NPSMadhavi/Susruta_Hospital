@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable } from "@workspace/db";
+import { db, pool, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable } from "@workspace/db";
 import { eq, desc, inArray, and, gte, lte, ne, sql, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
@@ -728,6 +728,30 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("Thank you email error:", err);
     res.status(500).json({ error: "email_failed", message: "Failed to send email. Check SMTP settings." });
+  }
+});
+
+// ── GET /admin/visitors/stats ──────────────────────────────────
+router.get("/visitors/stats", requireAdmin, async (_req, res) => {
+  try {
+    const query = `
+      SELECT 
+        COUNT(id)::int AS "totalUniqueVisitors",
+        COUNT(CASE WHEN last_seen >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') THEN 1 END)::int AS "todayVisitors",
+        COUNT(CASE WHEN last_seen >= NOW() - INTERVAL '90 seconds' THEN 1 END)::int AS "liveVisitors"
+      FROM website_visitors;
+    `;
+    const result = await pool.query(query);
+    const row = result.rows[0] || {};
+
+    res.json({
+      liveVisitors: Number(row.liveVisitors) || 0,
+      todayVisitors: Number(row.todayVisitors) || 0,
+      totalUniqueVisitors: Number(row.totalUniqueVisitors) || 0,
+    });
+  } catch (err: any) {
+    console.error("⚠️ [AdminVisitorStats] Error fetching visitor stats:", err.message);
+    res.status(500).json({ error: "stats_unavailable" });
   }
 });
 
