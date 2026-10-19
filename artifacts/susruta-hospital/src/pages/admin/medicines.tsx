@@ -5,6 +5,8 @@ import {
   ChevronLeft, ChevronRight, X, AlertCircle, FileSpreadsheet,
   CheckCircle2, Loader2
 } from "lucide-react";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -27,8 +29,8 @@ export default function AdminMedicines() {
   const [searchQuery, setSearchQuery] = useState("");
   
   // Pagination
+  const PAGE_SIZE = 10;
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -178,16 +180,18 @@ export default function AdminMedicines() {
     );
   }, [medicines, searchQuery]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   // Pagination logic
   const totalItems = filteredMedicines.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const currentPageClamped = Math.min(currentPage, totalPages);
-  const startIndex = totalItems === 0 ? 0 : (currentPageClamped - 1) * pageSize + 1;
-  const endIndex = Math.min(totalItems, currentPageClamped * pageSize);
   const paginatedMedicines = useMemo(() => {
-    const start = (currentPageClamped - 1) * pageSize;
-    return filteredMedicines.slice(start, start + pageSize);
-  }, [filteredMedicines, currentPageClamped, pageSize]);
+    const start = (currentPageClamped - 1) * PAGE_SIZE;
+    return filteredMedicines.slice(start, start + PAGE_SIZE);
+  }, [filteredMedicines, currentPageClamped]);
 
   // Export CSV
   const exportCSV = () => {
@@ -538,7 +542,7 @@ export default function AdminMedicines() {
         )}
 
         {/* ── MEDICINES TABLE / EMPTY STATE ─────────────────────── */}
-        <div className="bg-white rounded-2xl border border-[#EDEFEB] shadow-sm overflow-hidden">
+        <div className={cn("bg-white rounded-2xl border border-[#EDEFEB] shadow-sm overflow-hidden flex flex-col", totalItems > PAGE_SIZE && "min-h-[580px]")}>
           {isLoading ? (
             <div className="p-12 text-center text-muted-foreground text-sm">
               Loading medicines persistence data...
@@ -565,7 +569,7 @@ export default function AdminMedicines() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="flex-1 overflow-x-auto">
                 <table className="w-full text-left text-xs md:text-sm">
                   <thead>
                     <tr className="bg-[#F8F9FA] border-b border-[#EDEFEB] text-[#8E938B] font-semibold text-[13px] tracking-wider">
@@ -613,74 +617,13 @@ export default function AdminMedicines() {
                 </table>
               </div>
 
-              {/* ── PAGINATION BAR ─────────────────────────── */}
-              <div className="px-6 py-4 border-t border-[#EDEFEB] bg-[#F8F9FA]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-4">
-                  <span>
-                    Showing <strong className="text-foreground">{startIndex}</strong> to{" "}
-                    <strong className="text-foreground">{endIndex}</strong> of{" "}
-                    <strong className="text-foreground">{totalItems}</strong> items
-                  </span>
-
-                  <div className="flex items-center gap-2 border-l border-[#EDEFEB] pl-4">
-                    <span>Rows per page:</span>
-                    <select
-                      value={pageSize}
-                      onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="bg-white border border-[#EDEFEB] rounded-lg px-2 py-1 text-xs font-medium focus:outline-none"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    disabled={currentPageClamped <= 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="px-2.5 py-1.5 rounded-lg border border-[#EDEFEB] bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium flex items-center gap-1 transition-colors"
-                  >
-                    <ChevronLeft size={14} />
-                    <span>Previous</span>
-                  </button>
-
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPageClamped) <= 1)
-                    .map((p, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      const showEllipsis = prev && p - prev > 1;
-                      return (
-                        <React.Fragment key={p}>
-                          {showEllipsis && <span className="px-1 text-muted-foreground">...</span>}
-                          <button
-                            onClick={() => setCurrentPage(p)}
-                            className={`min-w-[28px] h-[28px] rounded-lg text-xs font-bold transition-all ${
-                              currentPageClamped === p
-                                ? "bg-[#D95B2F] text-white"
-                                : "bg-white border border-[#EDEFEB] text-foreground hover:bg-gray-50"
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        </React.Fragment>
-                      );
-                    })}
-
-                  <button
-                    disabled={currentPageClamped >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-2.5 py-1.5 rounded-lg border border-[#EDEFEB] bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium flex items-center gap-1 transition-colors"
-                  >
-                    <span>Next</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
+              <AdminPagination
+                currentPage={currentPageClamped}
+                totalItems={totalItems}
+                pageSize={PAGE_SIZE}
+                onPageChange={setCurrentPage}
+                itemLabel="items"
+              />
             </>
           )}
         </div>

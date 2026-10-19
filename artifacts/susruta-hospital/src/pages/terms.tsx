@@ -6,7 +6,7 @@ import logoImg from "@assets/logo_1773840200056.png";
 const Section = ({ num, title, children }: { num: number; title: string; children: React.ReactNode }) => (
   <section>
    <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">{num}</span>
+      <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">{num}</span>
       {title}
     </h2>
     <div className="text-[16px] md:text-[18px] text-gray-700 leading-relaxed space-y-2">{children}</div>
@@ -37,11 +37,11 @@ export default function TermsAndConditions() {
         </div>
       </div>
 
-      <div className="w-full mx-auto bg-[#F5F2E9] px-[7%] py-12">
+      <div className="w-full mx-auto bg-[#D95B2F]/10 px-[7%] py-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-2xl bg-[#1a3d2b]/10 flex items-center justify-center">
-              <FileText size={22} className="text-[#1a3d2b]" />
+              <FileText size={22} className="text-[#D95B2F]" />
             </div>
 
             <div>

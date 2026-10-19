@@ -132,7 +132,7 @@ function serializePatient(p: any) {
 export function getFrontendUrl(req: any) {
   if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "null") return process.env.FRONTEND_URL.replace(/\/$/, "");
 
-  const referer = req.get("referer") || req.get("origin");
+  const referer = req?.get?.("referer") || req?.get?.("origin");
   if (referer && referer !== "null") {
     try {
       const u = new URL(referer);
@@ -140,25 +140,46 @@ export function getFrontendUrl(req: any) {
     } catch {}
   }
 
+  // Plesk / Nginx / Reverse Proxy header check
+  const xForwardedHost = req?.get?.("x-forwarded-host");
+  const xForwardedProto = req?.get?.("x-forwarded-proto") || (req?.secure ? "https" : "http");
+  if (xForwardedHost) {
+    const hostPart = xForwardedHost.split(",")[0].trim();
+    if (hostPart && !hostPart.includes("localhost") && !hostPart.includes("127.0.0.1")) {
+      return `${xForwardedProto}://${hostPart}`;
+    }
+  }
+
   if (process.env.REPLIT_DEPLOYMENT === "1") {
     return (process.env.APP_URL && process.env.APP_URL !== "null")
       ? process.env.APP_URL.replace(/\/$/, "")
-      : `${req.protocol}://${req.get("host")}`;
+      : `${req?.protocol || "http"}://${req?.get?.("host") || "localhost:5000"}`;
   }
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain && domain !== "null") return `https://${domain}`;
+
+  // If host header has a real domain (not localhost:5000), use that
+  const host = req?.get?.("host") || "";
+  if (host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
+    const proto = req?.get?.("x-forwarded-proto") || (req?.secure ? "https" : "http");
+    return `${proto}://${host}`;
+  }
+
+  if (process.env.APP_URL && process.env.APP_URL !== "null" && !process.env.APP_URL.includes("localhost")) {
+    return process.env.APP_URL.replace(/\/$/, "");
+  }
+
+  if (host && host.includes(":5000")) {
+    return `${req?.protocol || "http"}://${host.replace(":5000", ":5173")}`;
+  }
+  if (host) {
+    return `${req?.protocol || "http"}://${host}`;
+  }
 
   if (process.env.APP_URL && process.env.APP_URL !== "null") {
     return process.env.APP_URL.replace(/\/$/, "");
   }
 
-  const host = req.get("host") || "";
-  if (host && host.includes(":5000")) {
-    return `${req.protocol}://${host.replace(":5000", ":5173")}`;
-  }
-  if (host) {
-    return `${req.protocol}://${host}`;
-  }
   return "https://demo.susrutahospital.com";
 }
 

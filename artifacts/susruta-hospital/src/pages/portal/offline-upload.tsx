@@ -37,13 +37,24 @@ interface UploadedDocItem {
 export default function OfflineUploadPage() {
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
-  const tokenFromQuery = searchParams.get("token") || "";
+  const tokenFromQuery =
+    searchParams.get("token") ||
+    new URLSearchParams(window.location.search).get("token") ||
+    new URLSearchParams(window.location.hash.split("?")[1] || "").get("token") ||
+    "";
 
   const [, paramsMain] = useRoute("/upload-documents/:token");
   const [, paramsAlt1] = useRoute("/patient/offline-upload/:token");
   const [, paramsAlt2] = useRoute("/portal/offline-upload/:token");
   const [, paramsDocUpload] = useRoute("/portal/document-upload/:token");
-  const token = paramsDocUpload?.token || paramsMain?.token || paramsAlt1?.token || paramsAlt2?.token || tokenFromQuery || "";
+  const token = (
+    paramsDocUpload?.token ||
+    paramsMain?.token ||
+    paramsAlt1?.token ||
+    paramsAlt2?.token ||
+    tokenFromQuery ||
+    ""
+  ).trim();
 
   const [, navigate] = useLocation();
 
@@ -51,6 +62,7 @@ export default function OfflineUploadPage() {
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isExpired, setIsExpired] = useState(false);
+  const [isInvalid, setIsInvalid] = useState(false);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedDocItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -61,23 +73,29 @@ export default function OfflineUploadPage() {
 
   useEffect(() => {
     if (!token) {
+      setIsInvalid(true);
       setErrorMsg("Please scan the QR code provided by Susruta Hospital.");
       setLoading(false);
       return;
     }
 
-    fetch(`${API_BASE}/appointments/upload-documents/${token}`, { credentials: "include" })
+    fetch(`${API_BASE}/appointments/upload-documents/${encodeURIComponent(token)}`, { credentials: "include" })
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok || !data.valid) {
           if (res.status === 410 || data.error === "expired") {
             setIsExpired(true);
-            setErrorMsg(data.message || "This medical document upload link has expired. Please contact the hospital or request a new QR code.");
+            setIsInvalid(false);
+            setErrorMsg(data.message || "This QR code has expired (valid for 24 hours). Please contact Susruta Hospital or request a new QR code.");
           } else {
-            setErrorMsg(data.message || "This medical document upload link is invalid. Please contact the hospital for assistance.");
+            setIsInvalid(true);
+            setIsExpired(false);
+            setErrorMsg(data.message || "This QR code is invalid or not recognized. Please scan the QR code provided by Susruta Hospital.");
           }
           setTokenInfo(null);
         } else {
+          setIsExpired(false);
+          setIsInvalid(false);
           setTokenInfo(data);
         }
       })
@@ -131,8 +149,12 @@ export default function OfflineUploadPage() {
 
         const { uploadURL, objectPath } = await reqRes.json();
 
+        const resolvedUploadURL = uploadURL.startsWith("/api")
+          ? `${API_BASE}${uploadURL.replace(/^\/api/, "")}`
+          : uploadURL;
+
         // 2. Upload file content to storage
-        const putRes = await fetch(uploadURL, {
+        const putRes = await fetch(resolvedUploadURL, {
           method: "PUT",
           headers: { "Content-Type": file.type || "application/octet-stream" },
           body: file,
@@ -143,7 +165,7 @@ export default function OfflineUploadPage() {
         }
 
         // 3. Register document with backend QR token endpoint
-        const docRes = await fetch(`${API_BASE}/appointments/upload-documents/${token}/documents`, {
+        const docRes = await fetch(`${API_BASE}/appointments/upload-documents/${encodeURIComponent(token)}/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -253,22 +275,22 @@ export default function OfflineUploadPage() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-2xl w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* EXPIRED OR INVALID STATE */}
-        {(isExpired || (errorMsg && !tokenInfo)) && (
+        {(isExpired || isInvalid || (errorMsg && !tokenInfo)) && (
           <div className="bg-white rounded-2xl border border-red-200 p-5 sm:p-6 shadow-sm text-center space-y-4 my-4 sm:my-8">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
-              <AlertCircle size={24} className="sm:w-7 sm:h-7" />
+            <div className={`w-12 h-12 sm:w-14 sm:h-14 ${isExpired ? "bg-amber-50 text-amber-500" : "bg-red-50 text-red-500"} rounded-full flex items-center justify-center mx-auto`}>
+              {isExpired ? <Clock size={24} className="sm:w-7 sm:h-7 text-amber-500" /> : <AlertCircle size={24} className="sm:w-7 sm:h-7" />}
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                {!token ? "Invalid or Missing Upload Link" : isExpired ? "Upload Link Expired" : "Invalid Upload Link"}
+                {isExpired ? "QR Code Expired" : !token ? "Invalid or Missing Upload Link" : "Invalid QR Code"}
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-md mx-auto leading-relaxed">
-                {!token
-                  ? "Please scan the QR code provided by Susruta Hospital."
-                  : errorMsg ||
-                    (isExpired
-                      ? "This medical document upload link has expired. Please contact the hospital or request a new QR code."
-                      : "This medical document upload link is invalid. Please contact the hospital for assistance.")}
+                {errorMsg ||
+                  (!token
+                    ? "Please scan the QR code provided by Susruta Hospital."
+                    : isExpired
+                    ? "This QR code has expired (valid for 24 hours). Please contact Susruta Hospital or request a new QR code."
+                    : "This QR code is invalid or not recognized. Please scan the QR code provided by Susruta Hospital.")}
               </p>
             </div>
             <div className="p-3 sm:p-4 bg-slate-50 rounded-xl text-xs text-slate-500 font-medium">

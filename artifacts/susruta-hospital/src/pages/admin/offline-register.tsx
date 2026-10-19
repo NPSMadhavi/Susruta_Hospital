@@ -189,16 +189,11 @@ export default function AdminOfflineRegister() {
   useEffect(() => {
     if (!bookingResult) return;
     const tokenStr = bookingResult.uploadToken || "";
-    let uploadFullUrl = bookingResult.uploadUrl || "";
+    if (!tokenStr) return;
 
-    if (!uploadFullUrl) {
-      const baseUrl = window.location.origin;
-      uploadFullUrl = tokenStr
-        ? `${baseUrl}/portal/document-upload?token=${tokenStr}`
-        : `${baseUrl}/portal/document-upload`;
-    } else if (tokenStr && !uploadFullUrl.includes("token=")) {
-      uploadFullUrl = `${uploadFullUrl.split("?")[0]}?token=${tokenStr}`;
-    }
+    const baseUrl = window.location.origin;
+    const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const uploadFullUrl = `${baseUrl}${basePath}/portal/document-upload?token=${encodeURIComponent(tokenStr)}`;
 
     QRCode.toDataURL(uploadFullUrl, {
       width: 160,

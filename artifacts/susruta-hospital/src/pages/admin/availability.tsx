@@ -186,7 +186,7 @@ export default function AdminAvailability() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[#1E293B]">Offline Consultation Slots</h1>
-          <p className="text-xs text-[#64748B] mt-1">
+          <p className="text-sm text-[#64748B] mt-1">
             Manage slot availability, open months, custom day timings, and blocked dates.
           </p>
         </div>

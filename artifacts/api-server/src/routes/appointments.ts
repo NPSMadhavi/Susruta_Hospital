@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { randomBytes } from "crypto";
 import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable, prescriptionsTable } from "@workspace/db";
-import { eq, and, desc, ne, sql } from "drizzle-orm";
+import { eq, and, desc, ne, sql, inArray } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
 import { requireAdmin } from "../lib/auth";
@@ -107,7 +107,7 @@ function extractClinicalNotes(notes: string | null | undefined): string | null {
   return trimmed;
 }
 
-function serializeAppt(a: any) {
+function serializeAppt(a: any, uploadToken?: string | null, uploadUrl?: string | null) {
   let extra: any = {};
   let userNotes: string | null = extractClinicalNotes(a.notes);
   if (a.notes && typeof a.notes === "string" && a.notes.startsWith("{")) {
@@ -117,6 +117,7 @@ function serializeAppt(a: any) {
       if (parsed.amount) extra.amount = parsed.amount;
       if (parsed.patientCode) extra.patientCode = parsed.patientCode;
       if (parsed.paymentThrough) extra.paymentThrough = parsed.paymentThrough;
+      if (parsed.uploadToken) extra.uploadToken = parsed.uploadToken;
     } catch {}
   }
   if (!extra.amount) {
@@ -127,6 +128,9 @@ function serializeAppt(a: any) {
   }
   const patientCode = a.patientCode || extra.patientCode || null;
   extra.patientCode = patientCode;
+
+  const finalUploadToken = uploadToken || a.uploadToken || extra.uploadToken || null;
+  const finalUploadUrl = uploadUrl || a.uploadUrl || null;
 
   return {
     id: a.id,
@@ -149,6 +153,8 @@ function serializeAppt(a: any) {
     followUpDate: a.followUpDate ?? null,
     followUpConfirmed: !!a.followUpConfirmed,
     createdAt: a.createdAt?.toISOString() ?? null,
+    uploadToken: finalUploadToken,
+    uploadUrl: finalUploadUrl,
   };
 }
 
@@ -685,7 +691,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
   const uploadUrl = `${frontendUrl}/portal/document-upload?token=${uploadToken}`;
 
   const serialized = {
-    ...serializeAppt(appointment),
+    ...serializeAppt(appointment, uploadToken, uploadUrl),
     patientId: patient.id,
     patientCode: patient.patientCode,
     patientName: patient.name,
@@ -864,7 +870,7 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
   const uploadUrl = `${frontendUrl}/portal/document-upload?token=${uploadToken}`;
 
   const serialized = {
-    ...serializeAppt(appointment),
+    ...serializeAppt(appointment, uploadToken, uploadUrl),
     ...(linkedPatientCode ? { patientCode: linkedPatientCode } : {}),
     uploadToken,
     uploadUrl,
@@ -948,11 +954,78 @@ router.get("/", requireAdmin, async (req, res) => {
   let filtered = appts;
   if (month) filtered = appts.filter((a) => a.date.startsWith(month));
 
-  res.json(filtered.map(serializeAppt));
+  const apptIds = filtered.map((a) => a.id).filter(Boolean);
+  const qrRecords = apptIds.length > 0
+    ? await db
+        .select()
+        .from(offlineQrTokensTable)
+        .where(inArray(offlineQrTokensTable.appointmentId, apptIds))
+        .orderBy(desc(offlineQrTokensTable.id))
+    : [];
+
+  const tokenMap = new Map<number, string>();
+  for (const qr of qrRecords) {
+    if (!tokenMap.has(qr.appointmentId)) {
+      tokenMap.set(qr.appointmentId, qr.token);
+    }
+  }
+
+  const frontendUrl = getFrontendUrl(req);
+  const serializedList = await Promise.all(
+    filtered.map(async (a) => {
+      let uploadToken = tokenMap.get(a.id);
+      if (!uploadToken && a.notes && typeof a.notes === "string" && a.notes.includes("uploadToken")) {
+        try {
+          const parsed = JSON.parse(a.notes);
+          if (parsed.uploadToken && typeof parsed.uploadToken === "string") {
+            const tok: string = parsed.uploadToken;
+            uploadToken = tok;
+            if (a.patientId) {
+              const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              await db
+                .insert(offlineQrTokensTable)
+                .values({
+                  token: tok,
+                  patientId: a.patientId,
+                  appointmentId: a.id,
+                  expiresAt,
+                })
+                .onConflictDoNothing()
+                .catch(() => {});
+            }
+          }
+        } catch {}
+      }
+
+      if (!uploadToken && a.patientId) {
+        uploadToken = randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        try {
+          await db
+            .insert(offlineQrTokensTable)
+            .values({
+              token: uploadToken,
+              patientId: a.patientId,
+              appointmentId: a.id,
+              expiresAt,
+            })
+            .onConflictDoNothing();
+        } catch {}
+      }
+
+      const uploadUrl = uploadToken
+        ? `${frontendUrl}/portal/document-upload?token=${uploadToken}`
+        : null;
+
+      return serializeAppt(a, uploadToken, uploadUrl);
+    })
+  );
+
+  res.json(serializedList);
 });
 
 // ── Helper to fetch full appointment with patientCode ─────────
-async function getFullAppointment(id: number) {
+async function getFullAppointment(id: number, req?: any) {
   const [appt] = await db
     .select({
       id: appointmentsTable.id,
@@ -992,13 +1065,266 @@ async function getFullAppointment(id: number) {
     }
   }
 
-  return serializeAppt(appt);
+  // Look for latest upload token in offlineQrTokensTable
+  let [qrRecord] = await db
+    .select()
+    .from(offlineQrTokensTable)
+    .where(eq(offlineQrTokensTable.appointmentId, id))
+    .orderBy(desc(offlineQrTokensTable.id));
+
+  let uploadToken = qrRecord?.token || null;
+  if (!uploadToken && appt.notes && typeof appt.notes === "string" && appt.notes.includes("uploadToken")) {
+    try {
+      const parsed = JSON.parse(appt.notes);
+      if (parsed.uploadToken && typeof parsed.uploadToken === "string") {
+        const tok: string = parsed.uploadToken;
+        uploadToken = tok;
+        if (appt.patientId) {
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          await db
+            .insert(offlineQrTokensTable)
+            .values({
+              token: tok,
+              patientId: appt.patientId,
+              appointmentId: appt.id,
+              expiresAt,
+            })
+            .onConflictDoNothing()
+            .catch(() => {});
+        }
+      }
+    } catch {}
+  }
+
+  if (!uploadToken && appt.patientId) {
+    uploadToken = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    try {
+      await db
+        .insert(offlineQrTokensTable)
+        .values({
+          token: uploadToken,
+          patientId: appt.patientId,
+          appointmentId: appt.id,
+          expiresAt,
+        })
+        .onConflictDoNothing();
+    } catch {}
+  }
+
+  const frontendUrl = getFrontendUrl(req);
+  const uploadUrl = uploadToken
+    ? `${frontendUrl}/portal/document-upload?token=${uploadToken}`
+    : null;
+
+  return serializeAppt(appt, uploadToken, uploadUrl);
 }
 
+async function resolveQrRecord(rawToken: string) {
+  if (!rawToken || typeof rawToken !== "string") return null;
+  const tokenStr = rawToken.trim();
+  if (!tokenStr) return null;
+
+  // 1. Direct lookup in offlineQrTokensTable
+  let [qrRecord] = await db
+    .select()
+    .from(offlineQrTokensTable)
+    .where(eq(offlineQrTokensTable.token, tokenStr));
+
+  if (qrRecord) return qrRecord;
+
+  // 2. Safe fallback: check if any appointment notes JSON contains this exact uploadToken
+  const [candidateByNotes] = await db
+    .select()
+    .from(appointmentsTable)
+    .where(
+      and(
+        sql`notes LIKE '%' || ${tokenStr} || '%'`,
+        eq(appointmentsTable.deleteColumn, 0)
+      )
+    )
+    .limit(1);
+
+  if (candidateByNotes && candidateByNotes.patientId) {
+    let parsedNotes: any = null;
+    try {
+      parsedNotes = JSON.parse(candidateByNotes.notes || "{}");
+    } catch {}
+
+    if (parsedNotes && parsedNotes.uploadToken === tokenStr) {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const [inserted] = await db
+        .insert(offlineQrTokensTable)
+        .values({
+          token: tokenStr,
+          patientId: candidateByNotes.patientId,
+          appointmentId: candidateByNotes.id,
+          expiresAt,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (inserted) return inserted;
+
+      const [existing] = await db
+        .select()
+        .from(offlineQrTokensTable)
+        .where(eq(offlineQrTokensTable.token, tokenStr));
+      return existing || null;
+    }
+  }
+
+  return null;
+}
+
+// ── Temporary QR Code Medical Document Upload Verification ─────
+router.get([
+  "/upload-documents",
+  "/upload-documents/:token",
+  "/patient/offline-upload/:token",
+  "/portal/offline-upload/:token",
+  "/portal/document-upload",
+  "/portal/document-upload/:token"
+], async (req, res) => {
+  const token = (req.params.token || req.query.token) as string;
+  if (!token || typeof token !== "string" || !token.trim()) {
+    res.status(400).json({
+      valid: false,
+      error: "missing_token",
+      message: "Please scan the QR code provided by Susruta Hospital."
+    });
+    return;
+  }
+
+  const cleanToken = token.trim();
+  const qrRecord = await resolveQrRecord(cleanToken);
+
+  if (!qrRecord) {
+    res.status(404).json({
+      valid: false,
+      error: "invalid_token",
+      message: "This QR code is invalid or not recognized. Please scan the QR code provided by Susruta Hospital."
+    });
+    return;
+  }
+
+  if (qrRecord.expiresAt < new Date()) {
+    res.status(410).json({
+      valid: false,
+      error: "expired",
+      message: "This QR code has expired (valid for 24 hours). Please contact Susruta Hospital or request a new QR code."
+    });
+    return;
+  }
+
+  const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, qrRecord.patientId), eq(patientsTable.deleteColumn, 0)));
+  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
+
+  if (!patient || !appointment) {
+    res.status(404).json({
+      valid: false,
+      error: "invalid_token",
+      message: "This QR code is invalid or not recognized. Please contact Susruta Hospital."
+    });
+    return;
+  }
+
+  let tokenStr = "A-101";
+  try {
+    const parsed = JSON.parse(appointment.notes || "{}");
+    if (parsed.token) tokenStr = parsed.token;
+  } catch {}
+
+  res.json({
+    valid: true,
+    patientName: patient.name,
+    patientCode: patient.patientCode || `ID #${patient.id}`,
+    appointmentDate: appointment.date,
+    timeSlot: appointment.timeSlot,
+    token: tokenStr,
+    expiresAt: qrRecord.expiresAt,
+  });
+});
+
+// ── Temporary QR Code Medical Document Upload Submission ────────
+router.post([
+  "/upload-documents/documents",
+  "/upload-documents/:token/documents",
+  "/patient/offline-upload/:token/documents",
+  "/portal/offline-upload/:token/documents",
+  "/portal/document-upload/documents",
+  "/portal/document-upload/:token/documents"
+], async (req, res) => {
+  const token = (req.params.token || req.query.token || req.body.token) as string;
+  const { name, objectPath, contentType, size } = req.body;
+
+  if (!token || typeof token !== "string" || !token.trim()) {
+    res.status(400).json({ error: "missing_token", message: "Please scan the QR code provided by Susruta Hospital." });
+    return;
+  }
+
+  if (!name || !objectPath) {
+    res.status(400).json({ error: "missing_fields", message: "Document name and objectPath are required." });
+    return;
+  }
+
+  const cleanToken = token.trim();
+  const qrRecord = await resolveQrRecord(cleanToken);
+
+  if (!qrRecord) {
+    res.status(404).json({ error: "invalid_token", message: "This QR code is invalid or not recognized. Please scan the QR code provided by Susruta Hospital." });
+    return;
+  }
+
+  if (qrRecord.expiresAt < new Date()) {
+    res.status(410).json({
+      error: "expired",
+      message: "This QR code has expired (valid for 24 hours). Please contact Susruta Hospital or request a new QR code."
+    });
+    return;
+  }
+
+  const [doc] = await db.insert(patientDocumentsTable).values({
+    patientId: qrRecord.patientId,
+    name: String(name).trim(),
+    objectPath: String(objectPath).trim(),
+    contentType: String(contentType || "application/octet-stream").trim(),
+    size: Number(size) || 0,
+    deleteColumn: 0,
+  }).returning();
+
+  // Also record metadata in appointment.notes while preserving existing properties
+  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
+  if (appointment) {
+    let parsedNotes: any = {};
+    try {
+      parsedNotes = JSON.parse(appointment.notes || "{}");
+    } catch {
+      parsedNotes = { notes: appointment.notes || "" };
+    }
+    const existingDocs = Array.isArray(parsedNotes.documents) ? parsedNotes.documents : [];
+    existingDocs.push({
+      id: doc.id,
+      name: doc.name,
+      objectPath: doc.objectPath,
+      contentType: doc.contentType,
+      size: doc.size,
+    });
+    parsedNotes.documents = existingDocs;
+    if (!parsedNotes.uploadToken) {
+      parsedNotes.uploadToken = qrRecord.token;
+    }
+    await db.update(appointmentsTable).set({ notes: JSON.stringify(parsedNotes) }).where(eq(appointmentsTable.id, appointment.id));
+  }
+
+  res.json({ success: true, message: "Document uploaded successfully", document: doc });
+});
+
 // ── Admin: Get one ────────────────────────────────────────────
-router.get("/:id", requireAdmin, async (req, res) => {
+router.get("/:id", requireAdmin, async (req, res, next) => {
   const id = parseInt(req.params.id);
-  const serialized = await getFullAppointment(id);
+  if (isNaN(id)) { return next(); }
+  const serialized = await getFullAppointment(id, req);
   if (!serialized) { res.status(404).json({ error: "not_found" }); return; }
   res.json(serialized);
 });
@@ -1013,14 +1339,27 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   }
   const updates: Record<string, unknown> = {};
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
-  if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+  if (parsed.data.notes !== undefined) {
+    const [existing] = await db.select().from(appointmentsTable).where(eq(appointmentsTable.id, id));
+    if (existing && existing.notes && existing.notes.startsWith("{")) {
+      try {
+        const parsedExisting = JSON.parse(existing.notes);
+        parsedExisting.notes = parsed.data.notes;
+        updates.notes = JSON.stringify(parsedExisting);
+      } catch {
+        updates.notes = parsed.data.notes;
+      }
+    } else {
+      updates.notes = parsed.data.notes;
+    }
+  }
 
   const [updated] = await db.update(appointmentsTable).set(updates).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0))).returning();
   if (!updated) { res.status(404).json({ error: "not_found" }); return; }
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }
-  const serialized = await getFullAppointment(id);
+  const serialized = await getFullAppointment(id, req);
   res.json(serialized);
 });
 
@@ -1035,7 +1374,7 @@ router.patch("/:id/arrive", requireAdmin, async (req, res) => {
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }
-  const serialized = await getFullAppointment(id);
+  const serialized = await getFullAppointment(id, req);
   res.json(serialized);
 });
 
@@ -1090,7 +1429,7 @@ router.patch("/:id/pay", requireAdmin, async (req, res) => {
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }
-  const serialized = await getFullAppointment(id);
+  const serialized = await getFullAppointment(id, req);
   res.json(serialized);
 });
 
@@ -1109,7 +1448,7 @@ router.patch("/:id/reschedule", requireAdmin, async (req, res) => {
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }
-  const serialized = await getFullAppointment(id);
+  const serialized = await getFullAppointment(id, req);
   res.json(serialized);
 });
 
@@ -1126,7 +1465,7 @@ router.patch("/:id/followup", requireAdmin, async (req, res) => {
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }
-  const serialized = await getFullAppointment(id);
+  const serialized = await getFullAppointment(id, req);
   res.json(serialized);
 });
 
@@ -1147,168 +1486,5 @@ router.delete("/:id", requireAdmin, async (req, res) => {
   res.status(204).send();
 });
 
-async function resolveQrRecord(rawToken: string) {
-  if (!rawToken || typeof rawToken !== "string") return null;
-  const tokenStr = rawToken.trim();
-
-  // 1. Direct lookup in offlineQrTokensTable
-  let [qrRecord] = await db
-    .select()
-    .from(offlineQrTokensTable)
-    .where(eq(offlineQrTokensTable.token, tokenStr));
-
-  if (qrRecord) return qrRecord;
-
-  // 2. Fallback lookup by appointment ID or notes payload
-  let candidateAppt: any = null;
-  const numId = parseInt(tokenStr, 10);
-  if (!isNaN(numId) && numId > 0) {
-    [candidateAppt] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, numId), eq(appointmentsTable.deleteColumn, 0)));
-  }
-  if (!candidateAppt) {
-    const [byNotes] = await db.select().from(appointmentsTable).where(and(sql`notes LIKE '%' || ${tokenStr} || '%'`, eq(appointmentsTable.deleteColumn, 0)));
-    candidateAppt = byNotes;
-  }
-
-  if (candidateAppt && candidateAppt.patientId) {
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const [inserted] = await db
-      .insert(offlineQrTokensTable)
-      .values({
-        token: tokenStr,
-        patientId: candidateAppt.patientId,
-        appointmentId: candidateAppt.id,
-        expiresAt,
-      })
-      .returning();
-    return inserted;
-  }
-
-  return null;
-}
-
-// ── Temporary QR Code Medical Document Upload Verification ─────
-router.get([
-  "/upload-documents",
-  "/upload-documents/:token",
-  "/patient/offline-upload/:token",
-  "/portal/offline-upload/:token",
-  "/portal/document-upload",
-  "/portal/document-upload/:token"
-], async (req, res) => {
-  const token = (req.params.token || req.query.token) as string;
-  if (!token || typeof token !== "string") {
-    res.status(400).json({ valid: false, error: "invalid_token", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
-    return;
-  }
-
-  const qrRecord = await resolveQrRecord(token);
-
-  if (!qrRecord) {
-    res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
-    return;
-  }
-
-  if (qrRecord.expiresAt < new Date()) {
-    res.status(410).json({
-      valid: false,
-      error: "expired",
-      message: "This medical document upload link has expired. Please contact the hospital or request a new QR code."
-    });
-    return;
-  }
-
-  const [patient] = await db.select().from(patientsTable).where(and(eq(patientsTable.id, qrRecord.patientId), eq(patientsTable.deleteColumn, 0)));
-  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
-
-  if (!patient || !appointment) {
-    res.status(404).json({ valid: false, error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
-    return;
-  }
-
-  let tokenStr = "A-101";
-  try {
-    const parsed = JSON.parse(appointment.notes || "{}");
-    if (parsed.token) tokenStr = parsed.token;
-  } catch {}
-
-  res.json({
-    valid: true,
-    patientName: patient.name,
-    patientCode: patient.patientCode || `ID #${patient.id}`,
-    appointmentDate: appointment.date,
-    timeSlot: appointment.timeSlot,
-    token: tokenStr,
-    expiresAt: qrRecord.expiresAt,
-  });
-});
-
-// ── Temporary QR Code Medical Document Upload Submission ────────
-router.post([
-  "/upload-documents/documents",
-  "/upload-documents/:token/documents",
-  "/patient/offline-upload/:token/documents",
-  "/portal/offline-upload/:token/documents",
-  "/portal/document-upload/documents",
-  "/portal/document-upload/:token/documents"
-], async (req, res) => {
-  const token = (req.params.token || req.query.token || req.body.token) as string;
-  const { name, objectPath, contentType, size } = req.body;
-
-  if (!token || typeof token !== "string") {
-    res.status(400).json({ error: "invalid_token", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
-    return;
-  }
-
-  if (!name || !objectPath) {
-    res.status(400).json({ error: "missing_fields", message: "Document name and objectPath are required." });
-    return;
-  }
-
-  const qrRecord = await resolveQrRecord(token);
-
-  if (!qrRecord) {
-    res.status(404).json({ error: "not_found", message: "This medical document upload link is invalid. Please contact the hospital for assistance." });
-    return;
-  }
-
-  if (qrRecord.expiresAt < new Date()) {
-    res.status(410).json({
-      error: "expired",
-      message: "This medical document upload link has expired. Please contact the hospital or request a new QR code."
-    });
-    return;
-  }
-
-  const [doc] = await db.insert(patientDocumentsTable).values({
-    patientId: qrRecord.patientId,
-    name: String(name).trim(),
-    objectPath: String(objectPath).trim(),
-    contentType: String(contentType || "application/octet-stream").trim(),
-    size: Number(size) || 0,
-    deleteColumn: 0,
-  }).returning();
-
-  // Also record metadata in appointment.notes
-  const [appointment] = await db.select().from(appointmentsTable).where(and(eq(appointmentsTable.id, qrRecord.appointmentId), eq(appointmentsTable.deleteColumn, 0)));
-  if (appointment) {
-    let parsedNotes: any = {};
-    try {
-      parsedNotes = JSON.parse(appointment.notes || "{}");
-    } catch {}
-    const existingDocs = Array.isArray(parsedNotes.documents) ? parsedNotes.documents : [];
-    existingDocs.push({
-      id: doc.id,
-      name: doc.name,
-      objectPath: doc.objectPath,
-      contentType: doc.contentType,
-      size: doc.size,
-    });
-    parsedNotes.documents = existingDocs;
-    await db.update(appointmentsTable).set({ notes: JSON.stringify(parsedNotes) }).where(eq(appointmentsTable.id, appointment.id));
-  }
-
-  res.json({ success: true, message: "Document uploaded successfully", document: doc });
-});
-
 export default router;
+

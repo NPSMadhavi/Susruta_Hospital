@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Heart, CheckCircle2, Clock, Mail, MailCheck, ChevronDown, IndianRupee, Search, RefreshCw, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -28,9 +29,11 @@ function fmtDate(iso: string) {
 }
 
 export default function AdminDonations() {
+  const PAGE_SIZE = 10;
   const now = new Date();
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [filterMonth, setFilterMonth] = useState<number>(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState<number>(now.getFullYear());
   const [allTime, setAllTime] = useState(false);
@@ -92,6 +95,10 @@ export default function AdminDonations() {
     setTimeout(() => setToasting(null), 3500);
   }
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterMonth, filterYear, allTime]);
+
   const filtered = donations.filter(d => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -102,6 +109,8 @@ export default function AdminDonations() {
       d.amount.includes(q)
     );
   });
+
+  const paginatedDonations = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const totalAmount = filtered
     .filter(d => d.status === "verified")
@@ -217,7 +226,7 @@ export default function AdminDonations() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className={cn("bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col", filtered.length > PAGE_SIZE && "min-h-[580px]")}>
         {loading ? (
           <div className="py-16 text-center text-gray-400 text-sm">Loading donations…</div>
         ) : filtered.length === 0 ? (
@@ -231,77 +240,86 @@ export default function AdminDonations() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Patient</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Amount</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Txn Last 6</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(d => (
-                  <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        {d.patientCode && (
-                          <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">
-                            {d.patientCode}
-                          </span>
-                        )}
-                        <div>
-                          <p className="font-semibold text-gray-800">{d.patientName || "—"}</p>
-                          <p className="text-xs text-gray-400">{d.patientEmail || "—"}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-base font-black text-emerald-700">₹{d.amount}</span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="font-mono font-semibold text-gray-700 tracking-widest">xxxxxx{d.lastSixDigits}</span>
-                    </td>
-                    <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{fmtDate(d.createdAt)}</td>
-                    <td className="px-5 py-4">
-                      <button onClick={() => toggleVerify(d)}
-                        className="flex items-center gap-2 cursor-pointer group select-none">
-                        <div className={cn(
-                          "relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0",
-                          d.status === "verified" ? "bg-emerald-600" : "bg-gray-200 group-hover:bg-gray-300"
-                        )}>
-                          <div className={cn(
-                            "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
-                            d.status === "verified" ? "translate-x-5" : "translate-x-1"
-                          )} />
-                        </div>
-                        <span className={cn("text-xs font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
-                          {d.status === "verified" ? "Received" : "Not Received"}
-                        </span>
-                      </button>
-                    </td>
-                    <td className="px-5 py-4">
-                      <button
-                        onClick={() => !d.thankYouSent && sendThankYou(d)}
-                        disabled={d.thankYouSent}
-                        className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
-                          d.thankYouSent
-                            ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
-                            : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
-                        )}>
-                        {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
-                        {d.thankYouSent ? "Sent" : "Send Thanks"}
-                      </button>
-                    </td>
+          <>
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Patient</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Amount</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Txn Last 6</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Date</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Status</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paginatedDonations.map(d => (
+                    <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          {d.patientCode && (
+                            <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2 py-1 shrink-0">
+                              {d.patientCode}
+                            </span>
+                          )}
+                          <div>
+                            <p className="font-semibold text-gray-800">{d.patientName || "—"}</p>
+                            <p className="text-xs text-gray-400">{d.patientEmail || "—"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-base font-black text-emerald-700">₹{d.amount}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="font-mono font-semibold text-gray-700 tracking-widest">xxxxxx{d.lastSixDigits}</span>
+                      </td>
+                      <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{fmtDate(d.createdAt)}</td>
+                      <td className="px-5 py-4">
+                        <button onClick={() => toggleVerify(d)}
+                          className="flex items-center gap-2 cursor-pointer group select-none">
+                          <div className={cn(
+                            "relative w-10 h-6 rounded-full transition-colors duration-200 shrink-0",
+                            d.status === "verified" ? "bg-emerald-600" : "bg-gray-200 group-hover:bg-gray-300"
+                          )}>
+                            <div className={cn(
+                              "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+                              d.status === "verified" ? "translate-x-5" : "translate-x-1"
+                            )} />
+                          </div>
+                          <span className={cn("text-xs font-semibold", d.status === "verified" ? "text-green-700" : "text-gray-400")}>
+                            {d.status === "verified" ? "Received" : "Not Received"}
+                          </span>
+                        </button>
+                      </td>
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => !d.thankYouSent && sendThankYou(d)}
+                          disabled={d.thankYouSent}
+                          className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+                            d.thankYouSent
+                              ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
+                              : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
+                          )}>
+                          {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
+                          {d.thankYouSent ? "Sent" : "Send Thanks"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCurrentPage}
+              itemLabel="donations"
+            />
+          </>
         )}
       </div>
     </AdminLayout>

@@ -3,6 +3,8 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Users, Search, BadgeCheck, Clock, Phone, Mail, Send, Trash2, Loader2, RefreshCw, Video, PhoneOff, Monitor, Pencil, Save, AlertTriangle, MapPin } from "lucide-react";
 import { AdminVideoRoom } from "@/components/VideoCall";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api/admin`;
@@ -370,9 +372,11 @@ function EditPatientDialog({
 }
 
 export default function AdminPatients() {
+  const PAGE_SIZE = 10;
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<Record<number, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<Patient | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -467,6 +471,10 @@ export default function AdminPatients() {
     return () => clearInterval(interval);
   }, [activeCalls.length, fetchActiveCalls]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   const filtered = patients.filter(p => {
     const q = search.toLowerCase();
     return (
@@ -476,6 +484,8 @@ export default function AdminPatients() {
       (p.patientCode ?? "").toLowerCase().includes(q)
     );
   });
+
+  const paginatedPatients = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function resendVerification(p: Patient) {
     if (!p.email) return;
@@ -720,138 +730,147 @@ export default function AdminPatients() {
           <p className="text-sm">{search ? "No patients match your search." : "No registered patients yet."}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-border overflow-x-auto">
-          <table className="w-full text-sm min-w-[1050px]">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Patient ID</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Name</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Age/Gender</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden md:table-cell whitespace-nowrap">Contact</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden lg:table-cell whitespace-nowrap">Registered</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[140px]">Status</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[340px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.map(p => (
-                <tr
-                  key={p.id}
-                  onClick={() => setViewingPatient(p)}
-                  className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                >
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    {p.patientCode
-                      ? <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">{p.patientCode}</span>
-                      : <span className="text-muted-foreground text-xs italic">—</span>
-                    }
-                  </td>
-                  <td className="px-5 py-4">
-                    <p className="font-semibold text-foreground break-words whitespace-normal max-w-[220px] leading-snug group-hover:text-primary transition-colors">{p.name}</p>
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold text-gray-700">
-                    {p.age || p.gender ? `${p.age ?? "--"}/${p.gender ?? "--"}` : "—"}
-                  </td>
-                  <td className="px-5 py-4 hidden md:table-cell">
-                    <div className="space-y-0.5 min-w-0 max-w-[240px]">
-                      {p.email && (
-                        <p className="flex items-center gap-1.5 text-muted-foreground truncate">
-                          <Mail size={12} className="shrink-0" /> {p.email}
-                        </p>
-                      )}
-                      {p.phone && (
-                        <p className="flex items-center gap-1.5 text-muted-foreground truncate font-mono text-xs">
-                          <Phone size={12} className="shrink-0" /> {formatDisplayPhone(p.phone)}
-                        </p>
-                      )}
-                      {p.address && (
-                        <p className="text-xs text-muted-foreground/80 truncate">
-                          📍 {p.address}
-                        </p>
-                      )}
-                      {!p.email && !p.phone && !p.address && (
-                        <span className="text-muted-foreground text-xs italic">—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 hidden lg:table-cell text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <Clock size={12} /> {fmtDate(p.createdAt)}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap min-w-[140px]">
-                    {p.email ? (
-                      p.emailVerified ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 shrink-0">
-                          <BadgeCheck size={12} /> Verified
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 shrink-0">
-                          <Clock size={12} /> Unverified
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-muted-foreground text-sm font-semibold px-2">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap min-w-[340px]" onClick={e => e.stopPropagation()}>
-                     <div className="flex items-center gap-2 whitespace-nowrap">
-                       <button
-                         onClick={(e) => { e.stopPropagation(); setEditingPatient(p); }}
-                         disabled={!!actionLoading[p.id]}
-                         title={`Edit ${p.name}`}
-                         aria-label={`Edit ${p.name}`}
-                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                       >
-                         <Pencil size={12} />
-                         <span>Edit</span>
-                       </button>
-                      {p.email && !p.emailVerified && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); resendVerification(p); }}
-                          disabled={!!actionLoading[p.id]}
-                          title="Resend verification email"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                        >
-                          {actionLoading[p.id] === "resend"
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <Send size={12} />
-                          }
-                          <span>Resend Email</span>
-                        </button>
-                      )}
-                      {p.email && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); startDirectCall(p); }}
-                          disabled={!!actionLoading[p.id] || activeCalls.length > 0}
-                          title={activeCalls.length > 0 ? "End the active direct call before starting another" : `Start a direct video call with ${p.name}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                        >
-                          {actionLoading[p.id] === "call"
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <Video size={12} />
-                          }
-                          <span>Call Patient</span>
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
-                        disabled={!!actionLoading[p.id]}
-                        title="Delete patient"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        {actionLoading[p.id] === "delete"
-                          ? <Loader2 size={12} className="animate-spin" />
-                          : <Trash2 size={12} />
-                        }
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </td>
+        <div className={cn("bg-white rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col", filtered.length > PAGE_SIZE && "min-h-[580px]")}>
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-sm min-w-[1050px]">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Patient ID</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Name</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap">Age/Gender</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden md:table-cell whitespace-nowrap">Contact</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider hidden lg:table-cell whitespace-nowrap">Registered</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[140px]">Status</th>
+                  <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs tracking-wider whitespace-nowrap min-w-[340px]">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginatedPatients.map(p => (
+                  <tr
+                    key={p.id}
+                    onClick={() => setViewingPatient(p)}
+                    className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                  >
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      {p.patientCode
+                        ? <span className="text-sm font-black text-[#D95B2F] font-mono tracking-widest bg-[#D95B2F1A] border border-[#1a3d2b]/15 rounded-lg px-2.5 py-1 inline-block shrink-0">{p.patientCode}</span>
+                        : <span className="text-muted-foreground text-xs italic">—</span>
+                      }
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-foreground break-words whitespace-normal max-w-[220px] leading-snug group-hover:text-primary transition-colors">{p.name}</p>
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold text-gray-700">
+                      {p.age || p.gender ? `${p.age ?? "--"}/${p.gender ?? "--"}` : "—"}
+                    </td>
+                    <td className="px-5 py-4 hidden md:table-cell">
+                      <div className="space-y-0.5 min-w-0 max-w-[240px]">
+                        {p.email && (
+                          <p className="flex items-center gap-1.5 text-muted-foreground truncate">
+                            <Mail size={12} className="shrink-0" /> {p.email}
+                          </p>
+                        )}
+                        {p.phone && (
+                          <p className="flex items-center gap-1.5 text-muted-foreground truncate font-mono text-xs">
+                            <Phone size={12} className="shrink-0" /> {formatDisplayPhone(p.phone)}
+                          </p>
+                        )}
+                        {p.address && (
+                          <p className="text-xs text-muted-foreground/80 truncate">
+                            📍 {p.address}
+                          </p>
+                        )}
+                        {!p.email && !p.phone && !p.address && (
+                          <span className="text-muted-foreground text-xs italic">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 hidden lg:table-cell text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={12} /> {fmtDate(p.createdAt)}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap min-w-[140px]">
+                      {p.email ? (
+                        p.emailVerified ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 shrink-0">
+                            <BadgeCheck size={12} /> Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 shrink-0">
+                            <Clock size={12} /> Unverified
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground text-sm font-semibold px-2">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap min-w-[340px]" onClick={e => e.stopPropagation()}>
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <button
+                           onClick={(e) => { e.stopPropagation(); setEditingPatient(p); }}
+                           disabled={!!actionLoading[p.id]}
+                           title={`Edit ${p.name}`}
+                           aria-label={`Edit ${p.name}`}
+                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                         >
+                           <Pencil size={12} />
+                           <span>Edit</span>
+                         </button>
+                        {p.email && !p.emailVerified && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); resendVerification(p); }}
+                            disabled={!!actionLoading[p.id]}
+                            title="Resend verification email"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            {actionLoading[p.id] === "resend"
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <Send size={12} />
+                            }
+                            <span>Resend Email</span>
+                          </button>
+                        )}
+                        {p.email && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); startDirectCall(p); }}
+                            disabled={!!actionLoading[p.id] || activeCalls.length > 0}
+                            title={activeCalls.length > 0 ? "End the active direct call before starting another" : `Start a direct video call with ${p.name}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            {actionLoading[p.id] === "call"
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <Video size={12} />
+                            }
+                            <span>Call Patient</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
+                          disabled={!!actionLoading[p.id]}
+                          title="Delete patient"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          {actionLoading[p.id] === "delete"
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : <Trash2 size={12} />
+                          }
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <AdminPagination
+            currentPage={currentPage}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            itemLabel="patients"
+          />
         </div>
       )}
     </AdminLayout>

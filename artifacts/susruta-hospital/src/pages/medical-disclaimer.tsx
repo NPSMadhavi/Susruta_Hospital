@@ -40,8 +40,8 @@ export default function MedicalDisclaimer() {
           {/* Title */}
           <div className="flex items-center gap-3 mb-8">
 
-            <div className="w-12 h-12 rounded-2xl bg-[#1a3d2b]/10 flex items-center justify-center">
-              <Shield size={22} className="text-[#1a3d2b]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#D95B2F]/10 flex items-center justify-center">
+              <Shield size={22} className="text-[#D95B2F]" />
             </div>
 
             <div>
@@ -61,7 +61,7 @@ export default function MedicalDisclaimer() {
             {/* Section 1 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   1
                 </span>
                 Purpose of Data Collection
@@ -94,7 +94,7 @@ export default function MedicalDisclaimer() {
             {/* Section 2 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   2
                 </span>
                 Nature of Data Collected
@@ -131,7 +131,7 @@ export default function MedicalDisclaimer() {
             {/* Section 3 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   3
                 </span>
                 Consent
@@ -160,7 +160,7 @@ export default function MedicalDisclaimer() {
             {/* Section 4 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   4
                 </span>
                 Confidentiality & Data Protection
@@ -189,7 +189,7 @@ export default function MedicalDisclaimer() {
             {/* Section 5 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   5
                 </span>
                 Data Storage & Access
@@ -214,7 +214,7 @@ export default function MedicalDisclaimer() {
             {/* Section 6 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   6
                 </span>
                 Cross-Border Use
@@ -228,7 +228,7 @@ export default function MedicalDisclaimer() {
             {/* Section 7 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   7
                 </span>
                 Medical Disclaimer
@@ -257,7 +257,7 @@ export default function MedicalDisclaimer() {
             {/* Section 8 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   8
                 </span>
                 Limitation of Liability
@@ -286,7 +286,7 @@ export default function MedicalDisclaimer() {
             {/* Section 9 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   9
                 </span>
                 Updates to Policy
@@ -300,7 +300,7 @@ export default function MedicalDisclaimer() {
             {/* Section 10 */}
             <section>
               <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
                   10
                 </span>
                 Contact

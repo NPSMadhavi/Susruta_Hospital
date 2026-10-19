@@ -52,21 +52,24 @@ export function AdminPagination({
 
   const totalPages = Math.ceil(totalItems / pageSize);
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
-  const startItem = (safeCurrentPage - 1) * pageSize + 1;
-  const endItem = Math.min(safeCurrentPage * pageSize, totalItems);
   const pageNumbers = getPageNumbers(safeCurrentPage, totalPages);
+
+  React.useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      onPageChange(totalPages);
+    }
+  }, [currentPage, totalPages, onPageChange]);
 
   return (
     <div
       className={cn(
-        "flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-border bg-white text-xs text-muted-foreground",
+        "flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-border bg-white text-xs text-muted-foreground mt-auto shrink-0 w-full",
         className
       )}
     >
       <div>
-        Showing <strong className="font-semibold text-foreground">{startItem}</strong> to{" "}
-        <strong className="font-semibold text-foreground">{endItem}</strong> of{" "}
-        <strong className="font-semibold text-foreground">{totalItems}</strong> {itemLabel}
+        Page <strong className="font-semibold text-foreground">{safeCurrentPage}</strong> of{" "}
+        <strong className="font-semibold text-foreground">{totalPages}</strong>
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -131,3 +134,4 @@ export function AdminPagination({
     </div>
   );
 }
+export { AdminPagination as Pagination };

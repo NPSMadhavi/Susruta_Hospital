@@ -7,7 +7,7 @@ import {
   Download, Heart, QrCode, X,
   AlertCircle, Phone, ChevronDown, ChevronUp,
   Bell, ImageIcon, Loader2, Trash2, Upload, Camera, FolderOpen,
-  Mic, VideoIcon, ShieldCheck, LayoutDashboard, RotateCcw, Eye, Search,
+  Mic, VideoIcon, ShieldCheck, LayoutDashboard, Footprints, Eye, Search,
 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -719,6 +719,8 @@ export default function PatientDashboard() {
   const sessionEndedRef = useRef(false);
   const videoCallDirectIdRef = useRef<number | null>(null);
   videoCallDirectIdRef.current = videoCallDirectId;
+  const videoCallApptIdRef = useRef<number | null>(null);
+  videoCallApptIdRef.current = videoCallApptId;
 
   async function patientFetch(path: string, opts?: RequestInit) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
@@ -781,6 +783,16 @@ export default function PatientDashboard() {
         setDirectCallPopup(activeDirect);
       }
       phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
+
+      // If patient is currently in a call but appointment was completed or ended by doctor
+      if (videoCallApptIdRef.current) {
+        const activeAppt = myOnline?.find((a: any) => a.id === videoCallApptIdRef.current);
+        if (activeAppt && (!activeAppt.joinEnabled || activeAppt.status === "completed")) {
+          const endedId = videoCallApptIdRef.current;
+          setVideoCallApptId(null);
+          setDonationPopup({ apptId: endedId, qrObjectPath: settings?.phonepeQrObjectPath ?? phonepeQrRef.current });
+        }
+      }
     } catch (err) {
       console.error("[PatientDashboard] Error loading data:", err);
     } finally {
@@ -1050,79 +1062,40 @@ export default function PatientDashboard() {
 
       {videoCallApptId && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-          <div className="h-14 px-4 flex items-center justify-between bg-[#1c1c1e] border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-              <p className="text-white text-sm font-bold">Consultation with Dr. P. Murali Krishna</p>
-            </div>
-            <button
-              onClick={() => {
-                const endedId = videoCallApptId;
-                setVideoCallApptId(null);
-                setDonationPopup({ apptId: endedId, qrObjectPath: phonepeQrRef.current });
-              }}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors"
-            >
-              Leave Call
-            </button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <VideoCall
-              apptId={videoCallApptId}
-              role="patient"
-              autoJoin
-              onCallEnded={() => {
-                const endedId = videoCallApptId;
-                setVideoCallApptId(null);
-                setDonationPopup({ apptId: endedId, qrObjectPath: phonepeQrRef.current });
-              }}
-              className="h-full rounded-none border-0"
-            />
-          </div>
+          <VideoCall
+            apptId={videoCallApptId}
+            role="patient"
+            autoJoin
+            title="Consultation with Dr. P. Murali Krishna"
+            onCallEnded={() => {
+              const endedId = videoCallApptId;
+              setVideoCallApptId(null);
+              setDonationPopup({ apptId: endedId, qrObjectPath: phonepeQrRef.current });
+            }}
+            className="w-full h-full rounded-none border-0"
+          />
         </div>
       )}
 
       {videoCallDirectId && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-          <div className="h-14 px-4 flex items-center justify-between bg-[#1c1c1e] border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-              <p className="text-white text-sm font-bold">Direct Consultation with Dr. P. Murali Krishna</p>
-            </div>
-            <button
-              onClick={() => {
-                const leavingId = videoCallDirectId;
-                setVideoCallDirectId(null);
-                if (leavingId) {
-                  fetch(`${BASE}/api/direct-calls/${leavingId}/patient-leave`, {
-                    method: "POST",
-                    credentials: "include",
-                  }).catch(() => {});
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors"
-            >
-              Leave Call
-            </button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <VideoCall
-              directCallId={videoCallDirectId}
-              role="patient"
-              autoJoin
-              onCallEnded={() => {
-                const leavingId = videoCallDirectId;
-                setVideoCallDirectId(null);
-                if (leavingId) {
-                  fetch(`${BASE}/api/direct-calls/${leavingId}/patient-leave`, {
-                    method: "POST",
-                    credentials: "include",
-                  }).catch(() => {});
-                }
-              }}
-              className="h-full rounded-none border-0"
-            />
-          </div>
+          <VideoCall
+            directCallId={videoCallDirectId}
+            role="patient"
+            autoJoin
+            title="Direct Consultation with Dr. P. Murali Krishna"
+            onCallEnded={() => {
+              const leavingId = videoCallDirectId;
+              setVideoCallDirectId(null);
+              if (leavingId) {
+                fetch(`${BASE}/api/direct-calls/${leavingId}/patient-leave`, {
+                  method: "POST",
+                  credentials: "include",
+                }).catch(() => {});
+              }
+            }}
+            className="w-full h-full rounded-none border-0"
+          />
         </div>
       )}
 
@@ -1298,9 +1271,9 @@ export default function PatientDashboard() {
                   <span className="font-bold text-[#D95B2F] bg-red-50 border border-red-100 px-2.5 py-0.5 rounded-full">
                     Patient ID: {patient?.patientCode || "A005"}
                   </span>
-                  <span className="text-gray-400">
+                  {/* <span className="text-gray-400">
                     Last updated: Today, {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
+                  </span> */}
                 </div>
               </div>
               {patient?.emailVerified && (
@@ -1337,7 +1310,7 @@ export default function PatientDashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-bold font-sans text-gray-800 text-sm">Total Visits</h3>
                     <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                      <RotateCcw size={18} />
+                      <Footprints  size={18} />
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 mt-3">
@@ -1375,56 +1348,80 @@ export default function PatientDashboard() {
               </div>
 
               <div className="space-y-3">
-                {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 0 ? (
-                  allAppointments.filter(a => isUpcoming(a.date, a.data.status)).map((item, i) => {
-                    const isOnline = item.type === "online";
-                    const date = item.date;
-                    const status = item.data.status;
-                    return (
-                      <div key={i} className="bg-gray-50/80 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 border border-[#EDEFEB]">
-                        <div className="flex items-center gap-3.5">
-                          <div className="w-11 h-11 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                            <User size={20} />
-                          </div>
-                          <div>
-                            <p className="font-bold text-base font-sans text-gray-900">Dr. P. Murali Krishna</p>
-                            <p className="text-xs font-sans text-gray-500 mt-0.5">{isOnline ? "General Ayurveda (Online)" : "In-Person Consultation"}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 ml-auto sm:ml-0">
-                          <span className="text-xs font-bold font-sans text-gray-700 whitespace-nowrap">
-                            {fmtDateShort(date)} • {isOnline ? ((item.data as OnlineAppt).slot?.startTime ? (item.data as OnlineAppt).slot.startTime : "10:00 AM") : "02:30 PM"}
-                          </span>
-                          {isOnline && (item.data as OnlineAppt).joinEnabled ? (
-                            <button
-                              onClick={() => setVideoCallApptId(item.data.id)}
-                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold transition-all shadow-md animate-pulse flex items-center gap-1.5"
-                            >
-                              <Video size={13} /> Join Call
-                            </button>
-                          ) : (
-                            <span className={cn(
-                              "text-xs font-bold font-sans px-3 py-1 rounded-full border capitalize",
-                              status === "confirmed"
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                : "bg-amber-100 text-amber-800 border-amber-200"
-                            )}>
-                              {status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="py-8 text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                    <Calendar size={32} className="mx-auto mb-2 text-gray-400" />
-                    <p className="font-bold text-sm font-sans text-gray-700">No upcoming appointments scheduled</p>
-                    <p className="text-xs font-sans text-gray-500 mt-1 mb-3">Book a consultation with Dr. P. Murali Krishna</p>
-                    
-                  </div>
-                )}
+  {allAppointments.filter(a => isUpcoming(a.date, a.data.status)).length > 0 ? (
+    allAppointments
+      .filter(a => isUpcoming(a.date, a.data.status))
+      .map((item, i) => {
+        const isOnline = item.type === "online";
+        const date = item.date;
+        const status = item.data.status;
+
+        return (
+          <div
+            key={i}
+            className="bg-gray-50/80 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 border border-[#EDEFEB]"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <User size={20} />
               </div>
+
+              <div>
+                <p className="font-bold text-base font-sans text-gray-900">
+                  Dr. P. Murali Krishna
+                </p>
+
+                <p className="text-xs font-sans text-gray-500 mt-0.5">
+                  {isOnline
+                    ? "Online Consultation"
+                    : "Offline Consultation"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 ml-auto sm:ml-0">
+              <span className="text-xs font-bold font-sans text-gray-700 whitespace-nowrap">
+                {fmtDateShort(date)} • {appointmentTime(item)}
+              </span>
+
+              {isOnline && (item.data as OnlineAppt).joinEnabled ? (
+                <button
+                  onClick={() => setVideoCallApptId(item.data.id)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold transition-all shadow-md animate-pulse flex items-center gap-1.5"
+                >
+                  <Video size={13} />
+                  Join Call
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "text-xs font-bold font-sans px-3 py-1 rounded-full border capitalize",
+                    status === "confirmed"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                      : "bg-amber-100 text-amber-800 border-amber-200"
+                  )}
+                >
+                  {status}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })
+  ) : (
+    <div className="py-8 text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+      <Calendar size={32} className="mx-auto mb-2 text-gray-400" />
+
+      <p className="font-bold text-sm font-sans text-gray-700">
+        No upcoming appointments scheduled
+      </p>
+
+      <p className="text-xs font-sans text-gray-500 mt-1 mb-3">
+        Book a consultation with Dr. P. Murali Krishna
+      </p>
+    </div>
+  )}
+</div>
             </div>
 
             {/* Row 3: Recent Prescriptions */}
@@ -1467,7 +1464,7 @@ export default function PatientDashboard() {
                             <button
                               type="button"
                               onClick={() => handleDownloadPhotoPrescription(photoPath, `Prescription_${fmtDateShort(appt.apptDate).replace(/\s+/g, "_")}.pdf`)}
-                              className="px-3 py-1 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-black transition-colors hover:bg-orange-50"
                             >
                               <Download size={12} /> Download
                             </button>
@@ -1496,7 +1493,7 @@ export default function PatientDashboard() {
                                 time: appt.timeLabel,
                                 prescription: appt.prescription,
                               })}
-                              className="px-3 py-1 bg-[#D95B2F]/10 hover:bg-[#D95B2F]/20 text-[#D95B2F] rounded-lg text-xs font-bold font-sans transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-black transition-colors hover:bg-orange-50"
                             >
                               <Download size={12} /> Download
                             </button>
@@ -1533,45 +1530,62 @@ export default function PatientDashboard() {
                      </div>
             <section aria-labelledby="upcoming-appointments-heading">
               <h2 id="upcoming-appointments-heading" className="mb-[18px] flex items-center gap-3 text-[20px] font-bold leading-5 text-[#242424]"> Upcoming Appointments</h2>
-              <div className="space-y-3">
-                {pagedUpcoming.items.map(item => (
-                  <div key={item.type + item.data.id} className="flex min-h-16 flex-wrap items-center gap-4 rounded-[13px] border border-[#ffb29b] bg-white py-[11px] pl-[18px] pr-[17px]">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f6eae6] text-[#b9380d]">{item.type === "online" ? <Video size={17} fill="currentColor" strokeWidth={1.5} /> : <MapPin size={17} />}</div>
-                    <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:ml-[19px]"><p className="text-base font-bold text-black">{fmtDateShort(item.date)}</p><p className="text-sm text-black">{appointmentTime(item)} · {item.type === "online" ? "Online Consultation" : "Offline Consultation"}</p></div>
-                    <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></div>
-                  </div>
-                ))}
-                {upcomingCount === 0 && <p className="rounded-[13px] border border-[#eee8e3] p-5 text-sm text-gray-500">No upcoming appointments scheduled</p>}
+              <div className={cn("flex flex-col", upcomingAppointments.length > PORTAL_PAGE_SIZE && "min-h-[580px]")}>
+                <div className="space-y-3 flex-1">
+                  {pagedUpcoming.items.map(item => (
+                    <div key={item.type + item.data.id} className="flex min-h-16 flex-wrap items-center gap-4 rounded-[13px] border border-[#ffb29b] bg-white py-[11px] pl-[18px] pr-[17px]">
+                      <div
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-full",
+                          item.type === "online"
+                            ? "bg-blue-50 text-blue-500"
+                            : "bg-orange-50 text-[#D95B2F]"
+                        )}
+                      >
+                        {item.type === "online" ? (
+                          <Video size={20} />
+                        ) : (
+                          <MapPin size={20} />
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:ml-[19px]"><p className="text-base font-bold text-black">{fmtDateShort(item.date)}</p><p className="text-sm text-black">{appointmentTime(item)} · {item.type === "online" ? "Online Consultation" : "Offline Consultation"}</p></div>
+                      <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></div>
+                    </div>
+                  ))}
+                  {upcomingCount === 0 && <p className="rounded-[13px] border border-[#eee8e3] p-5 text-sm text-gray-500">No upcoming appointments scheduled</p>}
+                </div>
+                {upcomingAppointments.length > PORTAL_PAGE_SIZE && (
+                  <nav aria-label="Upcoming appointments pages" className="mt-auto pt-3">
+                    <AdminPagination currentPage={pagedUpcoming.page} totalItems={upcomingAppointments.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setUpcomingPage} itemLabel="appointments" className="rounded-[13px] border border-[#eee8e3]" />
+                  </nav>
+                )}
               </div>
-              {upcomingAppointments.length > PORTAL_PAGE_SIZE && (
-                <nav aria-label="Upcoming appointments pages" className="mt-3">
-                  <AdminPagination currentPage={pagedUpcoming.page} totalItems={upcomingAppointments.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setUpcomingPage} itemLabel="appointments" className="rounded-[13px] border border-[#eee8e3]" />
-                </nav>
-              )}
             </section>
             <section aria-labelledby="past-appointments-heading" className="mt-[23px]">
               <h2 id="past-appointments-heading" className="mb-3 flex items-center gap-1.5 text-[20px] font-bold leading-5 text-[#263248]"> Past Appointments</h2>
-              <div className="overflow-x-auto rounded-[13px] border border-[#eee8e3] bg-white">
-                <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-[14px] text-[#202420]">
-                  <colgroup><col className="w-[17%]" /><col className="w-[26%]" /><col className="w-[23.5%]" /><col className="w-[18%]" /><col className="w-[15.5%]" /></colgroup>
-                  <thead className="bg-[#FAF7F4] text-[16px]"><tr>{["Date", "Time", "Type", "Status", "Action"].map(label => <th key={label} scope="col" className="h-11 px-[18px] font-medium">{label}</th>)}</tr></thead>
-                  <tbody>
-                    {pagedPast.items.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
-                      <td className="px-[18px] py-3 font-medium">{fmtDateShort(item.date)}</td>
-                      <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
-                      <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
-                      <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
-                      <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></td>
-                    </tr>)}
-                    {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
-                  </tbody>
-                </table>
+              <div className={cn("rounded-[13px] border border-[#eee8e3] bg-white overflow-hidden flex flex-col", pastAppts.length > PORTAL_PAGE_SIZE && "min-h-[580px]")}>
+                <div className="flex-1 overflow-x-auto">
+                  <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-[14px] text-[#202420]">
+                    <colgroup><col className="w-[17%]" /><col className="w-[26%]" /><col className="w-[23.5%]" /><col className="w-[18%]" /><col className="w-[15.5%]" /></colgroup>
+                    <thead className="bg-[#FAF7F4] text-[16px]"><tr>{["Date", "Time", "Type", "Status", "Action"].map(label => <th key={label} scope="col" className="h-11 px-[18px] font-medium">{label}</th>)}</tr></thead>
+                    <tbody>
+                      {pagedPast.items.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
+                        <td className="px-[18px] py-3 font-medium">{fmtDateShort(item.date)}</td>
+                        <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
+                        <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
+                        <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
+                        <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></td>
+                      </tr>)}
+                      {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                {pastAppts.length > PORTAL_PAGE_SIZE && (
+                  <nav aria-label="Past appointments pages" className="mt-auto border-t border-[#eee8e3]">
+                    <AdminPagination currentPage={pagedPast.page} totalItems={pastAppts.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setPastPage} itemLabel="appointments" />
+                  </nav>
+                )}
               </div>
-              {pastAppts.length > PORTAL_PAGE_SIZE && (
-                <nav aria-label="Past appointments pages" className="mt-3">
-                  <AdminPagination currentPage={pagedPast.page} totalItems={pastAppts.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setPastPage} itemLabel="appointments" className="rounded-[13px] border border-[#eee8e3]" />
-                </nav>
-              )}
             </section>
           </div>
         )}
@@ -1606,78 +1620,91 @@ export default function PatientDashboard() {
             ) : filteredPrescriptions.length === 0 ? (
               <p role="status" className="rounded-[13px] border border-[#e3eaf3] bg-white p-6 text-center text-sm text-gray-500">No prescriptions match your search.</p>
             ) : (
-              <div className="space-y-3">
-                {pagedPrescriptions.items.map(appt => {
-                  const photoPath = appt.prescription?.photoObjectPath;
-                  const apptDate = appt.slot.date;
-                  const downloadHref = photoPath ? (photoPath.startsWith("http") ? photoPath : `${BASE}/api/storage${photoPath.startsWith("/") ? "" : "/"}${photoPath}`) : "";
-                  return (
-                    <div key={`${appt.type || "rx"}-${appt.id}`} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e3eaf3] bg-[#f1f5f9] text-[#3d4e66]">
-                          <FileText size={17} />
+              <div className={cn("flex flex-col", filteredPrescriptions.length > PORTAL_PAGE_SIZE && "min-h-[580px]")}>
+                <div className="space-y-3 flex-1">
+                  {pagedPrescriptions.items.map(appt => {
+                    const photoPath = appt.prescription?.photoObjectPath;
+                    const apptDate = appt.slot.date;
+                    const downloadHref = photoPath ? (photoPath.startsWith("http") ? photoPath : `${BASE}/api/storage${photoPath.startsWith("/") ? "" : "/"}${photoPath}`) : "";
+                    return (
+                      <div key={`${appt.type || "rx"}-${appt.id}`} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div
+                            className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                              photoPath
+                                ? "bg-blue-50 text-blue-500"
+                                : "bg-red-50 text-red-500"
+                            )}
+                          >
+                            {photoPath ? (
+                              <ImageIcon size={20} />
+                            ) : (
+                              <FileText size={20} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[16px] font-bold leading-4 text-[#172238]">{photoPath ? "Prescription Document" : "Digital Prescription"}</p>
+                            <p className="mt-1 text-[12px] leading-4 text-[#7c8ca4]"><span className="text-[#27364c] font-semibold">{fmtDateShort(apptDate)} • {appt.timeLabel}</span> · {PRESCRIPTION_PRESCRIBER}</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[16px] font-bold leading-4 text-[#172238]">{photoPath ? "Prescription Document" : "Digital Prescription"}</p>
-                          <p className="mt-1 text-[12px] leading-4 text-[#7c8ca4]"><span className="text-[#27364c] font-semibold">{fmtDateShort(apptDate)} • {appt.timeLabel}</span> · {PRESCRIPTION_PRESCRIBER}</p>
+                        <div className="ml-auto flex shrink-0 items-center gap-2">
+                          {photoPath ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
+                                className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
+                              >
+                                <Eye size={11} /> View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadPhotoPrescription(photoPath, `Prescription_${fmtDateShort(apptDate).replace(/\s+/g, "_")}.pdf`)}
+                                className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
+                              >
+                                <Download size={10} /> Download
+                              </button>
+                            </>
+                          ) : appt.prescription?.notes ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openAppointmentPrescription({
+                                  id: appt.id,
+                                  type: appt.type,
+                                  date: appt.apptDate,
+                                  time: appt.timeLabel,
+                                  prescription: appt.prescription,
+                                })}
+                                className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
+                              >
+                                <Eye size={11} /> View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadDigitalPrescription({
+                                  id: appt.id,
+                                  type: appt.type,
+                                  date: appt.apptDate,
+                                  time: appt.timeLabel,
+                                  prescription: appt.prescription,
+                                })}
+                                className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
+                              >
+                                <Download size={10} /> Download
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg">Issued</span>
+                          )}
                         </div>
                       </div>
-                      <div className="ml-auto flex shrink-0 items-center gap-2">
-                        {photoPath ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewPrescription({ name: "Prescription Document", objectPath: photoPath, contentType: "" })}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
-                            >
-                              <Eye size={11} /> View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadPhotoPrescription(photoPath, `Prescription_${fmtDateShort(apptDate).replace(/\s+/g, "_")}.pdf`)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
-                            >
-                              <Download size={10} /> Download
-                            </button>
-                          </>
-                        ) : appt.prescription?.notes ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openAppointmentPrescription({
-                                id: appt.id,
-                                type: appt.type,
-                                date: appt.apptDate,
-                                time: appt.timeLabel,
-                                prescription: appt.prescription,
-                              })}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#d95b2f] transition-colors hover:bg-orange-50 cursor-pointer"
-                            >
-                              <Eye size={11} /> View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadDigitalPrescription({
-                                id: appt.id,
-                                type: appt.type,
-                                date: appt.apptDate,
-                                time: appt.timeLabel,
-                                prescription: appt.prescription,
-                              })}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#e3eaf3] bg-white px-2 py-1 text-[12px] font-medium text-[#27364c] transition-colors hover:bg-gray-50 cursor-pointer"
-                            >
-                              <Download size={10} /> Download
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg">Issued</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
                 {filteredPrescriptions.length > PORTAL_PAGE_SIZE && (
-                  <nav aria-label="Prescriptions pages">
+                  <nav aria-label="Prescriptions pages" className="mt-auto pt-3">
                     <AdminPagination currentPage={pagedPrescriptions.page} totalItems={filteredPrescriptions.length} pageSize={PORTAL_PAGE_SIZE} onPageChange={setPrescriptionPage} itemLabel="prescriptions" className="rounded-[13px] border border-[#e3eaf3]" />
                   </nav>
                 )}
@@ -1704,14 +1731,25 @@ export default function PatientDashboard() {
               />
               </div>
             </div>
-            <section aria-labelledby="recent-documents-heading" className="flex flex-1 flex-col">
+            <section aria-labelledby="recent-documents-heading" className={cn("flex flex-1 flex-col", filteredPatientDocs.length > PORTAL_PAGE_SIZE && "min-h-[580px]")}>
               <h2 id="recent-documents-heading" className="mb-3 text-[20px] font-bold text-[#172238]">Recent Documents</h2>
-              <div className="space-y-3">
+              <div className="space-y-3 flex-1">
                 {pagedPatientDocs.items.map(doc => (
                   <div key={doc.id} className="flex min-h-[65px] flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e3eaf3] bg-white px-4 py-2.5">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e3eaf3] bg-[#f1f5f9] text-[#3d4e66]">
-                        {doc.contentType.startsWith("image/") ? <ImageIcon size={17} /> : <FileText size={17} />}
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                          doc.contentType.startsWith("image/")
+                            ? "bg-blue-50 text-blue-500"
+                            : "bg-red-50 text-red-500"
+                        )}
+                      >
+                        {doc.contentType.startsWith("image/") ? (
+                          <ImageIcon size={20} />
+                        ) : (
+                          <FileText size={20} />
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p title={doc.name} className="truncate text-[16px] font-bold leading-6 text-[#172238]">{doc.name}</p>

@@ -14,7 +14,7 @@ const Section = ({
 }) => (
   <section>
     <h2 className="!text-[20px] font-bold text-[#0A2B21] mb-3 flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-[#1a3d2b] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
+      <span className="w-7 h-7 rounded-full bg-[#D95B2F] text-white text-[16px] md:text-[18px] font-bold flex items-center justify-center shrink-0">
         {num}
       </span>
       {title}
@@ -68,8 +68,8 @@ export default function PrivacyPolicy() {
           {/* Title */}
           <div className="flex items-center gap-3 mb-8">
 
-            <div className="w-12 h-12 rounded-2xl bg-[#1a3d2b]/10 flex items-center justify-center">
-              <Lock size={22} className="text-[#1a3d2b]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#D95B2F]/10 flex items-center justify-center">
+              <Lock size={22} className="text-[#D95B2F]" />
             </div>
 
             <div>

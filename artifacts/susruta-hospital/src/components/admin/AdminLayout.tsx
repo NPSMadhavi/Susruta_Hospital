@@ -2,9 +2,27 @@ import React, { useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart, BriefcaseMedical, Activity } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart, BriefcaseMedical } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
+
+// Carbon Design System "User Activity" Icon (matching carbon_user-activity.png)
+function CarbonUserActivity({ size = 18, className, ...props }: React.SVGProps<SVGSVGElement> & { size?: number | string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M25 23h-.021a1 1 0 0 1-.94-.726L20.87 11.19l-1.935 5.16A1 1 0 0 1 18 17h-4v-2h3.307l2.757-7.351a1 1 0 0 1 1.898.076l3.111 10.892l1.979-5.933A1 1 0 0 1 28 12h4v2h-3.28l-2.772 8.316A1 1 0 0 1 25 23m-10 7h-2v-7a3.003 3.003 0 0 0-3-3H6a3.003 3.003 0 0 0-3 3v7H1v-7a5.006 5.006 0 0 1 5-5h4a5.006 5.006 0 0 1 5 5ZM8 8a3 3 0 1 1-3 3a3 3 0 0 1 3-3m0-2a5 5 0 1 0 5 5a5 5 0 0 0-5-5" />
+    </svg>
+  );
+}
 
 const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -108,7 +126,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/donations", icon: <Heart size={18}/>, label: "Donations" },
     { href: "/admin/testimonials", icon: <MessageSquare size={18}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={18}/>, label: "Subscribers" },
-    { href: "/admin/visitors", icon: <Activity size={18}/>, label: "Visitors" },
+    { href: "/admin/visitors", icon: <CarbonUserActivity size={18}/>, label: "Visitors" },
     { href: "/admin/settings", icon: <Settings size={18}/>, label: "Settings" },
   ];
 

@@ -265,19 +265,21 @@ router.post("/webhook", express.raw({ type: "application/webhook+json" }), async
     const bodyStr = Buffer.isBuffer(req.body) ? req.body.toString("utf-8") : String(req.body || "");
     const event = await receiver.receive(bodyStr, authHeader);
     
-    if (event.event === "room_finished") {
+    if (event.event === "room_finished" || (event.event === "participant_left" && event.participant?.identity === "doctor")) {
       const roomName = event.room?.name;
       if (roomName?.startsWith("susruta-appt-")) {
         const apptId = parseInt(roomName.replace("susruta-appt-", ""), 10);
         if (!isNaN(apptId)) {
           const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, apptId));
+          const [settings] = await db.select().from(siteSettingsTable);
           await db.update(onlineAppointmentsTable)
             .set({ joinEnabled: false, status: "completed" })
             .where(eq(onlineAppointmentsTable.id, apptId));
+          roomService.deleteRoom(roomName).catch(() => {});
           notifyAdminCallEnded(apptId);
           notifyGuestsSessionEnded(apptId);
           if (appt?.patientId) {
-            notifyPatientSessionEnded(appt.patientId, apptId, null);
+            notifyPatientSessionEnded(appt.patientId, apptId, settings?.phonepeQrObjectPath ?? null);
           }
           broadcastAppointmentUpdated({ id: apptId, joinEnabled: false, status: "completed" });
         }

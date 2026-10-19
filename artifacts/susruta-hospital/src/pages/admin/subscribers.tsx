@@ -10,6 +10,7 @@ import {
   Heading2, Heading3, Eye, Pencil, Link2, Eraser, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -437,7 +438,9 @@ function ComposeModal({ count, onClose }: { count: number; onClose: () => void }
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function AdminSubscribers() {
+  const PAGE_SIZE = 10;
   const [subs, setSubs] = useState<Sub[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
@@ -612,8 +615,8 @@ export default function AdminSubscribers() {
           <p className="text-sm mt-1">People who subscribe via the popup on the home page will appear here.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+        <div className={cn("bg-white rounded-2xl border border-border overflow-hidden shadow-sm flex flex-col", subs.length > PAGE_SIZE && "min-h-[580px]")}>
+          <div className="flex-1 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
@@ -624,50 +627,60 @@ export default function AdminSubscribers() {
                 </tr>
               </thead>
               <tbody>
-                {subs.map((s, i) => (
-                  <tr key={s.id} className={cn("border-b border-border/60 last:border-0 transition-colors",
-                    newSubFlash === s.id ? "bg-green-50 animate-pulse" :
-                    s.unsubscribed ? "bg-muted/30 opacity-60" : "hover:bg-muted/20")}>
-                    <td className="px-5 py-3.5 text-muted-foreground text-xs">{i + 1}</td>
-                    <td className="px-5 py-3.5 font-medium text-foreground">
-                      {s.name}
-                      {newSubFlash === s.id && <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">NEW</span>}
-                    </td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{s.phone}</td>
-                    <td className="px-5 py-3.5 text-primary">{s.email}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.country || <span className="opacity-30">—</span>}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground text-xs whitespace-nowrap">
-                      {new Date(s.subscribedAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {s.unsubscribed ? (
-                        <span
-                          title={s.unsubscribeReason ? `Reason: ${s.unsubscribeReason}` : "Unsubscribed"}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 cursor-default"
+                {subs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((s, i) => {
+                  const rowNumber = (currentPage - 1) * PAGE_SIZE + i + 1;
+                  return (
+                    <tr key={s.id} className={cn("border-b border-border/60 last:border-0 transition-colors",
+                      newSubFlash === s.id ? "bg-green-50 animate-pulse" :
+                      s.unsubscribed ? "bg-muted/30 opacity-60" : "hover:bg-muted/20")}>
+                      <td className="px-5 py-3.5 text-muted-foreground text-xs">{rowNumber}</td>
+                      <td className="px-5 py-3.5 font-medium text-foreground">
+                        {s.name}
+                        {newSubFlash === s.id && <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">NEW</span>}
+                      </td>
+                      <td className="px-5 py-3.5 text-muted-foreground">{s.phone}</td>
+                      <td className="px-5 py-3.5 text-primary">{s.email}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.country || <span className="opacity-30">—</span>}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground text-xs whitespace-nowrap">
+                        {new Date(s.subscribedAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {s.unsubscribed ? (
+                          <span
+                            title={s.unsubscribeReason ? `Reason: ${s.unsubscribeReason}` : "Unsubscribed"}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 cursor-default"
+                          >
+                            Unsubscribed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteSub(s)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Remove subscriber"
                         >
-                          Unsubscribed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
-                          Active
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteSub(s)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Remove subscriber"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          <AdminPagination
+            currentPage={currentPage}
+            totalItems={subs.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            itemLabel="subscribers"
+          />
         </div>
       )}
 

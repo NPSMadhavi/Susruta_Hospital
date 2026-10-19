@@ -158,6 +158,7 @@ const ONLINE_STATUS_COLORS: Record<string, string> = {
 // ── Modals (In-Person) ───────────────────────────────────────────
 function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => void }) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+  const [resolvedToken, setResolvedToken] = useState<string>((appt as any).uploadToken || "");
 
   let notesObj: any = {};
   if (appt.notes) {
@@ -176,30 +177,46 @@ function OfflineReceiptModal({ appt, onClose }: { appt: Appt; onClose: () => voi
   const gender = (appt as any).gender || notesObj.gender;
   const address = (appt as any).address || notesObj.address;
 
-  const uploadToken = (appt as any).uploadToken || notesObj.uploadToken;
+  const uploadToken = (appt as any).uploadToken || notesObj.uploadToken || resolvedToken;
 
   useEffect(() => {
-    let uploadFullUrl = (appt as any).uploadUrl || notesObj.uploadUrl || "";
-    if (!uploadFullUrl) {
+    let activeToken = (appt as any).uploadToken || notesObj.uploadToken || resolvedToken;
+
+    const renderQr = (tok: string) => {
       const baseUrl = window.location.origin;
-      uploadFullUrl = uploadToken
-        ? `${baseUrl}/portal/document-upload?token=${uploadToken}`
-        : `${baseUrl}/portal/document-upload`;
-    } else if (uploadToken && !uploadFullUrl.includes("token=")) {
-      uploadFullUrl = `${uploadFullUrl.split("?")[0]}?token=${uploadToken}`;
+      const uploadFullUrl = `${baseUrl}${BASE}/portal/document-upload?token=${encodeURIComponent(tok)}`;
+
+      QRCode.toDataURL(uploadFullUrl, {
+        width: 140,
+        margin: 1,
+        color: {
+          dark: "#1E293B",
+          light: "#FFFFFF",
+        },
+      })
+        .then((url) => setQrCodeUrl(url))
+        .catch((err) => console.error("QR Code error:", err));
+    };
+
+    if (activeToken) {
+      renderQr(activeToken);
+      return;
     }
 
-    QRCode.toDataURL(uploadFullUrl, {
-      width: 140,
-      margin: 1,
-      color: {
-        dark: "#1E293B",
-        light: "#FFFFFF",
-      },
-    })
-      .then((url) => setQrCodeUrl(url))
-      .catch((err) => console.error("QR Code error:", err));
-  }, [uploadToken]);
+    // Fetch appointment detail to retrieve or generate the unique upload token
+    fetch(`${BASE}/api/appointments/${appt.id}`, { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.uploadToken) {
+          setResolvedToken(data.uploadToken);
+          renderQr(data.uploadToken);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch appointment upload token:", err));
+  }, [appt.id, (appt as any).uploadToken, notesObj.uploadToken, resolvedToken]);
 
   function maskPhone(p?: string) {
     if (!p) return "N/A";
@@ -911,6 +928,10 @@ function OnlineAppointmentsTable({
   onDelete,
   onResetToPending,
   onMarkDone,
+  currentPage,
+  totalItems,
+  pageSize = 10,
+  onPageChange,
 }: {
   appts: OnlineAppt[];
   onJoinToggle: (id: number, enable: boolean) => void;
@@ -920,12 +941,16 @@ function OnlineAppointmentsTable({
   onDelete: (id: number) => void;
   onResetToPending: (id: number) => void;
   onMarkDone: (id: number) => void;
+  currentPage?: number;
+  totalItems?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
 }) {
   const [deletingAppt, setDeletingAppt] = useState<OnlineAppt | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+    <div className={cn("bg-white rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col", (totalItems ?? 0) > (pageSize ?? 10) && "min-h-[580px]")}>
       {deletingAppt && (
         <DeleteConfirmModal
           appt={deletingAppt}
@@ -933,7 +958,7 @@ function OnlineAppointmentsTable({
           onConfirm={onDelete}
         />
       )}
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-x-auto">
         <table className="w-full text-left text-sm border-collapse">
           <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold tracking-wider border-b border-border">
             <tr>
@@ -1119,6 +1144,15 @@ function OnlineAppointmentsTable({
           </tbody>
         </table>
       </div>
+      {totalItems !== undefined && currentPage !== undefined && onPageChange && (
+        <AdminPagination
+          currentPage={currentPage}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          itemLabel="online appointments"
+        />
+      )}
     </div>
   );
 }
@@ -1133,6 +1167,10 @@ function OfflineAppointmentsTable({
   onFollowUp,
   onPrintReceipt,
   onDelete,
+  currentPage,
+  totalItems,
+  pageSize = 10,
+  onPageChange,
 }: {
   appts: Appt[];
   onApprove: (id: number) => void;
@@ -1143,12 +1181,16 @@ function OfflineAppointmentsTable({
   onFollowUp: (appt: Appt) => void;
   onPrintReceipt: (appt: Appt) => void;
   onDelete: (appt: Appt) => void;
+  currentPage?: number;
+  totalItems?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className={cn("bg-white rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col", (totalItems ?? 0) > (pageSize ?? 10) && "min-h-[580px]")}>
+      <div className="flex-1 overflow-x-auto">
         <table className="w-full text-left text-sm border-collapse">
           <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold tracking-wider border-b border-border">
             <tr>
@@ -1366,6 +1408,15 @@ function OfflineAppointmentsTable({
           </tbody>
         </table>
       </div>
+      {totalItems !== undefined && currentPage !== undefined && onPageChange && (
+        <AdminPagination
+          currentPage={currentPage}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          itemLabel="offline appointments"
+        />
+      )}
     </div>
   );
 }
@@ -1756,25 +1807,20 @@ export default function AdminAppointments() {
               <p className="font-semibold text-muted-foreground">No online appointments found</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              <OnlineAppointmentsTable
-                appts={paginatedOnline}
-                onJoinToggle={toggleJoin}
-                onRenotify={renotify}
-                onPrescriptionClick={appt => setUploadModalAppt(appt)}
-                onCancel={cancelAppt}
-                onDelete={deleteAppt}
-                onResetToPending={resetToPending}
-                onMarkDone={markDone}
-              />
-              <AdminPagination
-                currentPage={onlinePage}
-                totalItems={onlineAppts.length}
-                pageSize={PAGE_SIZE}
-                onPageChange={setOnlinePage}
-                itemLabel="online appointments"
-              />
-            </div>
+            <OnlineAppointmentsTable
+              appts={paginatedOnline}
+              onJoinToggle={toggleJoin}
+              onRenotify={renotify}
+              onPrescriptionClick={appt => setUploadModalAppt(appt)}
+              onCancel={cancelAppt}
+              onDelete={deleteAppt}
+              onResetToPending={resetToPending}
+              onMarkDone={markDone}
+              currentPage={onlinePage}
+              totalItems={onlineAppts.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setOnlinePage}
+            />
           )}
         </div>
       )}
@@ -1807,26 +1853,21 @@ export default function AdminAppointments() {
                 No appointments found
               </div>
             ) : (
-              <div className="space-y-4">
-                <OfflineAppointmentsTable
-                  appts={paginatedOffline}
-                  onApprove={approve}
-                  onReschedule={setRescheduleModal}
-                  onCancel={(appt) => setCancellingOfflineAppt(appt)}
-                  onDelete={(appt) => setDeletingOfflineAppt(appt)}
-                  onArrive={arrive}
-                  onPay={setPayModal}
-                  onFollowUp={setFollowUpModal}
-                  onPrintReceipt={setReceiptModalAppt}
-                />
-                <AdminPagination
-                  currentPage={offlinePage}
-                  totalItems={shown.length}
-                  pageSize={PAGE_SIZE}
-                  onPageChange={setOfflinePage}
-                  itemLabel="offline appointments"
-                />
-              </div>
+              <OfflineAppointmentsTable
+                appts={paginatedOffline}
+                onApprove={approve}
+                onReschedule={setRescheduleModal}
+                onCancel={(appt) => setCancellingOfflineAppt(appt)}
+                onDelete={(appt) => setDeletingOfflineAppt(appt)}
+                onArrive={arrive}
+                onPay={setPayModal}
+                onFollowUp={setFollowUpModal}
+                onPrintReceipt={setReceiptModalAppt}
+                currentPage={offlinePage}
+                totalItems={shown.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setOfflinePage}
+              />
             )}
           </div>
         </div>

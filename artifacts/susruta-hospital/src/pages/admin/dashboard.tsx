@@ -4,6 +4,7 @@ import { useListAppointments } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Users, Calendar as CalendarIcon, Clock, Video, ArrowRight, Activity, Globe } from "lucide-react";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -157,60 +158,62 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border flex justify-between items-center">
+      <div className={cn("bg-white rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col", allRequests.length > PAGE_SIZE && "min-h-[580px]")}>
+        <div className="p-6 border-b border-border flex justify-between items-center shrink-0">
           <h2 className="font-bold text-lg">Recent Requests</h2>
           <Link href="/admin/appointments" className="px-4 py-1.5 rounded-xl border border-[#EDEFEB] text-xs font-bold font-sans text-gray-600 bg-white hover:bg-gray-50 transition-colors">View All</Link>
         </div>
-        <div className="p-0">
+        <div className="p-0 flex-1 flex flex-col justify-between">
           {isLoading ? (
-            <div className="p-6 text-center text-muted-foreground">Loading...</div>
+            <div className="p-6 text-center text-muted-foreground flex-1 flex items-center justify-center">Loading...</div>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 text-muted-foreground">
-                <tr>
-                  <th className="p-4 font-medium">Patient</th>
-                  <th className="p-4 font-medium">Date & Time</th>
-                  <th className="p-4 font-medium">Phone</th>
-                  <th className="p-4 font-medium">Type</th>
-                  <th className="p-4 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {paginatedRequests.map(apt => (
-                  <tr key={apt.id} className="hover:bg-muted/30">
-                    <td className="p-4 font-medium text-foreground">{apt.patientName}</td>
-                    <td className="p-4">{apt.dateTime}</td>
-                    <td className="p-4">{apt.phone}</td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold ${
-                        apt.type === 'Online'
-                          ?'text-[#1B3227]'
-                          :'text-[#1B3227]'
-                      }`}>
-                        {apt.type}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        apt.status.toLowerCase() === 'completed'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : apt.status.toLowerCase() === 'pending'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : apt.status.toLowerCase() === 'confirmed'
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-gray-50 text-gray-700 border border-gray-200'
-                      }`}>
-                        {apt.status}
-                      </span>
-                    </td>
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="p-4 font-medium">Patient</th>
+                    <th className="p-4 font-medium">Date & Time</th>
+                    <th className="p-4 font-medium">Phone</th>
+                    <th className="p-4 font-medium">Type</th>
+                    <th className="p-4 font-medium">Status</th>
                   </tr>
-                ))}
-                {allRequests.length === 0 && (
-                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No recent requests found.</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {paginatedRequests.map(apt => (
+                    <tr key={apt.id} className="hover:bg-muted/30">
+                      <td className="p-4 font-medium text-foreground">{apt.patientName}</td>
+                      <td className="p-4">{apt.dateTime}</td>
+                      <td className="p-4">{apt.phone}</td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold ${
+                          apt.type === 'Online'
+                            ?'text-[#1B3227]'
+                            :'text-[#1B3227]'
+                        }`}>
+                          {apt.type}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          apt.status.toLowerCase() === 'completed'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : apt.status.toLowerCase() === 'pending'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : apt.status.toLowerCase() === 'confirmed'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-gray-50 text-gray-700 border border-gray-200'
+                        }`}>
+                          {apt.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {allRequests.length === 0 && (
+                    <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No recent requests found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
           {!isLoading && (
             <AdminPagination

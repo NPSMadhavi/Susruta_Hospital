@@ -16,6 +16,10 @@ import {
 import { eq, desc, inArray, and, gte, lte } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
 import { notifyPatientSessionEnded } from "./patient";
+import { roomService, makeRoomName } from "./livekit";
+import { notifyGuestsSessionEnded } from "../lib/guestSse";
+import { notifyAdminCallEnded } from "./appointments";
+import { broadcastAppointmentUpdated } from "../lib/appointmentSse";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
 import { addAppointmentSseClient } from "../lib/appointmentSse";
 import { streamPrescriptionDownload } from "../lib/prescription-service";
@@ -594,6 +598,7 @@ router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) 
 // Called by doctor portal when video call ends — marks appointment completed
 router.post("/online-appointments/:id/complete", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
 
   const [appt] = await db
     .select({ appt: onlineAppointmentsTable })
@@ -602,7 +607,6 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
     .then(r => r.map(x => x.appt));
 
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
-  if (appt.status === "completed") { res.json({ ok: true, alreadyDone: true }); return; }
 
   const [settings] = await db.select().from(siteSettingsTable);
 
@@ -611,7 +615,13 @@ router.post("/online-appointments/:id/complete", requireDoctor, async (req, res)
     .set({ joinEnabled: false, status: "completed" })
     .where(eq(onlineAppointmentsTable.id, id));
 
+  const roomName = appt.livekitRoomName || makeRoomName(id);
+  roomService.deleteRoom(roomName).catch(() => {});
+
   notifyPatientSessionEnded(appt.patientId, id, settings?.phonepeQrObjectPath ?? null);
+  notifyGuestsSessionEnded(id);
+  notifyAdminCallEnded(id);
+  broadcastAppointmentUpdated({ id, joinEnabled: false, status: "completed" });
 
   res.json({ ok: true });
 });

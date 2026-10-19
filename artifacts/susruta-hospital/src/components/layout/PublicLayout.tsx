@@ -367,7 +367,6 @@ const scrollTo = (
                     onClick={(e) => scrollTo(e, link.id)}
                     className="text-[#0A2B21] hover:text-[#E8A87C] transition-colors duration-200 flex items-center gap-2"
                   >
-                    <span className="w-1 h-1 rounded-full bg-[#D95B2F]/50" />
                     {link.label}
                   </a>
                 </li>

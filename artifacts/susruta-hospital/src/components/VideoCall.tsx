@@ -14,7 +14,7 @@ import { RoomEvent, Track, type Participant } from "livekit-client";
 import {
   Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users,
   Paperclip, FileText, Upload, Mic, MicOff, VideoOff, PhoneOff,
-  UserCheck, Clock,
+  UserCheck, Clock, Eye, EyeOff, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -88,85 +88,106 @@ const AVATAR_COLOURS = [
 ];
 
 // ── Single Participant Tile ────────────────────────────────────
-function ParticipantTile({ participant, colourIdx, isLocal }: {
+function ParticipantTile({
+  participant,
+  colourIdx = 0,
+  isLocal,
+  isPip = false,
+  fit = "contain",
+}: {
   participant: Participant;
-  colourIdx: number;
+  colourIdx?: number;
   isLocal: boolean;
+  isPip?: boolean;
+  fit?: "contain" | "cover";
 }) {
   const isSpeaking = useIsSpeaking(participant);
   const camPub = participant.getTrackPublication(Track.Source.Camera);
   const micPub = participant.getTrackPublication(Track.Source.Microphone);
-  const isCamOn  = !!(camPub && !camPub.isMuted && camPub.track);
-  const isMicOn  = !!(micPub && !micPub.isMuted);
+  const isCamOn = !!(camPub && !camPub.isMuted && camPub.track);
+  const isMicOn = !!(micPub && !micPub.isMuted);
   const initials = getInitials(participant.name);
-  const colour   = AVATAR_COLOURS[colourIdx % AVATAR_COLOURS.length];
+  const colour = AVATAR_COLOURS[colourIdx % AVATAR_COLOURS.length];
 
   // Build a proper TrackReference for VideoTrack
   const trackRef = camPub ? { participant, source: Track.Source.Camera, publication: camPub } : null;
 
   return (
-    <div className={cn(
-      "relative w-full h-full bg-[#1c1c1e] rounded-2xl overflow-hidden flex items-center justify-center select-none transition-all duration-200",
-      isSpeaking ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#111]" : "ring-1 ring-white/5",
-    )}>
+    <div
+      className={cn(
+        "relative w-full h-full bg-[#0d0d0f] flex items-center justify-center select-none overflow-hidden transition-all duration-200",
+        isPip
+          ? "rounded-xl sm:rounded-2xl border border-white/20 shadow-2xl"
+          : "rounded-none",
+        isSpeaking && isPip && "ring-2 ring-emerald-400"
+      )}
+    >
       {/* Video or Avatar */}
       {isCamOn && trackRef ? (
         <VideoTrack
           trackRef={trackRef as any}
-          className="absolute inset-0 w-full h-full object-cover"
+          className={cn(
+            "w-full h-full select-none",
+            isPip || fit === "cover"
+              ? "object-cover"
+              : "object-contain max-h-full max-w-full mx-auto"
+          )}
           style={{ transform: isLocal ? "scaleX(-1)" : "none" }}
         />
       ) : (
-        <div className="flex flex-col items-center gap-2">
-          <div className={cn(
-            "w-16 h-16 rounded-full bg-gradient-to-br flex items-center justify-center shadow-lg",
-            colour,
-          )}>
-            <span className="text-white font-bold text-2xl tracking-tight">{initials}</span>
+        <div className="flex flex-col items-center justify-center gap-2.5 p-4">
+          <div
+            className={cn(
+              "rounded-full bg-gradient-to-br flex items-center justify-center shadow-xl shrink-0",
+              colour,
+              isPip ? "w-11 h-11 text-sm font-bold" : "w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 text-2xl sm:text-3xl font-extrabold"
+            )}
+          >
+            <span className="text-white tracking-tight">{initials}</span>
           </div>
-          <p className="text-white/40 text-xs">{isCamOn ? "" : "Camera off"}</p>
+          {!isPip && (
+            <div className="text-center">
+              <p className="text-white/85 font-bold text-sm sm:text-base md:text-lg">{participant.name || "Unknown"}</p>
+              <p className="text-white/40 text-xs mt-0.5">Camera is off</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Gradient footer */}
-      <div className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-
-      {/* Name + mic row */}
-      <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5">
+      {/* Name + mic row (Zoom style) */}
+      <div
+        className={cn(
+          "absolute flex items-center gap-1.5 bg-black/60 backdrop-blur-md rounded-md z-10 select-none border border-white/10 pointer-events-none",
+          isPip
+            ? "bottom-1.5 left-1.5 px-2 py-0.5 text-[10px]"
+            : "bottom-3 left-3 sm:bottom-4 sm:left-4 px-2.5 py-1 text-xs"
+        )}
+      >
         {!isMicOn && (
-          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/90">
-            <MicOff size={10} className="text-white" />
+          <span className="flex items-center justify-center w-3.5 h-3.5 rounded-full bg-red-500/90 shrink-0">
+            <MicOff size={9} className="text-white" />
           </span>
         )}
-        <span className="text-white text-xs font-semibold drop-shadow-md">
+        <span className="text-white font-medium truncate max-w-[130px] sm:max-w-[220px]">
           {participant.name || "Unknown"}{isLocal ? " (You)" : ""}
         </span>
+        {isSpeaking && (
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0 shadow-sm" />
+        )}
       </div>
-
-      {/* Speaking pulse dot top-right */}
-      {isSpeaking && (
-        <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/60" />
-      )}
     </div>
   );
 }
 
-// ── Participants Sidebar ───────────────────────────────────────
+// ── Participants Sidebar / Drawer ───────────────────────────────
 function ParticipantsSidebar({ participants, localParticipant, onAskToUnmute }: {
   participants: Participant[];
   localParticipant: Participant;
   onAskToUnmute?: (participant: Participant) => void;
 }) {
   return (
-    <div className="flex flex-col h-full bg-[#1c1c1e] border-l border-white/5">
-      <div className="px-4 py-3.5 border-b border-white/5 flex items-center gap-2">
-        <Users size={15} className="text-white/50" />
-        <span className="text-white/70 text-sm font-semibold">People</span>
-        <span className="ml-auto text-white/30 text-xs bg-white/10 rounded-full px-2 py-0.5">
-          {participants.length}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+    <div className="flex flex-col h-full bg-[#18181b] overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {participants.map((p, i) => {
           const isLocal = p.identity === localParticipant.identity;
           const camPub = p.getTrackPublication(Track.Source.Camera);
@@ -175,25 +196,28 @@ function ParticipantsSidebar({ participants, localParticipant, onAskToUnmute }: 
           const isMicOn = !!(micPub && !micPub.isMuted);
           const colour = AVATAR_COLOURS[i % AVATAR_COLOURS.length];
           return (
-            <div key={p.identity} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors">
+            <div key={p.identity} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
               <div className={cn(
-                "w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center shrink-0 text-white text-xs font-bold",
+                "w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-sm",
                 colour,
               )}>
                 {getInitials(p.name)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white/80 text-xs font-semibold truncate">
+                <p className="text-white/90 text-xs font-semibold truncate">
                   {p.name || "Unknown"}{isLocal ? " (You)" : ""}
                 </p>
+                <p className="text-white/40 text-[10px] capitalize">
+                  {p.identity === "doctor" ? "Doctor" : isLocal ? "Local Participant" : "Participant"}
+                </p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {isMicOn
-                  ? <Mic size={12} className="text-white/40" />
-                  : <MicOff size={12} className="text-red-400" />}
+                  ? <Mic size={13} className="text-white/50" />
+                  : <MicOff size={13} className="text-red-400" />}
                 {isCamOn
-                  ? <Video size={12} className="text-white/40" />
-                  : <VideoOff size={12} className="text-red-400" />}
+                  ? <Video size={13} className="text-white/50" />
+                  : <VideoOff size={13} className="text-red-400" />}
               </div>
               {onAskToUnmute && !isLocal && !isMicOn && (
                 <button
@@ -201,7 +225,7 @@ function ParticipantsSidebar({ participants, localParticipant, onAskToUnmute }: 
                   title={`Ask ${p.name || "patient"} to unmute`}
                   className="text-[9px] font-bold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/30 border border-amber-400/20 rounded-md px-1.5 py-1 whitespace-nowrap transition-colors"
                 >
-                  Ask to unmute
+                  Ask unmute
                 </button>
               )}
             </div>
@@ -213,10 +237,11 @@ function ParticipantsSidebar({ participants, localParticipant, onAskToUnmute }: 
 }
 
 // ── Control Bar Button ─────────────────────────────────────────
-function CtrlBtn({ icon, label, active, danger, onClick, disabled }: {
+function CtrlBtn({ icon, label, active, danger, onClick, disabled, badge }: {
   icon: React.ReactNode; label: string;
   active?: boolean; danger?: boolean;
   onClick?: () => void; disabled?: boolean;
+  badge?: number;
 }) {
   return (
     <button
@@ -224,34 +249,59 @@ function CtrlBtn({ icon, label, active, danger, onClick, disabled }: {
       disabled={disabled}
       title={label}
       className={cn(
-        "flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-all select-none disabled:opacity-40",
+        "relative flex flex-col items-center justify-center gap-1 px-2.5 sm:px-3.5 py-1 rounded-xl transition-all select-none disabled:opacity-40 shrink-0",
         danger
-          ? "bg-red-600 hover:bg-red-500 text-white"
+          ? "bg-red-600/90 hover:bg-red-600 text-white shadow-sm"
           : active
             ? "bg-white/15 text-white hover:bg-white/20"
             : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80",
       )}
     >
-      <span className="w-9 h-9 flex items-center justify-center">{icon}</span>
-      <span className="text-[9px] font-semibold tracking-wide uppercase">{label}</span>
+      <span className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center relative">
+        {icon}
+        {badge !== undefined && badge > 0 && (
+          <span className="absolute -top-1 -right-1 px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-emerald-500 text-white shadow-sm">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="text-[9px] font-semibold tracking-wide uppercase truncate max-w-[65px]">{label}</span>
     </button>
   );
 }
 
 // ── Main Custom Room UI ────────────────────────────────────────
-function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void }) {
-  const participants        = useParticipants();
+function SusrutaVideoRoom({
+  role,
+  onLeave,
+  title,
+  apptId,
+  directCallId,
+}: {
+  role: Role;
+  onLeave?: () => void;
+  title?: string;
+  apptId?: number;
+  directCallId?: number;
+}) {
+  const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
-  const room                = useRoomContext();
+  const room = useRoomContext();
   const { buttonProps: leaveProps } = useDisconnectButton({});
   const { enabled: micOn, toggle: toggleMic } = useTrackToggle({ source: Track.Source.Microphone });
   const { enabled: camOn, toggle: toggleCam } = useTrackToggle({ source: Track.Source.Camera });
 
-  const [showPeople, setShowPeople] = useState(true);
+  const [showPeople, setShowPeople] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
+  const [isPipMinimized, setIsPipMinimized] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [unmuteRequest, setUnmuteRequest] = useState<string | null>(null);
   const [unmuteBusy, setUnmuteBusy] = useState(false);
+  const [doctorHasLeft, setDoctorHasLeft] = useState(false);
+  const [doctorLeftNotice, setDoctorLeftNotice] = useState<string | null>(null);
   const startRef = useRef(Date.now());
+  const hadDoctorJoinedRef = useRef(false);
+  const isLeavingRef = useRef(false);
 
   // Timer
   useEffect(() => {
@@ -259,28 +309,82 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
     return () => clearInterval(t);
   }, []);
 
-  // Admins join as observers by default, but can still speak when they
-  // explicitly enable their own microphone. Camera remains monitor-only.
   const canUseMicrophone = true;
   const canUseCamera = role !== "admin";
-  const allParticipants = participants; // includes local
+  const allParticipants = participants;
+
+  // Remote participants
+  const remoteParticipants = allParticipants.filter(p => p.identity !== localParticipant.identity);
+  const isDoctorPresent = allParticipants.some(
+    p => p.identity === "doctor" || p.name?.toLowerCase().includes("murali")
+  );
 
   useEffect(() => {
-    if (role !== "patient") return;
+    if (isDoctorPresent) {
+      hadDoctorJoinedRef.current = true;
+    }
+  }, [isDoctorPresent]);
+
+  const endCallAsDoctorLeft = useCallback((noticeText?: string) => {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    setDoctorHasLeft(true);
+    setDoctorLeftNotice(noticeText || "Dr. P. Murali Krishna has ended the consultation.");
+    setTimeout(() => {
+      try { room.disconnect(); } catch {}
+      onLeave?.();
+    }, 700);
+  }, [room, onLeave]);
+
+  // Handle in-call WebRTC events for doctor disconnect
+  useEffect(() => {
+    if (role !== "patient" && role !== "guest") return;
+
+    function handleParticipantDisconnected(p: Participant) {
+      if (p.identity === "doctor" || (hadDoctorJoinedRef.current && !allParticipants.some(x => x.identity === "doctor"))) {
+        endCallAsDoctorLeft("Dr. P. Murali Krishna has left the consultation.");
+      }
+    }
+
+    function handleRoomDisconnected() {
+      if (hadDoctorJoinedRef.current) {
+        endCallAsDoctorLeft("Consultation session ended.");
+      }
+    }
+
     function handleData(payload: Uint8Array, participant?: Participant) {
       try {
         const message = JSON.parse(new TextDecoder().decode(payload));
+        if (message?.type === "call-ended" || message?.type === "consultation-ended" || message?.type === "doctor-left") {
+          endCallAsDoctorLeft("Dr. P. Murali Krishna has ended the consultation.");
+          return;
+        }
         if (message?.type === "request-unmute" &&
             (!message.target || message.target === localParticipant.identity)) {
           setUnmuteRequest(participant?.name || "The care team");
         }
-      } catch {
-        // Ignore unrelated room data messages.
+      } catch {}
+    }
+
+    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+    room.on(RoomEvent.Disconnected, handleRoomDisconnected);
+    room.on(RoomEvent.DataReceived, handleData as any);
+
+    return () => {
+      room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+      room.off(RoomEvent.Disconnected, handleRoomDisconnected);
+      room.off(RoomEvent.DataReceived, handleData as any);
+    };
+  }, [room, role, localParticipant.identity, allParticipants, endCallAsDoctorLeft]);
+
+  // Reactive participant presence check
+  useEffect(() => {
+    if (role === "patient" || role === "guest") {
+      if (hadDoctorJoinedRef.current && !isDoctorPresent) {
+        endCallAsDoctorLeft("Dr. P. Murali Krishna has left the consultation.");
       }
     }
-    room.on(RoomEvent.DataReceived, handleData as any);
-    return () => { room.off(RoomEvent.DataReceived, handleData as any); };
-  }, [room, role, localParticipant.identity]);
+  }, [role, isDoctorPresent, endCallAsDoctorLeft]);
 
   async function askToUnmute(participant: Participant) {
     try {
@@ -291,9 +395,7 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
         })),
         { reliable: true, destinationIdentities: [participant.identity], topic: "susruta-call-control" },
       );
-    } catch {
-      // The participant can still use their own in-call microphone control.
-    }
+    } catch {}
   }
 
   async function acceptUnmuteRequest() {
@@ -308,171 +410,348 @@ function SusrutaVideoRoom({ role, onLeave }: { role: Role; onLeave?: () => void 
     }
   }
 
-  // Grid columns
-  const count = allParticipants.length;
-  const cols = count <= 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
-
-  function handleLeave() {
+  async function handleLeave() {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    if (role === "doctor") {
+      try {
+        await localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify({ type: "consultation-ended", by: "doctor" })),
+          { reliable: true }
+        );
+      } catch {}
+    }
+    try { room.disconnect(); } catch {}
     (leaveProps as any).onClick?.();
     onLeave?.();
   }
 
+  // 1-on-1 layout vs multi-participant layout
+  const primaryRemote = remoteParticipants[0];
+  const isOneOnOne = remoteParticipants.length === 1;
+  const isSolo = remoteParticipants.length === 0;
+
   return (
-    <div className="relative flex flex-col w-full h-full bg-[#111] select-none" style={{ fontFamily: "system-ui, sans-serif" }}>
+    <div className="relative flex flex-col w-full h-full bg-[#0a0a0c] text-white select-none overflow-hidden" style={{ minHeight: "100%" }}>
       {/* ── Audio renderer (invisible) */}
       <RoomAudioRenderer />
 
-      {/* ── Top bar ─────────────────────────────────────────── */}
-      <div className="shrink-0 flex items-center gap-3 px-4 h-12 bg-[#1c1c1e]/80 backdrop-blur border-b border-white/5">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-emerald-600 flex items-center justify-center">
-            <Video size={12} className="text-white" />
+      {/* ── Top Zoom-Style Header ─────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-between px-3 sm:px-6 h-12 sm:h-14 bg-[#141416]/95 backdrop-blur-md border-b border-white/10 z-30">
+        {/* Left: Branding + Title + Status */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0 shadow-md">
+            <Video size={14} className="text-white" />
           </div>
-          <span className="text-white/70 text-sm font-semibold">Susruta Hospital</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-white font-bold text-xs sm:text-sm truncate">
+              {title || (role === "doctor" ? "Online Consultation Session" : "Consultation with Dr. P. Murali Krishna")}
+            </span>
+            <span className="hidden sm:inline-block text-white/20">·</span>
+            <div className="hidden sm:flex items-center gap-1.5 text-white/50 text-xs">
+              <Clock size={11} className="text-emerald-400" />
+              <span className="font-mono text-emerald-400">{fmtElapsed(elapsed)}</span>
+            </div>
+          </div>
         </div>
-        <span className="text-white/15">·</span>
-        <div className="flex items-center gap-1.5 text-white/40 text-xs">
-          <Clock size={11} />
-          <span className="font-mono">{fmtElapsed(elapsed)}</span>
-        </div>
-        {role === "admin" && (
-          <span className="ml-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            Monitoring
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-1.5 text-white/40 text-xs">
-          <UserCheck size={11} />
-          <span>{allParticipants.length} in call</span>
+
+        {/* Right: Presence + Leave Button */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex sm:hidden items-center gap-1 text-white/50 text-[11px] font-mono mr-1">
+            <Clock size={10} className="text-emerald-400" />
+            <span className="text-emerald-400">{fmtElapsed(elapsed)}</span>
+          </div>
+
+          {role === "admin" && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Monitoring
+            </span>
+          )}
+
+          <button
+            onClick={() => setShowPeople(v => !v)}
+            title="Participants"
+            className={cn(
+              "hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+              showPeople
+                ? "bg-white/15 text-white border-white/20"
+                : "bg-white/5 text-white/60 hover:text-white border-white/10 hover:bg-white/10"
+            )}
+          >
+            <Users size={13} />
+            <span>{allParticipants.length}</span>
+          </button>
+
+          <button
+            onClick={handleLeave}
+            className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Leave consultation"
+          >
+            <PhoneOff size={13} />
+            <span>Leave Call</span>
+          </button>
         </div>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* ── Main Stage (Zoom Style) ────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black overflow-hidden w-full h-full">
+        {/* Scenario 1: Standard 1-on-1 Consultation */}
+        {isOneOnOne && primaryRemote && (
+          <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
+            {/* Primary Remote Video (fills entire stage with aspect-ratio intact) */}
+            <ParticipantTile
+              participant={primaryRemote}
+              isLocal={false}
+              fit="contain"
+            />
 
-        {/* Video grid */}
-        <div className="flex-1 min-w-0 p-3 overflow-hidden">
-          {allParticipants.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 size={28} className="text-white/20 animate-spin mx-auto mb-3" />
-                <p className="text-white/30 text-sm">Waiting for others to join…</p>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="h-full gap-2"
-              style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                gridAutoRows: count > 2 ? "1fr" : "1fr",
-              }}
-            >
-              {allParticipants.map((p, i) => (
+            {/* Floating Picture-in-Picture Self View */}
+            {!isPipMinimized ? (
+              <div className="absolute bottom-4 right-4 z-20 w-36 h-24 sm:w-52 sm:h-36 md:w-64 md:h-44 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-[#1c1c1e] transition-all duration-200">
                 <ParticipantTile
-                  key={p.identity}
+                  participant={localParticipant}
+                  isLocal={true}
+                  isPip={true}
+                  fit="cover"
+                />
+                <button
+                  onClick={() => setIsPipMinimized(true)}
+                  title="Hide self view"
+                  className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/60 hover:bg-black/80 text-white/70 hover:text-white z-20 transition-colors"
+                >
+                  <EyeOff size={11} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsPipMinimized(false)}
+                className="absolute bottom-4 right-4 z-20 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 shadow-xl text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Eye size={12} />
+                <span>Show Self</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Scenario 2: Solo / Waiting Room (0 Remote Participants) */}
+        {isSolo && (
+          <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
+            <ParticipantTile
+              participant={localParticipant}
+              isLocal={true}
+              fit="contain"
+            />
+
+            <div className="absolute top-6 inset-x-4 mx-auto max-w-md bg-black/80 backdrop-blur-md border border-white/15 rounded-2xl p-4 text-center shadow-2xl z-20">
+              <div className="flex items-center justify-center gap-2 mb-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <p className="text-white font-bold text-sm">
+                  {role === "patient" ? "Waiting for Dr. P. Murali Krishna to join..." : "Waiting for patient to join..."}
+                </p>
+              </div>
+              <p className="text-white/60 text-xs">
+                {role === "patient"
+                  ? "Your camera and microphone are ready. The doctor will connect shortly."
+                  : "Your camera and microphone are active. You will be connected as soon as the patient arrives."}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Scenario 3: Multi-Party (3+ participants: Doctor + Patient + Guest/Caregiver) */}
+        {!isOneOnOne && !isSolo && (
+          <div
+            className="w-full h-full p-2 sm:p-3 gap-2 overflow-hidden"
+            style={{
+              display: "grid",
+              gridTemplateColumns: allParticipants.length <= 2 ? "repeat(2, 1fr)" : allParticipants.length <= 4 ? "repeat(2, 1fr)" : "repeat(3, 1fr)",
+              gridAutoRows: allParticipants.length > 2 ? "1fr" : "1fr",
+            }}
+          >
+            {allParticipants.map((p, i) => (
+              <div key={p.identity} className="relative w-full h-full rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-[#141416]">
+                <ParticipantTile
                   participant={p}
                   colourIdx={i}
                   isLocal={p.identity === localParticipant.identity}
+                  fit="contain"
                 />
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Right sidebar — participants */}
+        {/* ── Slide-over Drawers (Overlay, does not shrink main video) ── */}
+        {/* Participants Drawer */}
         {showPeople && (
-          <div className="shrink-0 w-60 h-full border-l border-white/5 overflow-hidden">
-            <ParticipantsSidebar
-              participants={allParticipants}
-              localParticipant={localParticipant}
-              onAskToUnmute={role === "admin" ? askToUnmute : undefined}
-            />
+          <div className="absolute top-0 bottom-0 right-0 w-72 sm:w-80 bg-[#18181b]/95 backdrop-blur-xl border-l border-white/10 z-40 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Users size={15} className="text-emerald-400" />
+                <span>People ({allParticipants.length})</span>
+              </div>
+              <button
+                onClick={() => setShowPeople(false)}
+                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                aria-label="Close participants"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <ParticipantsSidebar
+                participants={allParticipants}
+                localParticipant={localParticipant}
+                onAskToUnmute={role === "admin" ? askToUnmute : undefined}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* In-Call Documents Drawer (Patient) */}
+        {showDocs && apptId && (
+          <div className="absolute top-0 bottom-0 right-0 w-full sm:w-96 bg-[#18181b]/95 backdrop-blur-xl border-l border-white/10 z-40 shadow-2xl flex flex-col p-4 overflow-y-auto animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Paperclip size={16} className="text-emerald-400" />
+                <span>Share Documents</span>
+              </div>
+              <button
+                onClick={() => setShowDocs(false)}
+                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                aria-label="Close documents"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <CallDocumentUpload apptId={apptId} />
+          </div>
+        )}
+
+        {/* ── Call Ended by Doctor Notice Overlay ─────────────────────── */}
+        {doctorHasLeft && (
+          <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-[#1c1c1e] border border-white/15 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl">
+              <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4 text-emerald-400 shadow-inner">
+                <CheckCircle2 size={28} />
+              </div>
+              <h3 className="text-white font-bold text-lg mb-1">Consultation Ended</h3>
+              <p className="text-white/60 text-xs sm:text-sm mb-5">
+                {doctorLeftNotice || "Dr. P. Murali Krishna has left the consultation. Transitioning..."}
+              </p>
+              <div className="flex items-center justify-center gap-2 text-emerald-400 text-xs font-semibold">
+                <Loader2 size={14} className="animate-spin" />
+                <span>Closing call...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Unmute Request Banner ─────────────────────────────────── */}
+        {role === "patient" && unmuteRequest && !doctorHasLeft && (
+          <div className="absolute left-4 right-4 bottom-4 z-30 mx-auto max-w-md rounded-2xl bg-white shadow-2xl border border-amber-200 p-3.5 flex items-center gap-3 animate-in slide-in-from-bottom duration-200">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Mic size={17} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-900 text-sm font-bold">Please turn on your microphone</p>
+              <p className="text-gray-500 text-xs truncate">
+                {unmuteRequest.includes("blocked") ? unmuteRequest : `${unmuteRequest} is asking you to unmute.`}
+              </p>
+            </div>
+            {!unmuteRequest.includes("blocked") && (
+              <button
+                onClick={acceptUnmuteRequest}
+                disabled={unmuteBusy}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap disabled:opacity-60 transition-colors"
+              >
+                {unmuteBusy ? "Enabling…" : "Unmute"}
+              </button>
+            )}
+            <button
+              onClick={() => setUnmuteRequest(null)}
+              className="text-gray-400 hover:text-gray-700 p-1"
+              aria-label="Dismiss microphone request"
+            >
+              ×
+            </button>
           </div>
         )}
       </div>
 
-      {role === "patient" && unmuteRequest && (
-        <div className="absolute left-4 right-4 bottom-[100px] z-20 mx-auto max-w-md rounded-2xl bg-white shadow-2xl border border-amber-200 p-3.5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <Mic size={17} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-gray-900 text-sm font-bold">Please turn on your microphone</p>
-            <p className="text-gray-500 text-xs truncate">
-              {unmuteRequest.includes("blocked") ? unmuteRequest : `${unmuteRequest} is asking you to unmute.`}
-            </p>
-          </div>
-          {!unmuteRequest.includes("blocked") && (
-            <button
-              onClick={acceptUnmuteRequest}
-              disabled={unmuteBusy}
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap disabled:opacity-60"
-            >
-              {unmuteBusy ? "Enabling…" : "Unmute"}
-            </button>
-          )}
-          <button
-            onClick={() => setUnmuteRequest(null)}
-            className="text-gray-400 hover:text-gray-700 p-1"
-            aria-label="Dismiss microphone request"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* ── Bottom control bar ──────────────────────────────── */}
-      <div className="shrink-0 h-[88px] bg-[#1c1c1e]/90 backdrop-blur border-t border-white/5 flex items-center justify-between px-6">
-
-        {/* Left: clock */}
-        <div className="text-white/25 text-xs font-mono w-20">
-          {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+      {/* ── Bottom Control Bar (Zoom style) ──────────────────────────────── */}
+      <div className="shrink-0 h-16 sm:h-[72px] bg-[#141416]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-between px-3 sm:px-6 z-30">
+        {/* Left: Local Clock */}
+        <div className="hidden md:flex items-center gap-2 text-white/40 text-xs font-mono w-28">
+          <Clock size={12} />
+          <span>{new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
 
-        {/* Centre: controls */}
-        <div className="flex items-center gap-2">
+        {/* Center: Main Media Controls */}
+        <div className="flex items-center justify-center gap-1.5 sm:gap-3 flex-1 md:flex-initial">
           {canUseMicrophone && (
             <CtrlBtn
-              icon={micOn ? <Mic size={20} /> : <MicOff size={20} />}
+              icon={micOn ? <Mic size={18} /> : <MicOff size={18} />}
               label={micOn ? "Mute" : "Unmute"}
               active={micOn}
+              danger={!micOn}
               onClick={() => toggleMic()}
             />
           )}
+
           {canUseCamera && (
-            <>
-              <CtrlBtn
-                icon={camOn ? <Video size={20} /> : <VideoOff size={20} />}
-                label={camOn ? "Stop Video" : "Start Video"}
-                active={camOn}
-                onClick={() => toggleCam()}
-              />
-            </>
+            <CtrlBtn
+              icon={camOn ? <Video size={18} /> : <VideoOff size={18} />}
+              label={camOn ? "Stop Video" : "Start Video"}
+              active={camOn}
+              danger={!camOn}
+              onClick={() => toggleCam()}
+            />
           )}
+
+          <CtrlBtn
+            icon={<Users size={18} />}
+            label="People"
+            active={showPeople}
+            badge={allParticipants.length}
+            onClick={() => setShowPeople(v => !v)}
+          />
+
+          {(role === "patient" || role === "guest") && apptId && (
+            <CtrlBtn
+              icon={<Paperclip size={18} />}
+              label="Share Docs"
+              active={showDocs}
+              onClick={() => setShowDocs(v => !v)}
+            />
+          )}
+
+          {/* On mobile: compact Leave button in control bar */}
           <button
             onClick={handleLeave}
-            className="flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-all"
+            className="sm:hidden flex flex-col items-center gap-1 px-3 py-1 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-all ml-1 shadow-sm"
             title="Leave call"
           >
-            <span className="w-9 h-9 flex items-center justify-center">
-              <PhoneOff size={20} />
+            <span className="w-8 h-8 flex items-center justify-center">
+              <PhoneOff size={17} />
             </span>
-            <span className="text-[9px] font-semibold tracking-wide uppercase">Leave</span>
+            <span className="text-[8px] font-bold tracking-wide uppercase">Leave</span>
           </button>
         </div>
 
-        {/* Right: people toggle */}
-        <div className="flex items-center gap-2 w-20 justify-end">
-          <button
-            onClick={() => setShowPeople(v => !v)}
-            title="Toggle participants"
-            className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-xl transition-all",
-              showPeople ? "bg-white/15 text-white" : "bg-white/5 text-white/40 hover:text-white/70",
-            )}
-          >
-            <Users size={16} />
-          </button>
+        {/* Right: PiP Toggle on Desktop */}
+        <div className="hidden md:flex items-center justify-end gap-2 w-28">
+          {isOneOnOne && (
+            <button
+              onClick={() => setIsPipMinimized(v => !v)}
+              title={isPipMinimized ? "Show self view" : "Hide self view"}
+              className="text-white/40 hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5 border border-white/10"
+            >
+              {isPipMinimized ? <Eye size={13} /> : <EyeOff size={13} />}
+              <span>{isPipMinimized ? "Self View" : "Hide Self"}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -593,6 +872,7 @@ interface VideoCallProps {
   className?: string;
   autoJoin?: boolean;
   keepOpenOnDisconnect?: boolean;
+  title?: string;
 }
 
 export function VideoCall({
@@ -604,6 +884,7 @@ export function VideoCall({
   className,
   autoJoin,
   keepOpenOnDisconnect = false,
+  title,
 }: VideoCallProps) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
@@ -653,15 +934,20 @@ export function VideoCall({
 
   if (inCall && creds) {
     return (
-      <div className={cn("rounded-2xl overflow-hidden border border-white/10 bg-[#111] shadow-2xl flex flex-col", className)}
-        style={{ height: 520 }}>
+      <div className={cn("w-full h-full flex-1 flex flex-col min-h-0 bg-black overflow-hidden relative", className)}>
         <LiveKitRoom
           token={creds.token} serverUrl={creds.serverUrl}
           connect={true} video={true} audio={true}
           onDisconnected={handleDisconnect}
           onError={(err) => console.warn("[LiveKit] Room notice:", err)}
-          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <SusrutaVideoRoom role={role} onLeave={handleUserLeave} />
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
+          <SusrutaVideoRoom
+            role={role}
+            onLeave={handleUserLeave}
+            title={title}
+            apptId={apptId}
+            directCallId={directCallId}
+          />
         </LiveKitRoom>
       </div>
     );
@@ -807,18 +1093,15 @@ export function GuestCallPage({ apptId }: { apptId: number }) {
 
   if (step === "call" && creds) {
     return (
-      <div className="flex flex-col bg-[#111]" style={{ height: "100dvh" }}>
+      <div className="w-full h-full min-h-0 flex flex-col bg-black" style={{ height: "100dvh" }}>
         <LiveKitRoom
           token={creds.token} serverUrl={creds.serverUrl}
           connect={true} video={true} audio={true}
           onDisconnected={() => setStep("ended")}
           onError={(err) => console.warn("[LiveKit] Room notice:", err)}
-          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <SusrutaVideoRoom role="guest" onLeave={() => setStep("ended")} />
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", height: "100%" }}>
+          <SusrutaVideoRoom role="guest" onLeave={() => setStep("ended")} apptId={apptId} title="Consultation with Dr. P. Murali Krishna" />
         </LiveKitRoom>
-        <div className="px-4 py-3 bg-[#1c1c1e] shrink-0 border-t border-white/5">
-          <CallDocumentUpload apptId={apptId} />
-        </div>
       </div>
     );
   }

@@ -3002,7 +3002,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
                     </div>
 
                     <div className="font-medium text-[14px] md:text-[16px] text-right">
-                      <div>10:00 AM – 1:00 PM</div>
+                      <div>10:00 AM – 1:30 PM</div>
                     </div>
                   </div>
 
@@ -3013,7 +3013,7 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
                     </div>
 
                     <div className="text-right text-[14px] md:text-[16px] text-[#15392D]">
-                      <div className="mb-1.5">10:00 AM – 1:00 PM</div>
+                      <div className="mb-1.5">10:00 AM – 1:30 PM</div>
                       <div>6:00 PM – 10:00 PM</div>
                     </div>
                   </div>

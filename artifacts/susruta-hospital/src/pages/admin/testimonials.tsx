@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const PAGE_SIZE = 10;
@@ -56,31 +57,6 @@ function DeleteTestimonialModal({
       </div>
     </div>
   );
-}
-
-function getPageNumbers(currentPage: number, totalPages: number): (number | "ellipsis")[] {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
-  }
-
-  const pages: (number | "ellipsis")[] = [1];
-  if (currentPage > 3) {
-    pages.push("ellipsis");
-  }
-
-  const start = Math.max(2, currentPage - 1);
-  const end = Math.min(totalPages - 1, currentPage + 1);
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-
-  if (currentPage < totalPages - 2) {
-    pages.push("ellipsis");
-  }
-
-  pages.push(totalPages);
-  return pages;
 }
 
 type TestimonialForm = {
@@ -541,8 +517,8 @@ export default function AdminTestimonials() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+        <div className={cn("bg-white rounded-2xl border border-border overflow-hidden shadow-sm flex flex-col", totalItems > PAGE_SIZE && "min-h-[580px]")}>
+          <div className="flex-1 overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
@@ -695,69 +671,13 @@ export default function AdminTestimonials() {
             </table>
           </div>
 
-          {/* Pagination Bar (10 items per page) */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-border bg-white text-xs text-muted-foreground">
-            <div>
-              Showing <strong className="font-semibold text-foreground">{totalItems === 0 ? 0 : startIndex + 1}</strong> to{" "}
-              <strong className="font-semibold text-foreground">{endIndex}</strong> of{" "}
-              <strong className="font-semibold text-foreground">{totalItems}</strong> {totalItems === 1 ? "testimonial" : "testimonials"}
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPageClamped <= 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-white text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium text-xs shadow-sm cursor-pointer"
-                title="Previous Page"
-              >
-                <ChevronLeft size={14} />
-                <span>Previous</span>
-              </button>
-
-              <div className="flex items-center gap-1">
-                {getPageNumbers(currentPageClamped, totalPages).map((p, idx) => {
-                  if (p === "ellipsis") {
-                    return (
-                      <span
-                        key={`ellipsis-${idx}`}
-                        className="w-8 h-8 flex items-center justify-center text-muted-foreground"
-                      >
-                        …
-                      </span>
-                    );
-                  }
-                  const isActive = p === currentPageClamped;
-                  return (
-                    <button
-                      key={`page-${p}`}
-                      type="button"
-                      onClick={() => setCurrentPage(p)}
-                      className={cn(
-                        "min-w-[32px] h-8 px-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
-                        isActive
-                          ? "bg-[#D95B2F] text-white shadow-sm"
-                          : "border border-border bg-white text-foreground hover:bg-muted"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPageClamped >= totalPages}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-white text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium text-xs shadow-sm cursor-pointer"
-                title="Next Page"
-              >
-                <span>Next</span>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
+          <AdminPagination
+            currentPage={currentPageClamped}
+            totalItems={totalItems}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            itemLabel="testimonials"
+          />
         </div>
       )}
     </AdminLayout>
