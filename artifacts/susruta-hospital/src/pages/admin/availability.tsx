@@ -39,7 +39,7 @@ export default function AdminAvailability() {
   const [customDate, setCustomDate] = useState("");
   const [morningEnabled, setMorningEnabled] = useState(true);
   const [morningStart, setMorningStart] = useState("10:00 AM");
-  const [morningEnd, setMorningEnd] = useState("01:00 PM");
+  const [morningEnd, setMorningEnd] = useState("01:30 PM");
   const [eveningEnabled, setEveningEnabled] = useState(true);
   const [eveningStart, setEveningStart] = useState("06:00 PM");
   const [eveningEnd, setEveningEnd] = useState("10:00 PM");
@@ -50,7 +50,7 @@ export default function AdminAvailability() {
     setCustomDate("");
     setMorningEnabled(true);
     setMorningStart("10:00 AM");
-    setMorningEnd("01:00 PM");
+    setMorningEnd("01:30 PM");
     setEveningEnabled(true);
     setEveningStart("06:00 PM");
     setEveningEnd("10:00 PM");
@@ -562,7 +562,7 @@ export default function AdminAvailability() {
                       <label className="block text-[11px] font-semibold text-[#64748B] mb-1">End Time</label>
                       <input
                         type="text"
-                        placeholder="e.g. 01:00 PM"
+                        placeholder="e.g. 01:30 PM"
                         value={morningEnd}
                         onChange={(e) => setMorningEnd(e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-[#CBD5E1] text-xs text-[#1E293B]"

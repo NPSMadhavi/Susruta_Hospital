@@ -354,7 +354,7 @@ export default function AdminSettings() {
               </div>
               <div>
                 <label className={labelCls}>Working Hours</label>
-                <input className={inputCls} value={form.workingHours || ""} onChange={set("workingHours")} placeholder="Mon–Sat: 10:00 AM – 1:00 PM · 6:00 PM – 10:00 PM" />
+                <input className={inputCls} value={form.workingHours || ""} onChange={set("workingHours")} placeholder="Mon–Sat: 10:00 AM – 1:30 PM · 6:00 PM – 10:00 PM" />
               </div>
               <div>
                 <label className={labelCls}>Physical Address</label>

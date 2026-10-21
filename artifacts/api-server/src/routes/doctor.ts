@@ -840,8 +840,8 @@ router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
   try {
     const { sendDonationThankYou } = await import("../lib/email");
     const donationDate = row.createdAt
-      ? row.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-      : new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+      ? row.createdAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" })
+      : new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
     await sendDonationThankYou({
       to: row.patientEmail,
       name: row.patientName || "Patient",

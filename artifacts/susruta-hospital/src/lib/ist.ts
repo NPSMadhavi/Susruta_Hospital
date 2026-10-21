@@ -58,6 +58,21 @@ export function fmtDate(
   return new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { timeZone: TZ, ...opts });
 }
 
+/** Format a UTC ISO timestamp for donation display in Asia/Kolkata locale */
+export function fmtDonationDateTime(iso: string | Date | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-IN", {
+    timeZone: TZ,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Format a UTC timestamp for IST display (date + time) */
 export function fmtTimestamp(
   ts: string | Date,
@@ -109,9 +124,71 @@ export function isSlotExceeded(date: string, startTime: string): boolean {
   return slotMinutes <= nowISTMinutes();
 }
 
+export interface OfflineSessionDefault {
+  label: string;
+  total: number;
+  cutoffMinutes: number;
+  isAvailable: boolean;
+  booked: number;
+  remaining: number;
+}
+
+/**
+ * Single source of truth for default offline consultation session timings & slot counts.
+ * Monday - Saturday:
+ *   Morning: 10:00 AM - 1:30 PM (14 slots of 15 min, cutoff 13:30 / 810 mins)
+ *   Evening: 6:00 PM - 10:00 PM (16 slots of 15 min, cutoff 22:00 / 1320 mins)
+ * Sunday:
+ *   Morning: 10:00 AM - 1:00 PM (12 slots of 15 min, cutoff 13:00 / 780 mins)
+ *   Evening: Closed on Sunday (0 slots)
+ */
+export function getDefaultOfflineSession(dateStr?: string | null, session: "morning" | "evening" = "morning"): OfflineSessionDefault {
+  const isSunday = dateStr ? new Date(dateStr + "T12:00:00+05:30").getDay() === 0 : false;
+  if (session === "morning") {
+    if (isSunday) {
+      return {
+        label: "10 AM - 1 PM",
+        total: 12,
+        cutoffMinutes: 13 * 60,
+        isAvailable: true,
+        booked: 0,
+        remaining: 12,
+      };
+    }
+    return {
+      label: "10 AM - 1:30 PM",
+      total: 14,
+      cutoffMinutes: 13 * 60 + 30,
+      isAvailable: true,
+      booked: 0,
+      remaining: 14,
+    };
+  } else {
+    if (isSunday) {
+      return {
+        label: "Closed on Sunday",
+        total: 0,
+        cutoffMinutes: 0,
+        isAvailable: false,
+        booked: 0,
+        remaining: 0,
+      };
+    }
+    return {
+      label: "6 PM - 10 PM",
+      total: 16,
+      cutoffMinutes: 22 * 60,
+      isAvailable: true,
+      booked: 0,
+      remaining: 16,
+    };
+  }
+}
+
 /**
  * Check whether an offline session has exceeded (passed) in IST.
- * Morning session: 10 AM - 1 PM (ends at 13:00 / 780 mins).
+ * Morning session: Mon-Sat 10 AM - 1:30 PM (ends at 13:30 / 810 mins).
+ * Sunday morning: 10 AM - 1 PM (ends at 13:00 / 780 mins).
  * Evening session: 6 PM - 10 PM (ends at 22:00 / 1320 mins).
  */
 export function isOfflineSessionExceeded(date: string, session: "morning" | "evening"): boolean {
@@ -120,8 +197,8 @@ export function isOfflineSessionExceeded(date: string, session: "morning" | "eve
   if (date > today) return false;
   const currentMins = nowISTMinutes();
   if (session === "morning") {
-    // 13:00 (1:00 PM) cutoff
-    return currentMins >= 13 * 60;
+    const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
+    return currentMins >= (isSunday ? 13 * 60 : 13 * 60 + 30);
   } else {
     // 22:00 (10:00 PM) cutoff
     return currentMins >= 22 * 60;

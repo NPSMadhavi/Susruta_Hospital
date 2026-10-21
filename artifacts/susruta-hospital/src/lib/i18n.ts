@@ -83,7 +83,7 @@ export const translations: TranslationMap = {
   "appt.success": { en: "Appointment Request Sent!", te: "అపాయింట్‌మెంట్ అభ్యర్థన పంపబడింది!" },
   "appt.success_msg": { en: "Your request has been received. Our staff will call you to confirm.", te: "మీ అభ్యర్థన స్వీకరించబడింది. మా సిబ్బంది నిర్ధారించడానికి మీకు కాల్ చేస్తారు." },
   "appt.no_months": { en: "No months are open for booking yet. Please call us.", te: "ఇంకా ఏ నెల బుకింగ్ కోసం తెరవబడలేదు. దయచేసి మాకు కాల్ చేయండి." },
-  "appt.morning": { en: "Morning — 10:00 AM to 1:00 PM", te: "ఉదయం — 10:00 AM నుండి 1:00 PM వరకు" },
+  "appt.morning": { en: "Morning — 10:00 AM to 1:30 PM", te: "ఉదయం — 10:00 AM నుండి 1:30 PM వరకు" },
   "appt.evening": { en: "Evening — 6:00 PM to 10:00 PM", te: "సాయంత్రం — 6:00 PM నుండి 10:00 PM వరకు" },
   "appt.sunday_note": { en: "Sunday: Morning only", te: "ఆదివారం: ఉదయం మాత్రమే" },
   "appt.slots_for": { en: "Available slots for", te: "అందుబాటులో ఉన్న స్లాట్‌లు" },

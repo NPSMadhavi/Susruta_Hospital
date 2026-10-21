@@ -7,7 +7,7 @@ export const customDayTimingsTable = pgTable("custom_day_timings", {
   date: varchar("date", { length: 10 }).notNull().unique(), // YYYY-MM-DD
   morningEnabled: boolean("morning_enabled").notNull().default(true),
   morningStart: varchar("morning_start", { length: 10 }).notNull().default("10:00 AM"),
-  morningEnd: varchar("morning_end", { length: 10 }).notNull().default("01:00 PM"),
+  morningEnd: varchar("morning_end", { length: 10 }).notNull().default("01:30 PM"),
   eveningEnabled: boolean("evening_enabled").notNull().default(true),
   eveningStart: varchar("evening_start", { length: 10 }).notNull().default("06:00 PM"),
   eveningEnd: varchar("evening_end", { length: 10 }).notNull().default("10:00 PM"),

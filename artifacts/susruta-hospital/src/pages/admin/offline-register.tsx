@@ -4,7 +4,7 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { ChevronLeft, CheckCircle2, Printer, X, Search, Loader2, UserPlus } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import QRCode from "qrcode";
-import { isOfflineSessionExceeded } from "@/lib/ist";
+import { isOfflineSessionExceeded, getDefaultOfflineSession } from "@/lib/ist";
 import logoImg from "@assets/logo_1773840200056.png";
 
 const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
@@ -63,20 +63,23 @@ export default function AdminOfflineRegister() {
   // Appointment details
   const [appointmentDate, setAppointmentDate] = useState(todayStr);
 
-  const SESSIONS = [
-    { id: "morning", label: "10 AM - 1 PM", slotCount: 12 },
-    { id: "evening", label: "6 PM - 10 PM", slotCount: 16 },
-  ];
-
   const [selectedSessionId, setSelectedSessionId] = useState<"morning" | "evening">("morning");
 
   const [slotStatus, setSlotStatus] = useState<{
     morning: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
     evening: { label: string; total: number; booked: number; remaining: number; isAvailable: boolean; isExceeded?: boolean };
-  }>({
-    morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
-    evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
-  });
+  }>(() => ({
+    morning: getDefaultOfflineSession(todayStr, "morning"),
+    evening: getDefaultOfflineSession(todayStr, "evening"),
+  }));
+
+  const defaultMorning = getDefaultOfflineSession(appointmentDate, "morning");
+  const defaultEvening = getDefaultOfflineSession(appointmentDate, "evening");
+
+  const SESSIONS = [
+    { id: "morning", label: slotStatus.morning.label || defaultMorning.label, slotCount: slotStatus.morning.total || defaultMorning.total },
+    { id: "evening", label: slotStatus.evening.label || defaultEvening.label, slotCount: slotStatus.evening.total || defaultEvening.total },
+  ];
 
   const [amount, setAmount] = useState("200");
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "unpaid">("unpaid");
@@ -92,8 +95,8 @@ export default function AdminOfflineRegister() {
 
   const currentSessionLabel =
     selectedSessionId === "morning"
-      ? (slotStatus.morning.label || "10 AM - 1 PM")
-      : (slotStatus.evening.label || "6 PM - 10 PM");
+      ? (slotStatus.morning.label || defaultMorning.label)
+      : (slotStatus.evening.label || defaultEvening.label);
 
   const isMorningExceeded = isOfflineSessionExceeded(appointmentDate, "morning");
   const isEveningExceeded = isOfflineSessionExceeded(appointmentDate, "evening");
@@ -111,8 +114,10 @@ export default function AdminOfflineRegister() {
 
       if (res.ok) {
         const data = await res.json();
-        const morningData = data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true };
-        const eveningData = data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true };
+        const defaultM = getDefaultOfflineSession(date, "morning");
+        const defaultE = getDefaultOfflineSession(date, "evening");
+        const morningData = data.morning ?? defaultM;
+        const eveningData = data.evening ?? defaultE;
 
         setSlotStatus({
           morning: morningData,
@@ -155,20 +160,22 @@ export default function AdminOfflineRegister() {
           a.timeSlot?.startsWith("21:")
         ).length;
 
+        const defaultM = getDefaultOfflineSession(date, "morning");
+        const defaultE = getDefaultOfflineSession(date, "evening");
         setSlotStatus({
           morning: {
-            label: "10 AM - 1 PM",
-            total: 12,
+            label: defaultM.label,
+            total: defaultM.total,
             booked: mBooked,
-            remaining: Math.max(0, 12 - mBooked),
-            isAvailable: mBooked < 12,
+            remaining: Math.max(0, defaultM.total - mBooked),
+            isAvailable: mBooked < defaultM.total,
           },
           evening: {
-            label: "6 PM - 10 PM",
-            total: 16,
+            label: defaultE.label,
+            total: defaultE.total,
             booked: eBooked,
-            remaining: Math.max(0, 16 - eBooked),
-            isAvailable: eBooked < 16,
+            remaining: Math.max(0, defaultE.total - eBooked),
+            isAvailable: eBooked < defaultE.total,
           },
         });
       }

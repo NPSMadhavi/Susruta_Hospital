@@ -15,7 +15,7 @@ import { useActiveCall } from "@/context/ActiveCallContext";
 import { CleanPdfViewer } from "@/components/CleanPdfViewer";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
-import { todayIST, fmtDateFromTs, fmtTimeIST } from "@/lib/ist";
+import { todayIST, fmtDateFromTs, fmtTimeIST, fmtDonationDateTime } from "@/lib/ist";
 import { playDoctorCallAlert } from "@/lib/sound";
 import { downloadFileDirectly, downloadPrescriptionPdf, type PrintPrescriptionData } from "@/lib/prescription-download";
 import { HOSPITAL_LOGO_DATA_URL } from "@/lib/hospital-logo-b64";
@@ -330,8 +330,7 @@ export function isAppointmentPrescriptionComplete(a: AnyAppt | { prescription?: 
   return false;
 }
 function fmtDateFull(iso: string) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return fmtDonationDateTime(iso);
 }
 function isUpcoming(date: string, status: string) {
   const today = todayIST();
@@ -3939,7 +3938,7 @@ export default function DoctorPortal() {
                   const photoPath = a.prescription?.photoObjectPath;
                   const dateStrShort = fmtDateShort(a.date);
                   const apptDateYear = fmtDateYear(a.date);
-                  const slotTime = a.timeLabel || "10 AM – 1 PM";
+                  const slotTime = a.timeLabel || "10 AM – 1:30 PM";
                   const consultType = getConsultationType(a);
                   const uploadedDate = a.prescription?.updatedAt ? fmtDateShort(a.prescription.updatedAt) : dateStrShort;
 

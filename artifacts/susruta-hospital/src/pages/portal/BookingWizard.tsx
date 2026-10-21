@@ -6,7 +6,7 @@ import {
   Loader2, Leaf, Phone,
 } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
-import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded } from "@/lib/ist";
+import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded, getDefaultOfflineSession } from "@/lib/ist";
 import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
 import {
   useListOpenMonths,
@@ -286,17 +286,19 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
       .then(res => res.json())
       .then(data => {
         if (!cancelled) {
+          const defMorning = getDefaultOfflineSession(selectedDate, "morning");
+          const defEvening = getDefaultOfflineSession(selectedDate, "evening");
           setOfflineSlotStatus({
-            morning: data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
-            evening: data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+            morning: data.morning ?? defMorning,
+            evening: data.evening ?? defEvening,
           });
         }
       })
       .catch(() => {
         if (!cancelled) {
           setOfflineSlotStatus({
-            morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
-            evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+            morning: getDefaultOfflineSession(selectedDate, "morning"),
+            evening: getDefaultOfflineSession(selectedDate, "evening"),
           });
         }
       })
@@ -644,13 +646,13 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     {[
                       {
                         id: "morning",
-                        label: offlineSlotStatus?.morning?.label || "10 AM - 1 PM",
+                        label: offlineSlotStatus?.morning?.label || getDefaultOfflineSession(selectedDate, "morning").label,
                         title: getConsultationTitle(offlineSlotStatus?.morning?.label || "", "Morning Consultation"),
                         status: offlineSlotStatus?.morning,
                       },
                       {
                         id: "evening",
-                        label: offlineSlotStatus?.evening?.label || "6 PM - 10 PM",
+                        label: offlineSlotStatus?.evening?.label || getDefaultOfflineSession(selectedDate, "evening").label,
                         title: getConsultationTitle(offlineSlotStatus?.evening?.label || "", "Evening Consultation"),
                         status: offlineSlotStatus?.evening,
                       },
@@ -1124,8 +1126,8 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                       disabled={
                         !selectedSlot ||
                         !selectedDate ||
-                        (selectedSlot === "9 AM - 1 PM" && (isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0)) ||
-                        (selectedSlot === "4 PM - 7 PM" && (isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0))
+                        ((selectedSlot === offlineSlotStatus?.morning?.label || selectedSlot?.includes("Morning") || selectedSlot?.includes("10 AM")) && (isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0)) ||
+                        ((selectedSlot === offlineSlotStatus?.evening?.label || selectedSlot?.includes("Evening") || selectedSlot?.includes("6 PM")) && (isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0))
                       }
                       onClick={() => setOfflineStep("confirm")}
                       className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-sm"

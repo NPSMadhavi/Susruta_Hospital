@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Clock, ArrowLeft, CheckCircle2, Leaf, AlertCircle, Video, MapPin, Phone } from "lucide-react";
 import { patientApi } from "@/lib/patient-api";
-import { isOfflineSessionExceeded, isSlotExceeded } from "@/lib/ist";
+import { isOfflineSessionExceeded, isSlotExceeded, getDefaultOfflineSession } from "@/lib/ist";
 import { EmailVerificationGate } from "@/components/EmailVerificationGate";
 import { MathCaptcha } from "@/components/MathCaptcha";
 
@@ -193,17 +193,19 @@ export default function PortalBook() {
       .then(res => res.json())
       .then(data => {
         if (!cancelled) {
+          const defMorning = getDefaultOfflineSession(selectedDate, "morning");
+          const defEvening = getDefaultOfflineSession(selectedDate, "evening");
           setOfflineSlotStatus({
-            morning: data.morning ?? { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
-            evening: data.evening ?? { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+            morning: data.morning ?? defMorning,
+            evening: data.evening ?? defEvening,
           });
         }
       })
       .catch(() => {
         if (!cancelled) {
           setOfflineSlotStatus({
-            morning: { label: "10 AM - 1 PM", total: 12, booked: 0, remaining: 12, isAvailable: true },
-            evening: { label: "6 PM - 10 PM", total: 16, booked: 0, remaining: 16, isAvailable: true },
+            morning: getDefaultOfflineSession(selectedDate, "morning"),
+            evening: getDefaultOfflineSession(selectedDate, "evening"),
           });
         }
       })
@@ -473,13 +475,13 @@ export default function PortalBook() {
                       {[
                         {
                           id: "morning",
-                          label: offlineSlotStatus?.morning?.label || "10 AM - 1 PM",
+                          label: offlineSlotStatus?.morning?.label || getDefaultOfflineSession(selectedDate, "morning").label,
                           title: getConsultationTitle(offlineSlotStatus?.morning?.label || "", "Morning Consultation"),
                           status: offlineSlotStatus?.morning,
                         },
                         {
                           id: "evening",
-                          label: offlineSlotStatus?.evening?.label || "6 PM - 10 PM",
+                          label: offlineSlotStatus?.evening?.label || getDefaultOfflineSession(selectedDate, "evening").label,
                           title: getConsultationTitle(offlineSlotStatus?.evening?.label || "", "Evening Consultation"),
                           status: offlineSlotStatus?.evening,
                         },

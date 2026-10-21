@@ -83,7 +83,7 @@ async function getOrCreateSettings() {
         clinicPhone2: "0877-2220663",
         clinicEmail: null,
         clinicAddress: "119, Ramulavari North Mada Street, Tirupati - 517 507",
-        workingHours: "Mon-Sat: 10:00 AM - 1:00 PM, 6:00 PM - 10:00 PM | Sun: 10:00 AM - 1:00 PM",
+        workingHours: "Mon-Sat: 10:00 AM - 1:30 PM, 6:00 PM - 10:00 PM | Sun: 10:00 AM - 1:00 PM",
         smtpFromName: "Susruta Hospital",
         smtpFromEmail: "noreply@susrutahospital.com",
         smtpSubscriberFrom: "updates@susrutahospital.com",
@@ -660,6 +660,20 @@ router.get("/donations/sse", requireAdmin, (req, res) => {
   const cleanup = addDonationSseClient("admin", res);
   const heartbeat = setInterval(() => { try { res.write(": ping\n\n"); } catch { clearInterval(heartbeat); } }, 15000);
   req.on("close", () => { cleanup(); clearInterval(heartbeat); });
+});
+
+// ── GET /admin/donations/count ─────────────────────────────────
+router.get("/donations/count", requireAdmin, async (_req, res) => {
+  try {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(donationsTable)
+      .where(eq(donationsTable.deleteColumn, 0));
+    res.json({ count: result?.count ?? 0 });
+  } catch (err) {
+    console.error("Admin donations count error:", err);
+    res.status(500).json({ error: "Failed to fetch donations count" });
+  }
 });
 
 // ── GET /admin/donations ───────────────────────────────────────

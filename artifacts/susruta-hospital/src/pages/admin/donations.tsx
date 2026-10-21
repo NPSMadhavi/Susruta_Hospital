@@ -3,6 +3,7 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Heart, CheckCircle2, Clock, Mail, MailCheck, ChevronDown, IndianRupee, Search, RefreshCw, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { fmtDonationDateTime } from "@/lib/ist";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -25,7 +26,7 @@ const MONTHS = [
 ];
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return fmtDonationDateTime(iso);
 }
 
 export default function AdminDonations() {
@@ -66,6 +67,7 @@ export default function AdminDonations() {
     es.addEventListener("new_donation", (e) => {
       const d = JSON.parse((e as MessageEvent).data) as Donation;
       setDonations(prev => [d, ...prev]);
+      window.dispatchEvent(new CustomEvent("susruta:donation_count_change", { detail: { delta: 1 } }));
     });
     return () => es.close();
   }, []);

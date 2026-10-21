@@ -15,7 +15,7 @@ async function ensureCustomDayTimingsTable() {
         date VARCHAR(10) NOT NULL UNIQUE,
         morning_enabled BOOLEAN NOT NULL DEFAULT true,
         morning_start VARCHAR(10) NOT NULL DEFAULT '10:00 AM',
-        morning_end VARCHAR(10) NOT NULL DEFAULT '01:00 PM',
+        morning_end VARCHAR(10) NOT NULL DEFAULT '01:30 PM',
         evening_enabled BOOLEAN NOT NULL DEFAULT true,
         evening_start VARCHAR(10) NOT NULL DEFAULT '06:00 PM',
         evening_end VARCHAR(10) NOT NULL DEFAULT '10:00 PM',
@@ -25,6 +25,7 @@ async function ensureCustomDayTimingsTable() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
       ALTER TABLE public.custom_day_timings ADD COLUMN IF NOT EXISTS delete_column INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE public.custom_day_timings ALTER COLUMN morning_end SET DEFAULT '01:30 PM';
     `);
   } catch (err: any) {
     console.error("⚠️ Failed to ensure custom_day_timings table:", err.message);
@@ -32,10 +33,17 @@ async function ensureCustomDayTimingsTable() {
 }
 ensureCustomDayTimingsTable();
 
-const MORNING_SLOTS = [
+export const MORNING_SLOTS_WEEKDAY = [
   "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
   "12:00 PM", "12:30 PM", "01:00 PM"
 ];
+
+export const MORNING_SLOTS_SUNDAY = [
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+  "12:00 PM", "12:30 PM"
+];
+
+export const MORNING_SLOTS = MORNING_SLOTS_WEEKDAY;
 
 const EVENING_SLOTS = [
   "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM",
@@ -125,7 +133,10 @@ router.get("/slots", async (req, res) => {
 
   const blocked = await db.select().from(blockedDatesTable).where(and(eq(blockedDatesTable.date, date), eq(blockedDatesTable.deleteColumn, 0)));
   if (blocked.length > 0) {
-    const allSlots = [...MORNING_SLOTS, ...EVENING_SLOTS];
+    const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay();
+    const isSunday = dayOfWeek === 0;
+    const morningList = isSunday ? MORNING_SLOTS_SUNDAY : MORNING_SLOTS_WEEKDAY;
+    const allSlots = isSunday ? morningList : [...morningList, ...EVENING_SLOTS];
     res.json(allSlots.map((t) => ({ time: t, available: false })));
     return;
   }
@@ -172,13 +183,13 @@ router.get("/slots", async (req, res) => {
     const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay();
     const isSunday = dayOfWeek === 0;
     if (isSunday && !onlineSessions.some((s) => parseInt(s.startTime.split(":")[0], 10) < 12)) {
-      sessionSlots.unshift(...MORNING_SLOTS);
+      sessionSlots.unshift(...MORNING_SLOTS_SUNDAY);
     }
     allSlots = Array.from(new Set(sessionSlots));
   } else {
     const dayOfWeek = new Date(date + "T12:00:00+05:30").getDay(); // 0 = Sunday
     const isSunday = dayOfWeek === 0;
-    allSlots = isSunday ? MORNING_SLOTS : [...MORNING_SLOTS, ...EVENING_SLOTS];
+    allSlots = isSunday ? MORNING_SLOTS_SUNDAY : [...MORNING_SLOTS_WEEKDAY, ...EVENING_SLOTS];
   }
 
   const bookedAppts = await db
@@ -213,7 +224,7 @@ router.post("/custom-timings", requireAdmin, async (req, res) => {
     date,
     morningEnabled = true,
     morningStart = "10:00 AM",
-    morningEnd = "01:00 PM",
+    morningEnd = "01:30 PM",
     eveningEnabled = true,
     eveningStart = "06:00 PM",
     eveningEnd = "10:00 PM",

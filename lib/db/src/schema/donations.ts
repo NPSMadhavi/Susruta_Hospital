@@ -14,9 +14,9 @@ export const donationsTable = pgTable("donations", {
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   thankYouSent: boolean("thank_you_sent").notNull().default(false),
   isSeen: boolean("is_seen").notNull().default(false),
-  seenAt: timestamp("seen_at"),
+  seenAt: timestamp("seen_at", { withTimezone: true }),
   deleteColumn: integer("delete_column").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type Donation = typeof donationsTable.$inferSelect;

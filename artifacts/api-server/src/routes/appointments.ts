@@ -63,6 +63,13 @@ export function notifyAdminNewOnlineAppointment(data: any) {
   }
 }
 
+export function notifyAdminNewDonation(donation: any) {
+  const msg = JSON.stringify({ type: "new_donation", donation });
+  for (const client of sseClients) {
+    try { client.write(`data: ${msg}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
 router.get("/notifications", requireAdmin, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -190,12 +197,18 @@ router.get("/offline/slots-status", async (req, res) => {
 
   const offlineMorningBooked = existingOffline.filter((a) =>
     a.timeSlot.includes("10 AM") ||
+    a.timeSlot.includes("1:30 PM") ||
+    a.timeSlot.includes("1 PM") ||
     a.timeSlot.includes("9 AM") ||
     a.timeSlot.includes("Morning") ||
     a.timeSlot.startsWith("08:") ||
     a.timeSlot.startsWith("09:") ||
     a.timeSlot.startsWith("10:") ||
-    a.timeSlot.startsWith("11:")
+    a.timeSlot.startsWith("11:") ||
+    a.timeSlot.startsWith("12:") ||
+    a.timeSlot.startsWith("13:") ||
+    a.timeSlot.startsWith("01:") ||
+    a.timeSlot.startsWith("1:")
   ).length;
 
   const onlineMorningBooked = existingOnlineSlots.filter((s) => {
@@ -206,27 +219,22 @@ router.get("/offline/slots-status", async (req, res) => {
   const morningBooked = offlineMorningBooked + onlineMorningBooked;
 
   const offlineEveningBooked = existingOffline.filter((a) =>
-    a.timeSlot.includes("12 PM") ||
     a.timeSlot.includes("6 PM") ||
     a.timeSlot.includes("4 PM") ||
     a.timeSlot.includes("5 PM") ||
     a.timeSlot.includes("Evening") ||
-    a.timeSlot.startsWith("12:") ||
-    a.timeSlot.startsWith("13:") ||
-    a.timeSlot.startsWith("14:") ||
-    a.timeSlot.startsWith("15:") ||
-    a.timeSlot.startsWith("04:") ||
-    a.timeSlot.startsWith("05:") ||
-    a.timeSlot.startsWith("06:") ||
-    a.timeSlot.startsWith("07:") ||
-    a.timeSlot.startsWith("08:") ||
-    a.timeSlot.startsWith("09:") ||
     a.timeSlot.startsWith("16:") ||
     a.timeSlot.startsWith("17:") ||
     a.timeSlot.startsWith("18:") ||
     a.timeSlot.startsWith("19:") ||
     a.timeSlot.startsWith("20:") ||
-    a.timeSlot.startsWith("21:")
+    a.timeSlot.startsWith("21:") ||
+    a.timeSlot.startsWith("04:") ||
+    a.timeSlot.startsWith("05:") ||
+    a.timeSlot.startsWith("06:") ||
+    a.timeSlot.startsWith("07:") ||
+    a.timeSlot.startsWith("08:") ||
+    a.timeSlot.startsWith("09:")
   ).length;
 
   const onlineEveningBooked = existingOnlineSlots.filter((s) => {
@@ -273,9 +281,9 @@ router.get("/offline/slots-status", async (req, res) => {
   const isToday = date === todayStr;
   const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
 
-  let morningLabel = "10 AM - 1 PM";
-  let morningTotal = 12;
-  let morningCutoffMins = 13 * 60; // 1:00 PM
+  let morningLabel = "10 AM - 1:30 PM";
+  let morningTotal = 14;
+  let morningCutoffMins = 13 * 60 + 30; // 1:30 PM (810 mins)
   let morningEnabled = true;
 
   let eveningLabel = "6 PM - 10 PM";
@@ -347,7 +355,7 @@ router.get("/offline/slots-status", async (req, res) => {
     } else {
       if (morningOnlineSession) {
         morningLabel = `${formatHHMMTo12Hour(morningOnlineSession.startTime)} - ${formatHHMMTo12Hour(morningOnlineSession.endTime)}`;
-        morningTotal = morningOnlineSession.maxBookings || 12;
+        morningTotal = morningOnlineSession.maxBookings || 14;
         morningCutoffMins = parseTimeString(formatHHMMTo12Hour(morningOnlineSession.endTime));
       }
       if (eveningOnlineSession) {
@@ -723,13 +731,39 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
   }
   const data = parsed.data;
 
-  const isMorningSession = data.timeSlot.includes("9 AM") || data.timeSlot.includes("Morning");
-  const isEveningSession = data.timeSlot.includes("4 PM") || data.timeSlot.includes("Evening");
-  const isLegacySession = data.timeSlot.includes("10 AM") || data.timeSlot === "10 AM - 1 PM";
+  const isSunday = new Date(data.date + "T12:00:00+05:30").getDay() === 0;
+  const isMorningSession =
+    data.timeSlot.includes("10 AM") ||
+    data.timeSlot.includes("1:30 PM") ||
+    data.timeSlot.includes("1 PM") ||
+    data.timeSlot.includes("9 AM") ||
+    data.timeSlot.includes("Morning");
+  const isEveningSession =
+    data.timeSlot.includes("6 PM") ||
+    data.timeSlot.includes("4 PM") ||
+    data.timeSlot.includes("Evening");
 
   let generatedToken: string | null = null;
 
   if (isMorningSession || isEveningSession) {
+    const [customTiming] = await db
+      .select()
+      .from(customDayTimingsTable)
+      .where(and(eq(customDayTimingsTable.date, data.date), eq(customDayTimingsTable.deleteColumn, 0)));
+
+    let maxSlots = isMorningSession ? (isSunday ? 12 : 14) : (isSunday ? 0 : 16);
+    if (customTiming) {
+      if (isMorningSession) {
+        maxSlots = customTiming.morningEnabled
+          ? generateTimeSlots(customTiming.morningStart, customTiming.morningEnd, customTiming.slotIntervalMinutes).length
+          : 0;
+      } else {
+        maxSlots = customTiming.eveningEnabled
+          ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes).length
+          : 0;
+      }
+    }
+
     const existing = await db
       .select()
       .from(appointmentsTable)
@@ -741,12 +775,41 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
         )
       );
 
-    const maxSlots = isMorningSession ? 16 : 12;
     const sessionBooked = existing.filter((a) => {
       if (isMorningSession) {
-        return a.timeSlot.includes("9 AM") || a.timeSlot.includes("Morning") || a.timeSlot.startsWith("09:") || a.timeSlot.startsWith("10:") || a.timeSlot.startsWith("11:");
+        return (
+          a.timeSlot.includes("10 AM") ||
+          a.timeSlot.includes("1:30 PM") ||
+          a.timeSlot.includes("1 PM") ||
+          a.timeSlot.includes("9 AM") ||
+          a.timeSlot.includes("Morning") ||
+          a.timeSlot.startsWith("08:") ||
+          a.timeSlot.startsWith("09:") ||
+          a.timeSlot.startsWith("10:") ||
+          a.timeSlot.startsWith("11:") ||
+          a.timeSlot.startsWith("12:") ||
+          a.timeSlot.startsWith("13:") ||
+          a.timeSlot.startsWith("01:") ||
+          a.timeSlot.startsWith("1:")
+        );
       } else {
-        return a.timeSlot.includes("4 PM") || a.timeSlot.includes("Evening") || a.timeSlot.includes("12 PM") || a.timeSlot.startsWith("12:") || a.timeSlot.startsWith("13:") || a.timeSlot.startsWith("14:") || a.timeSlot.startsWith("15:") || a.timeSlot.startsWith("04:") || a.timeSlot.startsWith("05:") || a.timeSlot.startsWith("06:") || a.timeSlot.startsWith("16:") || a.timeSlot.startsWith("17:") || a.timeSlot.startsWith("18:");
+        return (
+          a.timeSlot.includes("6 PM") ||
+          a.timeSlot.includes("4 PM") ||
+          a.timeSlot.includes("Evening") ||
+          a.timeSlot.startsWith("16:") ||
+          a.timeSlot.startsWith("17:") ||
+          a.timeSlot.startsWith("18:") ||
+          a.timeSlot.startsWith("19:") ||
+          a.timeSlot.startsWith("20:") ||
+          a.timeSlot.startsWith("21:") ||
+          a.timeSlot.startsWith("04:") ||
+          a.timeSlot.startsWith("05:") ||
+          a.timeSlot.startsWith("06:") ||
+          a.timeSlot.startsWith("07:") ||
+          a.timeSlot.startsWith("08:") ||
+          a.timeSlot.startsWith("09:")
+        );
       }
     });
 
@@ -759,30 +822,6 @@ router.post("/", verifyRecaptcha("appointment_booking"), async (req, res) => {
       generatedToken = await getNextDailyToken(data.date);
     } catch (err: any) {
       res.status(409).json({ error: "tokens_exhausted", message: err.message || "Daily token limit of 500 reached for this date." });
-      return;
-    }
-  } else if (isLegacySession) {
-    const existing = await db
-      .select()
-      .from(appointmentsTable)
-      .where(
-        and(
-          eq(appointmentsTable.date, data.date),
-          ne(appointmentsTable.status, "cancelled"),
-          eq(appointmentsTable.deleteColumn, 0)
-        )
-      );
-    const booked = existing.filter((a) =>
-      a.timeSlot.includes("10 AM") ||
-      a.timeSlot.includes("9 AM") ||
-      a.timeSlot.includes("Morning") ||
-      a.timeSlot.startsWith("10:") ||
-      a.timeSlot.startsWith("11:") ||
-      a.timeSlot.startsWith("12:")
-    ).length;
-
-    if (booked >= 12) {
-      res.status(409).json({ error: "slot_unavailable", message: "No slots available for 10 AM - 1 PM on this date." });
       return;
     }
   } else {

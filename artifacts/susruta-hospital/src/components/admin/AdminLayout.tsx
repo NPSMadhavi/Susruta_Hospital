@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,31 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const { data: admin, isLoading, isError } = useGetAdminMe({ query: { retry: false }});
   const logoutMutation = useAdminLogout();
   const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
+  const [donationCount, setDonationCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!admin) return;
+    adminFetch("/donations/count")
+      .then(res => {
+        if (typeof res?.count === "number") {
+          setDonationCount(res.count);
+        }
+      })
+      .catch(() => {});
+  }, [admin]);
+
+  useEffect(() => {
+    const onCountChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail?.count === "number") {
+        setDonationCount(detail.count);
+      } else if (typeof detail?.delta === "number") {
+        setDonationCount(prev => Math.max(0, prev + detail.delta));
+      }
+    };
+    window.addEventListener("susruta:donation_count_change", onCountChange);
+    return () => window.removeEventListener("susruta:donation_count_change", onCountChange);
+  }, []);
 
   // Track seen appointment IDs to detect new arrivals
   const seenIdsRef = useRef<Set<number>>(new Set());
@@ -94,6 +119,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           notify("New Online Booking!", `${name} booked an online consultation.`);
         } else if (data.type === "direct_call_updated" && data.status === "ended") {
           notify("Direct Call Ended", "The patient consultation call has ended.");
+        } else if (data.type === "new_donation") {
+          setDonationCount(prev => prev + 1);
+          const name = data.donation?.patientName || "A donor";
+          const amount = data.donation?.amount ? `₹${data.donation.amount}` : "";
+          notify("New Donation Received!", `${name} made a donation of ${amount}.`);
         }
       } catch { /* ignore parse errors */ }
     };
@@ -123,7 +153,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const managementGroup = [
     { href: "/admin/patients", icon: <UserCheck size={18}/>, label: "Patients" },
     { href: "/admin/medicines", icon: <BriefcaseMedical size={18}/>, label: "Medicines" },
-    { href: "/admin/donations", icon: <Heart size={18}/>, label: "Donations" },
+    { href: "/admin/donations", icon: <Heart size={18}/>, label: "Donations", count: donationCount },
     { href: "/admin/testimonials", icon: <MessageSquare size={18}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={18}/>, label: "Subscribers" },
     { href: "/admin/visitors", icon: <CarbonUserActivity size={18}/>, label: "Visitors" },
@@ -132,7 +162,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   const mobileNavItems = [...dashboardGroup, ...managementGroup].slice(0, 6);
 
-  const renderNavItem = (item: { href: string; icon: React.ReactNode; label: string }) => {
+  const renderNavItem = (item: { href: string; icon: React.ReactNode; label: string; count?: number }) => {
     const isActive = location === item.href || (item.href === "/admin/availability" && location === "/admin/offline-register");
     return (
       <Link 
@@ -147,7 +177,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <span className={isActive ? 'text-[#D95B2F]' : 'text-[#42493E]'}>
           {item.icon}
         </span>
-        {item.label}
+        <span className="flex-1">{item.label}</span>
+        {typeof item.count === "number" && item.count > 0 && (
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full min-w-[20px] text-center shrink-0 ml-auto ${
+            isActive ? "bg-[#D95B2F] text-white" : "bg-[#EDEFEB] text-[#42493E]"
+          }`}>
+            {item.count}
+          </span>
+        )}
       </Link>
     );
   };
@@ -223,7 +260,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               <span className={isActive ? 'text-[#D95B2F]' : 'text-[#42493E]'}>
                 {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18 })}
               </span>
-              {item.label}
+              <span>{item.label}</span>
+              {typeof (item as any).count === "number" && (item as any).count > 0 && (
+                <span className="absolute top-1 right-2 text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-[#D95B2F] text-white">
+                  {(item as any).count}
+                </span>
+              )}
             </Link>
           );
         })}

@@ -27,7 +27,7 @@ SET default_table_access_method = heap;
 CREATE TABLE public.admin_sessions (
     id integer NOT NULL,
     session_token text NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp without time zone NOT NULL
 );
 
@@ -66,7 +66,7 @@ CREATE TABLE public.appointments (
     reason text,
     status character varying(30) DEFAULT 'pending'::character varying NOT NULL,
     notes text,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     patient_id integer,
     arrived_at timestamp without time zone,
     payment_status character varying(20) DEFAULT 'unpaid'::character varying NOT NULL,
@@ -106,7 +106,7 @@ CREATE TABLE public.blocked_dates (
     id integer NOT NULL,
     date character varying(10) NOT NULL,
     reason text,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -172,7 +172,7 @@ ALTER SEQUENCE public.direct_calls_id_seq OWNED BY public.direct_calls.id;
 CREATE TABLE public.doctor_sessions (
     id integer NOT NULL,
     session_token character varying(128) NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp without time zone NOT NULL
 );
 
@@ -213,8 +213,8 @@ CREATE TABLE public.donations (
     status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
     thank_you_sent boolean DEFAULT false NOT NULL,
     is_seen boolean DEFAULT false NOT NULL,
-    seen_at timestamp without time zone,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    seen_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -249,7 +249,7 @@ CREATE TABLE public.login_tokens (
     next_url character varying(500) DEFAULT '/portal/dashboard'::character varying,
     expires_at timestamp without time zone NOT NULL,
     used boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     verification_email character varying(255)
 );
 
@@ -285,7 +285,7 @@ CREATE TABLE public.medicine_order_items (
     instructions character varying(500),
     qty integer DEFAULT 1 NOT NULL,
     available boolean,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -323,7 +323,7 @@ CREATE TABLE public.medicine_orders (
     phone character varying(20) NOT NULL,
     tracking_number character varying(255),
     pharmacist_notes text,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL
 );
 
@@ -359,7 +359,7 @@ CREATE TABLE public.online_appointments (
     reason text,
     documents json DEFAULT '[]'::json NOT NULL,
     status character varying(30) DEFAULT 'pending'::character varying NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     meeting_link text,
     join_enabled boolean DEFAULT false NOT NULL,
     join_enabled_at timestamp without time zone,
@@ -400,7 +400,7 @@ CREATE TABLE public.online_slot_sessions (
     end_time character varying(5) NOT NULL,
     interval_minutes integer NOT NULL,
     max_bookings integer,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -435,7 +435,7 @@ CREATE TABLE public.online_slots (
     start_time character varying(5) NOT NULL,
     end_time character varying(5) NOT NULL,
     is_booked boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -467,7 +467,7 @@ CREATE TABLE public.open_months (
     id integer NOT NULL,
     month character varying(7) NOT NULL,
     is_open boolean DEFAULT true NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -502,7 +502,7 @@ CREATE TABLE public.patient_documents (
     object_path text NOT NULL,
     content_type character varying(100) NOT NULL,
     size integer NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -534,7 +534,7 @@ CREATE TABLE public.patient_sessions (
     id integer NOT NULL,
     session_token text NOT NULL,
     patient_id integer NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp without time zone NOT NULL
 );
 
@@ -572,7 +572,7 @@ CREATE TABLE public.patients (
     address text,
     avatar_url text,
     password_hash text,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     email_verified boolean DEFAULT false NOT NULL,
     patient_code character varying(4),
     verification_reminder_sent_at timestamp without time zone,
@@ -614,7 +614,7 @@ CREATE TABLE public.pharmacy_sessions (
     id integer NOT NULL,
     session_token character varying(255) NOT NULL,
     expires_at timestamp without time zone NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -645,7 +645,7 @@ ALTER SEQUENCE public.pharmacy_sessions_id_seq OWNED BY public.pharmacy_sessions
 CREATE TABLE public.prescriptions (
     id integer NOT NULL,
     online_appointment_id integer NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     photo_object_path text,
     notes text
@@ -772,7 +772,7 @@ CREATE TABLE public.testimonials (
     content_te text,
     rating integer DEFAULT 5 NOT NULL,
     is_published boolean DEFAULT true NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 

@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, prescriptionsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable } from "@workspace/db";
+import { db, patientsTable, appointmentsTable, prescriptionsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable, customDayTimingsTable } from "@workspace/db";
 import { eq, and, desc, ne, isNotNull, sql, or } from "drizzle-orm";
 import {
   createPatientSession, deletePatientSession, requirePatient,
@@ -10,7 +10,7 @@ import { sendMobileOtp } from "../lib/sms";
 import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes, randomInt, createHash, timingSafeEqual } from "crypto";
 import { z } from "zod/v4";
-import { notifyNewAppointment } from "./appointments";
+import { notifyNewAppointment, notifyAdminNewDonation } from "./appointments";
 import { extractClinicalNotes } from "./doctor";
 import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
 import { normalizeVerificationEmail } from "../lib/verification";
@@ -18,6 +18,7 @@ import { addDirectCallPatientClient } from "../lib/directCallSse";
 import { registerNewPatientWithNextId } from "../lib/patient-id";
 import { streamPrescriptionDownload } from "../lib/prescription-service";
 import { verifyRecaptcha } from "../lib/recaptcha";
+import { parseTimeString, generateTimeSlots } from "./availability";
 
 const OTP_PEPPER = process.env.UNSUBSCRIBE_SECRET || "susruta-otp-pepper-secure-2026";
 
@@ -1123,8 +1124,44 @@ router.post("/appointments", requirePatient, async (req, res) => {
   const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0", 10);
   const currentMinutes = hour * 60 + minute;
 
-  const isMorning = timeSlot.includes("10 AM") || timeSlot.includes("Morning") || timeSlot.includes("9 AM");
-  const isEvening = timeSlot.includes("6 PM") || timeSlot.includes("Evening") || timeSlot.includes("4 PM");
+  const isSunday = new Date(date + "T12:00:00+05:30").getDay() === 0;
+  const isMorning =
+    timeSlot.includes("10 AM") ||
+    timeSlot.includes("1:30 PM") ||
+    timeSlot.includes("1 PM") ||
+    timeSlot.includes("Morning") ||
+    timeSlot.includes("9 AM");
+  const isEvening =
+    timeSlot.includes("6 PM") ||
+    timeSlot.includes("Evening") ||
+    timeSlot.includes("4 PM");
+
+  const [customTiming] = await db
+    .select()
+    .from(customDayTimingsTable)
+    .where(and(eq(customDayTimingsTable.date, date), eq(customDayTimingsTable.deleteColumn, 0)));
+
+  let morningCutoffMins = isSunday ? 13 * 60 : 13 * 60 + 30;
+  let morningMaxSlots = isSunday ? 12 : 14;
+  let morningEnabled = true;
+
+  let eveningCutoffMins = isSunday ? 0 : 22 * 60;
+  let eveningMaxSlots = isSunday ? 0 : 16;
+  let eveningEnabled = !isSunday;
+
+  if (customTiming) {
+    morningEnabled = customTiming.morningEnabled;
+    morningCutoffMins = parseTimeString(customTiming.morningEnd);
+    morningMaxSlots = morningEnabled
+      ? generateTimeSlots(customTiming.morningStart, customTiming.morningEnd, customTiming.slotIntervalMinutes).length
+      : 0;
+
+    eveningEnabled = customTiming.eveningEnabled;
+    eveningCutoffMins = parseTimeString(customTiming.eveningEnd);
+    eveningMaxSlots = eveningEnabled
+      ? generateTimeSlots(customTiming.eveningStart, customTiming.eveningEnd, customTiming.slotIntervalMinutes).length
+      : 0;
+  }
 
   if (date < todayStr) {
     res.status(400).json({ error: "date_passed", message: "Cannot book appointments for past dates." });
@@ -1132,11 +1169,11 @@ router.post("/appointments", requirePatient, async (req, res) => {
   }
 
   if (date === todayStr) {
-    if (isMorning && currentMinutes >= 13 * 60) {
+    if (isMorning && (!morningEnabled || currentMinutes >= morningCutoffMins)) {
       res.status(400).json({ error: "session_expired", message: "Morning session has already ended. Please select another date or evening session." });
       return;
     }
-    if (isEvening && currentMinutes >= 22 * 60) {
+    if (isEvening && (!eveningEnabled || currentMinutes >= eveningCutoffMins)) {
       res.status(400).json({ error: "session_expired", message: "Evening session has already ended. Please select another date." });
       return;
     }
@@ -1161,44 +1198,45 @@ router.post("/appointments", requirePatient, async (req, res) => {
   if (isMorning) {
     const offlineM = existingOffline.filter(a =>
       a.timeSlot.includes("10 AM") ||
+      a.timeSlot.includes("1:30 PM") ||
+      a.timeSlot.includes("1 PM") ||
       a.timeSlot.includes("9 AM") ||
       a.timeSlot.includes("Morning") ||
       a.timeSlot.startsWith("08:") ||
       a.timeSlot.startsWith("09:") ||
       a.timeSlot.startsWith("10:") ||
-      a.timeSlot.startsWith("11:")
+      a.timeSlot.startsWith("11:") ||
+      a.timeSlot.startsWith("12:") ||
+      a.timeSlot.startsWith("13:") ||
+      a.timeSlot.startsWith("01:") ||
+      a.timeSlot.startsWith("1:")
     ).length;
     const onlineM = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h < 12; }).length;
-    if (offlineM + onlineM >= 12) {
+    if (offlineM + onlineM >= morningMaxSlots) {
       res.status(409).json({ error: "slot_unavailable", message: "Morning session is fully booked for this date." });
       return;
     }
   } else if (isEvening) {
     const offlineE = existingOffline.filter(a =>
-      a.timeSlot.includes("12 PM") ||
       a.timeSlot.includes("6 PM") ||
       a.timeSlot.includes("4 PM") ||
       a.timeSlot.includes("5 PM") ||
       a.timeSlot.includes("Evening") ||
-      a.timeSlot.startsWith("12:") ||
-      a.timeSlot.startsWith("13:") ||
-      a.timeSlot.startsWith("14:") ||
-      a.timeSlot.startsWith("15:") ||
-      a.timeSlot.startsWith("04:") ||
-      a.timeSlot.startsWith("05:") ||
-      a.timeSlot.startsWith("06:") ||
-      a.timeSlot.startsWith("07:") ||
-      a.timeSlot.startsWith("08:") ||
-      a.timeSlot.startsWith("09:") ||
       a.timeSlot.startsWith("16:") ||
       a.timeSlot.startsWith("17:") ||
       a.timeSlot.startsWith("18:") ||
       a.timeSlot.startsWith("19:") ||
       a.timeSlot.startsWith("20:") ||
-      a.timeSlot.startsWith("21:")
+      a.timeSlot.startsWith("21:") ||
+      a.timeSlot.startsWith("04:") ||
+      a.timeSlot.startsWith("05:") ||
+      a.timeSlot.startsWith("06:") ||
+      a.timeSlot.startsWith("07:") ||
+      a.timeSlot.startsWith("08:") ||
+      a.timeSlot.startsWith("09:")
     ).length;
     const onlineE = existingOnlineSlots.filter(s => { const [h] = s.startTime.split(":").map(Number); return h >= 12; }).length;
-    if (offlineE + onlineE >= 16) {
+    if (offlineE + onlineE >= eveningMaxSlots) {
       res.status(409).json({ error: "slot_unavailable", message: "Evening session is fully booked for this date." });
       return;
     }
@@ -1440,11 +1478,14 @@ router.post("/donations", requirePatient, async (req: any, res) => {
     isSeen: false,
   }).returning();
 
-  // Notify doctor and admin portals in real time
-  broadcastNewDonation({
+  const donationPayload = {
     ...donation,
-    createdAt: donation.createdAt?.toISOString() ?? new Date().toISOString(),
-  });
+    createdAt: donation.createdAt instanceof Date ? donation.createdAt.toISOString() : new Date(donation.createdAt).toISOString(),
+  };
+
+  // Notify doctor and admin portals in real time
+  broadcastNewDonation(donationPayload);
+  notifyAdminNewDonation(donationPayload);
 
   res.json(donation);
 });
