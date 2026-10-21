@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { randomBytes } from "crypto";
-import { db, appointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable, prescriptionsTable } from "@workspace/db";
+import { db, appointmentsTable, onlineAppointmentsTable, patientsTable, onlineSlotsTable, customDayTimingsTable, onlineSlotSessionsTable, offlineQrTokensTable, patientDocumentsTable, prescriptionsTable } from "@workspace/db";
 import { eq, and, desc, ne, sql, inArray } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
@@ -1444,7 +1444,31 @@ router.patch("/:id/reschedule", requireAdmin, async (req, res) => {
     .set({ rescheduleDates: JSON.stringify(dates), status: "reschedule_proposed" })
     .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.deleteColumn, 0)))
     .returning();
-  if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+  if (!updated) {
+    const [onlineUpdated] = await db.update(onlineAppointmentsTable)
+      .set({ status: "reschedule_proposed" })
+      .where(and(eq(onlineAppointmentsTable.id, id), eq(onlineAppointmentsTable.deleteColumn, 0)))
+      .returning();
+    if (!onlineUpdated) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (onlineUpdated.patientId) {
+      notifyPatientAppointmentUpdated(onlineUpdated.patientId);
+    }
+    res.json({
+      id: onlineUpdated.id,
+      patientName: "",
+      patientPhone: "",
+      date: "",
+      timeSlot: "",
+      status: "reschedule_proposed",
+      paymentStatus: "paid",
+      followUpConfirmed: false,
+      createdAt: onlineUpdated.createdAt,
+    });
+    return;
+  }
   if (updated.patientId) {
     notifyPatientAppointmentUpdated(updated.patientId);
   }

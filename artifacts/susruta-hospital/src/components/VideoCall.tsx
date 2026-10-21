@@ -14,7 +14,7 @@ import { RoomEvent, Track, type Participant } from "livekit-client";
 import {
   Video, Loader2, AlertCircle, Copy, CheckCircle2, Link, Users,
   Paperclip, FileText, Upload, Mic, MicOff, VideoOff, PhoneOff,
-  UserCheck, Clock, Eye, EyeOff, X,
+  UserCheck, Clock, Eye, EyeOff, X, Minimize2, Maximize2, ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -277,12 +277,18 @@ function SusrutaVideoRoom({
   title,
   apptId,
   directCallId,
+  isMinimized,
+  onMinimize,
+  onMaximize,
 }: {
   role: Role;
   onLeave?: () => void;
   title?: string;
   apptId?: number;
   directCallId?: number;
+  isMinimized?: boolean;
+  onMinimize?: () => void;
+  onMaximize?: () => void;
 }) {
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -292,8 +298,7 @@ function SusrutaVideoRoom({
   const { enabled: camOn, toggle: toggleCam } = useTrackToggle({ source: Track.Source.Camera });
 
   const [showPeople, setShowPeople] = useState(false);
-  const [showDocs, setShowDocs] = useState(false);
-  const [isPipMinimized, setIsPipMinimized] = useState(false);
+  const [isSwapped, setIsSwapped] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [unmuteRequest, setUnmuteRequest] = useState<string | null>(null);
   const [unmuteBusy, setUnmuteBusy] = useState(false);
@@ -431,6 +436,111 @@ function SusrutaVideoRoom({
   const isOneOnOne = remoteParticipants.length === 1;
   const isSolo = remoteParticipants.length === 0;
 
+  // ── Floating Zoom-Style Mini Window ──────────────────────────────
+  if (isMinimized) {
+    const activeRemote = remoteParticipants.find(p => p.identity !== localParticipant.identity) || remoteParticipants[0];
+    const displayParticipant = activeRemote || localParticipant;
+
+    return (
+      <div
+        onClick={() => onMaximize?.()}
+        className="relative w-full h-full bg-[#141416] text-white select-none cursor-pointer group overflow-hidden"
+      >
+        {/* Invisible audio renderer keeps audio stream playing */}
+        <RoomAudioRenderer />
+
+        {/* Video feed */}
+        <div className="w-full h-full pointer-events-none">
+          <ParticipantTile
+            participant={displayParticipant}
+            colourIdx={0}
+            isLocal={!activeRemote}
+            fit="cover"
+          />
+        </div>
+
+        {/* Top header badge */}
+        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between z-20 pointer-events-auto">
+          <div className="flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 text-[11px] font-mono shadow-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-emerald-400 font-bold tracking-wider">{fmtElapsed(elapsed)}</span>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMaximize?.();
+            }}
+            className="p-1.5 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 hover:text-white border border-white/15 transition-all shadow-md cursor-pointer"
+            title="Expand to Full Video Call"
+          >
+            <Maximize2 size={13} />
+          </button>
+        </div>
+
+        {/* Bottom controls bar (Zoom-style) */}
+        <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between z-20 pointer-events-auto">
+          <div className="bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/15 text-[11px] font-bold text-white truncate max-w-[100px] sm:max-w-[120px] shadow-md">
+            {activeRemote?.name || (role === "doctor" ? "Patient" : "Dr. Murali")}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {canUseMicrophone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMic();
+                }}
+                className={cn(
+                  "p-1.5 rounded-lg text-white transition-all shadow-md cursor-pointer",
+                  micOn ? "bg-black/75 hover:bg-black/95 border border-white/15" : "bg-red-600 hover:bg-red-700"
+                )}
+                title={micOn ? "Mute" : "Unmute"}
+              >
+                {micOn ? <Mic size={12} /> : <MicOff size={12} />}
+              </button>
+            )}
+
+            {canUseCamera && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCam();
+                }}
+                className={cn(
+                  "p-1.5 rounded-lg text-white transition-all shadow-md cursor-pointer",
+                  camOn ? "bg-black/75 hover:bg-black/95 border border-white/15" : "bg-red-600 hover:bg-red-700"
+                )}
+                title={camOn ? "Stop Video" : "Start Video"}
+              >
+                {camOn ? <Video size={12} /> : <VideoOff size={12} />}
+              </button>
+            )}
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLeave();
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] flex items-center gap-1 transition-all shadow-md cursor-pointer"
+              title="Leave Consultation"
+            >
+              <PhoneOff size={11} />
+              <span>Leave</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Hover hint */}
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none flex items-center justify-center">
+          <span className="text-[11px] font-semibold text-white/90 bg-black/70 px-2.5 py-1 rounded-md border border-white/10 shadow-lg">
+            Click to expand
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex flex-col w-full h-full bg-[#0a0a0c] text-white select-none overflow-hidden" style={{ minHeight: "100%" }}>
       {/* ── Audio renderer (invisible) */}
@@ -482,9 +592,20 @@ function SusrutaVideoRoom({
             <span>{allParticipants.length}</span>
           </button>
 
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/15 transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Minimize to floating window (Zoom style)"
+            >
+              <Minimize2 size={13} />
+              <span className="hidden sm:inline">Minimize</span>
+            </button>
+          )}
+
           <button
             onClick={handleLeave}
-            className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Leave consultation"
           >
             <PhoneOff size={13} />
@@ -493,79 +614,97 @@ function SusrutaVideoRoom({
         </div>
       </div>
 
-      {/* ── Main Stage (Zoom Style) ────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black overflow-hidden w-full h-full">
-        {/* Scenario 1: Standard 1-on-1 Consultation */}
-        {isOneOnOne && primaryRemote && (
-          <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
-            {/* Primary Remote Video (fills entire stage with aspect-ratio intact) */}
-            <ParticipantTile
-              participant={primaryRemote}
-              isLocal={false}
-              fit="contain"
-            />
-
-            {/* Floating Picture-in-Picture Self View */}
-            {!isPipMinimized ? (
-              <div className="absolute bottom-4 right-4 z-20 w-36 h-24 sm:w-52 sm:h-36 md:w-64 md:h-44 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-[#1c1c1e] transition-all duration-200">
-                <ParticipantTile
-                  participant={localParticipant}
-                  isLocal={true}
-                  isPip={true}
-                  fit="cover"
-                />
-                <button
-                  onClick={() => setIsPipMinimized(true)}
-                  title="Hide self view"
-                  className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/60 hover:bg-black/80 text-white/70 hover:text-white z-20 transition-colors"
-                >
-                  <EyeOff size={11} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsPipMinimized(false)}
-                className="absolute bottom-4 right-4 z-20 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 shadow-xl text-xs flex items-center gap-1.5 transition-colors"
-              >
-                <Eye size={12} />
-                <span>Show Self</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Scenario 2: Solo / Waiting Room (0 Remote Participants) */}
-        {isSolo && (
-          <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
-            <ParticipantTile
-              participant={localParticipant}
-              isLocal={true}
-              fit="contain"
-            />
-
-            <div className="absolute top-6 inset-x-4 mx-auto max-w-md bg-black/80 backdrop-blur-md border border-white/15 rounded-2xl p-4 text-center shadow-2xl z-20">
-              <div className="flex items-center justify-center gap-2 mb-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                <p className="text-white font-bold text-sm">
-                  {role === "patient" ? "Waiting for Dr. P. Murali Krishna to join..." : "Waiting for patient to join..."}
-                </p>
-              </div>
-              <p className="text-white/60 text-xs">
-                {role === "patient"
-                  ? "Your camera and microphone are ready. The doctor will connect shortly."
-                  : "Your camera and microphone are active. You will be connected as soon as the patient arrives."}
-              </p>
+      {/* ── Main Stage (Zoom Grid Style — No Floating Overlays) ─────────── */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black overflow-hidden w-full h-full p-2 sm:p-3">
+        {allParticipants.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 size={28} className="text-white/20 animate-spin mx-auto mb-3" />
+              <p className="text-white/30 text-sm">Waiting for others to join…</p>
             </div>
           </div>
-        )}
+        ) : allParticipants.length === 1 ? (
+          /* Solo / Waiting for other participant */
+          <div className="w-full h-full relative flex items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl border border-white/10 bg-[#141416]">
+            <ParticipantTile
+              participant={allParticipants[0]}
+              colourIdx={0}
+              isLocal={allParticipants[0].identity === localParticipant.identity}
+              fit="contain"
+            />
+            {allParticipants[0].identity === localParticipant.identity && (
+              <div className="absolute top-6 inset-x-4 mx-auto max-w-md bg-black/80 backdrop-blur-md border border-white/15 rounded-2xl p-4 text-center shadow-2xl z-20">
+                <div className="flex items-center justify-center gap-2 mb-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <p className="text-white font-bold text-sm">
+                    {role === "patient" ? "Waiting for Dr. P. Murali Krishna to join..." : "Waiting for patient to join..."}
+                  </p>
+                </div>
+                <p className="text-white/60 text-xs">
+                  {role === "patient"
+                    ? "Your camera and microphone are ready. The doctor will connect shortly."
+                    : "Your camera and microphone are active. You will be connected as soon as the patient arrives."}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : allParticipants.length === 2 ? (
+          /* 2 participants: Non-overlapping Large Main (75–80%) & Small Secondary (20–25% at bottom-right) */
+          (() => {
+            const remoteOne = remoteParticipants[0] || localParticipant;
+            const mainP = isSwapped ? localParticipant : remoteOne;
+            const secP = isSwapped ? remoteOne : localParticipant;
 
-        {/* Scenario 3: Multi-Party (3+ participants: Doctor + Patient + Guest/Caregiver) */}
-        {!isOneOnOne && !isSolo && (
+            return (
+              <div className="w-full h-full flex flex-col sm:flex-row gap-2.5 sm:gap-3.5 overflow-hidden">
+                {/* Main Video Area (~75–80% of available space) */}
+                <div className="flex-1 min-w-0 min-h-0 h-full rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-[#141416] flex items-center justify-center relative shadow-xl">
+                  <ParticipantTile
+                    participant={mainP}
+                    colourIdx={isSwapped ? 1 : 0}
+                    isLocal={mainP.identity === localParticipant.identity}
+                    fit="cover"
+                  />
+                </div>
+
+                {/* Secondary Video Area Column (~20–25% of space, in its own allocated layout space at bottom-right) */}
+                <div className="w-full sm:w-[24%] sm:min-w-[220px] sm:max-w-[340px] flex flex-row sm:flex-col justify-end items-end sm:items-stretch shrink-0">
+                  <div
+                    onClick={() => setIsSwapped(v => !v)}
+                    className="w-full aspect-[4/3] sm:aspect-video rounded-xl sm:rounded-2xl overflow-hidden border-2 border-white/20 hover:border-emerald-400 bg-[#141416] shadow-2xl cursor-pointer group relative transition-all duration-200 hover:scale-[1.02]"
+                    title="Click to swap main and secondary video"
+                  >
+                    <ParticipantTile
+                      participant={secP}
+                      colourIdx={isSwapped ? 0 : 1}
+                      isLocal={secP.identity === localParticipant.identity}
+                      isPip={true}
+                      fit="cover"
+                    />
+
+                    {/* Hover Feedback Overlay */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <span className="text-[11px] font-bold text-white bg-black/85 px-2.5 py-1 rounded-lg border border-white/25 shadow-xl flex items-center gap-1.5">
+                        <ArrowLeftRight size={12} className="text-emerald-400" /> Click to Swap
+                      </span>
+                    </div>
+
+                    {/* Swap indicator badge in top-right */}
+                    <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 text-white/80 group-hover:text-white group-hover:bg-black/90 border border-white/15 transition-colors pointer-events-none shadow-md">
+                      <ArrowLeftRight size={12} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          /* 3 or more participants: Multi-Party Grid */
           <div
-            className="w-full h-full p-2 sm:p-3 gap-2 overflow-hidden"
+            className="w-full h-full gap-2 overflow-hidden"
             style={{
               display: "grid",
-              gridTemplateColumns: allParticipants.length <= 2 ? "repeat(2, 1fr)" : allParticipants.length <= 4 ? "repeat(2, 1fr)" : "repeat(3, 1fr)",
+              gridTemplateColumns: allParticipants.length <= 4 ? "repeat(2, 1fr)" : "repeat(3, 1fr)",
               gridAutoRows: allParticipants.length > 2 ? "1fr" : "1fr",
             }}
           >
@@ -606,26 +745,6 @@ function SusrutaVideoRoom({
                 onAskToUnmute={role === "admin" ? askToUnmute : undefined}
               />
             </div>
-          </div>
-        )}
-
-        {/* In-Call Documents Drawer (Patient) */}
-        {showDocs && apptId && (
-          <div className="absolute top-0 bottom-0 right-0 w-full sm:w-96 bg-[#18181b]/95 backdrop-blur-xl border-l border-white/10 z-40 shadow-2xl flex flex-col p-4 overflow-y-auto animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-2">
-              <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <Paperclip size={16} className="text-emerald-400" />
-                <span>Share Documents</span>
-              </div>
-              <button
-                onClick={() => setShowDocs(false)}
-                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-                aria-label="Close documents"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <CallDocumentUpload apptId={apptId} />
           </div>
         )}
 
@@ -718,15 +837,6 @@ function SusrutaVideoRoom({
             onClick={() => setShowPeople(v => !v)}
           />
 
-          {(role === "patient" || role === "guest") && apptId && (
-            <CtrlBtn
-              icon={<Paperclip size={18} />}
-              label="Share Docs"
-              active={showDocs}
-              onClick={() => setShowDocs(v => !v)}
-            />
-          )}
-
           {/* On mobile: compact Leave button in control bar */}
           <button
             onClick={handleLeave}
@@ -740,19 +850,8 @@ function SusrutaVideoRoom({
           </button>
         </div>
 
-        {/* Right: PiP Toggle on Desktop */}
-        <div className="hidden md:flex items-center justify-end gap-2 w-28">
-          {isOneOnOne && (
-            <button
-              onClick={() => setIsPipMinimized(v => !v)}
-              title={isPipMinimized ? "Show self view" : "Hide self view"}
-              className="text-white/40 hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5 border border-white/10"
-            >
-              {isPipMinimized ? <Eye size={13} /> : <EyeOff size={13} />}
-              <span>{isPipMinimized ? "Self View" : "Hide Self"}</span>
-            </button>
-          )}
-        </div>
+        {/* Right spacing on Desktop */}
+        <div className="hidden md:flex items-center justify-end gap-2 w-28" />
       </div>
     </div>
   );
@@ -873,6 +972,9 @@ interface VideoCallProps {
   autoJoin?: boolean;
   keepOpenOnDisconnect?: boolean;
   title?: string;
+  isMinimized?: boolean;
+  onMinimize?: () => void;
+  onMaximize?: () => void;
 }
 
 export function VideoCall({
@@ -885,6 +987,9 @@ export function VideoCall({
   autoJoin,
   keepOpenOnDisconnect = false,
   title,
+  isMinimized,
+  onMinimize,
+  onMaximize,
 }: VideoCallProps) {
   const [creds, setCreds] = useState<CallCredentials | null>(null);
   const [loading, setLoading] = useState(false);
@@ -947,6 +1052,9 @@ export function VideoCall({
             title={title}
             apptId={apptId}
             directCallId={directCallId}
+            isMinimized={isMinimized}
+            onMinimize={onMinimize}
+            onMaximize={onMaximize}
           />
         </LiveKitRoom>
       </div>

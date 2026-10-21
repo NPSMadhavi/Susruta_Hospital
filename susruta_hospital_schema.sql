@@ -212,6 +212,8 @@ CREATE TABLE public.donations (
     last_six_digits character varying(6) NOT NULL,
     status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
     thank_you_sent boolean DEFAULT false NOT NULL,
+    is_seen boolean DEFAULT false NOT NULL,
+    seen_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT now() NOT NULL
 );
 

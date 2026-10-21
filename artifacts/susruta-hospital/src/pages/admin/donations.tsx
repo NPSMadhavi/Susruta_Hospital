@@ -81,6 +81,7 @@ export default function AdminDonations() {
   }
 
   async function sendThankYou(d: Donation) {
+    if (d.status !== "verified") return;
     setToasting(`Sending to ${d.patientName}…`);
     const res = await fetch(`${BASE}/api/admin/donations/${d.id}/thank-you`, {
       method: "POST", credentials: "include",
@@ -294,18 +295,28 @@ export default function AdminDonations() {
                         </button>
                       </td>
                       <td className="px-5 py-4">
-                        <button
-                          onClick={() => !d.thankYouSent && sendThankYou(d)}
-                          disabled={d.thankYouSent}
-                          className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
-                            d.thankYouSent
-                              ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
-                              : "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10"
-                          )}>
-                          {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
-                          {d.thankYouSent ? "Sent" : "Send Thanks"}
-                        </button>
+                        {(() => {
+                          const isReceived = d.status === "verified";
+                          const isSent = d.thankYouSent;
+                          const isEnabled = isReceived && !isSent;
+
+                          return (
+                            <button
+                              onClick={() => isEnabled && sendThankYou(d)}
+                              disabled={!isEnabled}
+                              className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all select-none",
+                                isEnabled
+                                  ? "bg-[#1a3d2b]/5 border-[#1a3d2b]/20 text-[#1a3d2b] hover:bg-[#1a3d2b]/10 cursor-pointer"
+                                  : isSent
+                                    ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
+                                    : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                              )}>
+                              {isSent ? <MailCheck size={12} /> : <Mail size={12} />}
+                              {isSent ? "Sent" : "Send Thanks"}
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}

@@ -708,6 +708,10 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
 
   const [donation] = await db.select().from(donationsTable).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   if (!donation) { res.status(404).json({ error: "not_found" }); return; }
+  if (donation.status !== "verified") {
+    res.status(400).json({ error: "not_received", message: "Cannot send thank-you email for a donation that is not marked as Received." });
+    return;
+  }
   if (!donation.patientEmail) { res.status(400).json({ error: "no_email" }); return; }
 
   try {

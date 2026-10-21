@@ -16,13 +16,14 @@ import { dateSearchTerms, matchesPortalSearch } from "@/lib/portal-search";
 import { usePortalSectionBadges } from "@/hooks/use-portal-section-badges";
 import { playAppointmentChime } from "@/lib/sound";
 import { BookingWizard } from "./BookingWizard";
-import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { VideoCall, GuestLinkCard, CallDocumentUpload } from "@/components/VideoCall";
+import { useActiveCall } from "@/context/ActiveCallContext";
 import PatientProfile from "@/components/portal/PatientProfile";
 import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { PrintPrescriptionModal, extractDigitalPrescriptionData, parseMedicinesFromNotes } from "@/pages/doctor/appointments";
 import { downloadFileDirectly, downloadPrescriptionPdf, type PrintPrescriptionData } from "@/lib/prescription-download";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const PORTAL_PAGE_SIZE = 10;
@@ -514,6 +515,7 @@ function DonationPopup({
 // ── Main Component ───────────────────────────────────────────────
 export default function PatientDashboard() {
   const [, nav] = useLocation();
+  const { activeCall, startCall, minimizeCall, maximizeCall, endCall, isCallActive } = useActiveCall();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [onlineAppts, setOnlineAppts] = useState<OnlineAppt[]>([]);
   const [physicalAppts, setPhysicalAppts] = useState<PhysicalAppt[]>([]);
@@ -522,14 +524,15 @@ export default function PatientDashboard() {
   const [directCall, setDirectCall] = useState<DirectCall | null>(null);
   const [directCallPopup, setDirectCallPopup] = useState<DirectCall | null>(null);
   const [donationPopup, setDonationPopup] = useState<{ apptId: number; qrObjectPath: string | null } | null>(null);
-  const [videoCallApptId, setVideoCallApptId] = useState<number | null>(null);
-  const [videoCallDirectId, setVideoCallDirectId] = useState<number | null>(null);
   const [permissionRequest, setPermissionRequest] = useState<{ apptId: number } | null>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [bookingKey, setBookingKey] = useState(0);
 
   const openBooking = () => {
     if (!patient?.emailVerified) return;
+    if (isCallActive) {
+      minimizeCall();
+    }
     setBookingKey(k => k + 1);
     setShowBooking(true);
   };
@@ -539,6 +542,48 @@ export default function PatientDashboard() {
     setShowBooking(false);
   };
   const [sidebarTab, setSidebarTab] = useState<"dashboard" | "appointments" | "prescriptions" | "docs" | "profile">("dashboard");
+
+  const selectSidebarTab = (tab: typeof sidebarTab) => {
+    if (isCallActive) {
+      minimizeCall();
+    }
+    setSidebarTab(tab);
+  };
+
+  const handleJoinCall = (id: number) => {
+    setJoinPopup(null);
+    fetch(`${BASE}/api/online-appointments/${id}/patient-joined`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+    startCall({
+      apptId: id,
+      role: "patient",
+      title: "Consultation with Dr. P. Murali Krishna",
+      onCallEnded: () => {
+        setDonationPopup({ apptId: id, qrObjectPath: phonepeQrRef.current });
+      },
+    });
+  };
+
+  const handleJoinDirectCall = (id: number) => {
+    setDirectCallPopup(null);
+    fetch(`${BASE}/api/direct-calls/${id}/patient-joined`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+    startCall({
+      directCallId: id,
+      role: "patient",
+      title: "Direct Consultation with Dr. P. Murali Krishna",
+      onCallEnded: () => {
+        fetch(`${BASE}/api/direct-calls/${id}/patient-leave`, {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => {});
+      },
+    });
+  };
   const [patientDocs, setPatientDocs] = useState<PatientDoc[]>([]);
   const [documentSearch, setDocumentSearch] = useState("");
   const [prescriptionSearch, setPrescriptionSearch] = useState("");
@@ -717,10 +762,8 @@ export default function PatientDashboard() {
 
   const phonepeQrRef = useRef<string | null>(null);
   const sessionEndedRef = useRef(false);
-  const videoCallDirectIdRef = useRef<number | null>(null);
-  videoCallDirectIdRef.current = videoCallDirectId;
-  const videoCallApptIdRef = useRef<number | null>(null);
-  videoCallApptIdRef.current = videoCallApptId;
+  const activeCallRef = useRef(activeCall);
+  activeCallRef.current = activeCall;
 
   async function patientFetch(path: string, opts?: RequestInit) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
@@ -779,18 +822,18 @@ export default function PatientDashboard() {
       setPhysicalAppts(myPhysical ?? []);
       setPatientDocs(myDocs ?? []);
       setDirectCall(activeDirect ?? null);
-      if (activeDirect && !videoCallDirectIdRef.current) {
+      if (activeDirect && !(activeCallRef.current?.directCallId === activeDirect.id)) {
         setDirectCallPopup(activeDirect);
       }
       phonepeQrRef.current = settings?.phonepeQrObjectPath ?? null;
 
-      // If patient is currently in a call but appointment was completed or ended by doctor
-      if (videoCallApptIdRef.current) {
-        const activeAppt = myOnline?.find((a: any) => a.id === videoCallApptIdRef.current);
+      // If patient is currently in an appointment call but appointment was completed or ended by doctor
+      if (activeCallRef.current?.apptId) {
+        const currentApptId = activeCallRef.current.apptId;
+        const activeAppt = myOnline?.find((a: any) => a.id === currentApptId);
         if (activeAppt && (!activeAppt.joinEnabled || activeAppt.status === "completed")) {
-          const endedId = videoCallApptIdRef.current;
-          setVideoCallApptId(null);
-          setDonationPopup({ apptId: endedId, qrObjectPath: settings?.phonepeQrObjectPath ?? phonepeQrRef.current });
+          endCall();
+          setDonationPopup({ apptId: currentApptId, qrObjectPath: settings?.phonepeQrObjectPath ?? phonepeQrRef.current });
         }
       }
     } catch (err) {
@@ -798,7 +841,7 @@ export default function PatientDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [endCall]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -809,8 +852,10 @@ export default function PatientDashboard() {
     es.addEventListener("join_enabled", (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { apptId: number; roomName: string; guestToken?: string | null };
-        playChime();
-        setJoinPopup({ apptId: data.apptId });
+        if (!isCallActive && activeCallRef.current?.apptId !== data.apptId) {
+          playChime();
+          setJoinPopup({ apptId: data.apptId });
+        }
         setOnlineAppts(prev => prev.map(a =>
           a.id === data.apptId ? { ...a, joinEnabled: true, status: "confirmed" } : a
         ));
@@ -823,13 +868,10 @@ export default function PatientDashboard() {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { apptId: number; qrObjectPath?: string | null };
         setJoinPopup(prev => prev?.apptId === data.apptId ? null : prev);
-        setVideoCallApptId(prev => {
-          if (prev === data.apptId) {
-            setDonationPopup({ apptId: data.apptId, qrObjectPath: data.qrObjectPath || phonepeQrRef.current });
-            return null;
-          }
-          return prev;
-        });
+        if (activeCallRef.current?.apptId === data.apptId) {
+          endCall();
+          setDonationPopup({ apptId: data.apptId, qrObjectPath: data.qrObjectPath || phonepeQrRef.current });
+        }
         setOnlineAppts(prev => prev.map(a =>
           a.id === data.apptId ? { ...a, joinEnabled: false, status: "completed" } : a
         ));
@@ -841,9 +883,11 @@ export default function PatientDashboard() {
     es.addEventListener("direct_call_started", (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as DirectCall;
-        playChime();
-        setDirectCall(data);
-        setDirectCallPopup(data);
+        if (!isCallActive && activeCallRef.current?.directCallId !== data.id) {
+          playChime();
+          setDirectCall(data);
+          setDirectCallPopup(data);
+        }
       } catch (err) {
         console.error("[Patient SSE] direct_call_started error:", err);
       }
@@ -853,7 +897,9 @@ export default function PatientDashboard() {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { callId: number };
         setDirectCallPopup(prev => prev?.id === data.callId ? null : prev);
-        setVideoCallDirectId(prev => prev === data.callId ? null : prev);
+        if (activeCallRef.current?.directCallId === data.callId) {
+          endCall();
+        }
         setDirectCall(prev => prev?.id === data.callId ? null : prev);
       } catch (err) {
         console.error("[Patient SSE] direct_call_ended error:", err);
@@ -1022,17 +1068,10 @@ export default function PatientDashboard() {
             onSuccess={() => loadData()}
           />
         )}
-        {joinPopup && (
+        {!isCallActive && joinPopup && (
           <JoinPopup
             apptId={joinPopup.apptId}
-            onJoin={(id) => {
-              setJoinPopup(null);
-              setVideoCallApptId(id);
-              fetch(`${BASE}/api/online-appointments/${id}/patient-joined`, {
-                method: "POST",
-                credentials: "include",
-              }).catch(() => {});
-            }}
+            onJoin={handleJoinCall}
             onClose={() => setJoinPopup(null)}
           />
         )}
@@ -1044,60 +1083,14 @@ export default function PatientDashboard() {
             onClose={() => setDonationPopup(null)}
           />
         )}
-        {directCallPopup && (
+        {!isCallActive && directCallPopup && (
           <DirectCallPopup
             call={directCallPopup}
-            onJoin={(id) => {
-              setDirectCallPopup(null);
-              setVideoCallDirectId(id);
-              fetch(`${BASE}/api/direct-calls/${id}/patient-joined`, {
-                method: "POST",
-                credentials: "include",
-              }).catch(() => {});
-            }}
+            onJoin={handleJoinDirectCall}
             onClose={() => setDirectCallPopup(null)}
           />
         )}
       </AnimatePresence>
-
-      {videoCallApptId && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-          <VideoCall
-            apptId={videoCallApptId}
-            role="patient"
-            autoJoin
-            title="Consultation with Dr. P. Murali Krishna"
-            onCallEnded={() => {
-              const endedId = videoCallApptId;
-              setVideoCallApptId(null);
-              setDonationPopup({ apptId: endedId, qrObjectPath: phonepeQrRef.current });
-            }}
-            className="w-full h-full rounded-none border-0"
-          />
-        </div>
-      )}
-
-      {videoCallDirectId && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-          <VideoCall
-            directCallId={videoCallDirectId}
-            role="patient"
-            autoJoin
-            title="Direct Consultation with Dr. P. Murali Krishna"
-            onCallEnded={() => {
-              const leavingId = videoCallDirectId;
-              setVideoCallDirectId(null);
-              if (leavingId) {
-                fetch(`${BASE}/api/direct-calls/${leavingId}/patient-leave`, {
-                  method: "POST",
-                  credentials: "include",
-                }).catch(() => {});
-              }
-            }}
-            className="w-full h-full rounded-none border-0"
-          />
-        </div>
-      )}
 
       {/* ── LEFT SIDEBAR ────────────────────────────────────────── */}
       <aside className="w-full md:w-[270px] lg:w-[282px] bg-white border-b md:border-b-0 md:border-r border-[#EDEFEB] flex flex-col shrink-0 h-auto md:h-screen md:sticky md:top-0">
@@ -1117,7 +1110,7 @@ export default function PatientDashboard() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setSidebarTab(item.id)}
+                  onClick={() => selectSidebarTab(item.id)}
                   className={cn(
                     "w-full flex items-center justify-between px-5 py-2.5 text-sm transition-all duration-150 relative text-left",
                     active
@@ -1181,7 +1174,7 @@ export default function PatientDashboard() {
       <main className={cn("flex-1 w-full min-w-0 md:h-screen md:overflow-y-auto", sidebarTab === "appointments" ? "bg-[#f8faf9] px-4 pb-8 pt-4 md:pl-[18px] md:pr-2" : sidebarTab === "docs" ? "flex flex-col p-[14px]" : "p-5 md:p-8 xl:p-10")}>
 
         {/* Direct Call Alert Banner */}
-        {directCall && !videoCallDirectId && (
+        {directCall && !isCallActive && (
           <div className="mb-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-5 shadow-lg flex flex-wrap items-center justify-between gap-4 border border-emerald-500/30">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center animate-pulse shrink-0">
@@ -1193,14 +1186,8 @@ export default function PatientDashboard() {
               </div>
             </div>
             <button
-              onClick={() => {
-                setVideoCallDirectId(directCall.id);
-                fetch(`${BASE}/api/direct-calls/${directCall.id}/patient-joined`, {
-                  method: "POST",
-                  credentials: "include",
-                }).catch(() => {});
-              }}
-              className="bg-white hover:bg-emerald-50 text-emerald-800 px-6 py-3 rounded-xl font-extrabold text-sm shadow-md transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => handleJoinDirectCall(directCall.id)}
+              className="bg-white hover:bg-emerald-50 text-emerald-800 px-6 py-3 rounded-xl font-extrabold text-sm shadow-md transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
               <Video size={16} /> Answer Call Now
             </button>
@@ -1208,7 +1195,7 @@ export default function PatientDashboard() {
         )}
 
         {/* Live Video Consultation Alert Banner */}
-        {onlineAppts.some(a => a.joinEnabled) && (
+        {!isCallActive && onlineAppts.some(a => a.joinEnabled) && (
           <div className="mb-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-5 shadow-lg flex flex-wrap items-center justify-between gap-4 border border-emerald-500/30">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center animate-pulse shrink-0">
@@ -1222,9 +1209,9 @@ export default function PatientDashboard() {
             <button
               onClick={() => {
                 const live = onlineAppts.find(a => a.joinEnabled);
-                if (live) setVideoCallApptId(live.id);
+                if (live) handleJoinCall(live.id);
               }}
-              className="bg-white hover:bg-emerald-50 text-emerald-800 px-6 py-3 rounded-xl font-extrabold text-sm shadow-md transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+              className="bg-white hover:bg-emerald-50 text-emerald-800 px-6 py-3 rounded-xl font-extrabold text-sm shadow-md transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
               <Video size={16} /> Join Consultation Now
             </button>
@@ -1385,13 +1372,23 @@ export default function PatientDashboard() {
               </span>
 
               {isOnline && (item.data as OnlineAppt).joinEnabled ? (
-                <button
-                  onClick={() => setVideoCallApptId(item.data.id)}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold transition-all shadow-md animate-pulse flex items-center gap-1.5"
-                >
-                  <Video size={13} />
-                  Join Call
-                </button>
+                activeCall?.apptId === item.data.id ? (
+                  <button
+                    onClick={() => maximizeCall()}
+                    className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Video size={13} />
+                    In Call (Return)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleJoinCall(item.data.id)}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold transition-all shadow-md animate-pulse flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Video size={13} />
+                    Join Call
+                  </button>
+                )
               ) : (
                 <span
                   className={cn(
@@ -1549,7 +1546,7 @@ export default function PatientDashboard() {
                         )}
                       </div>
                       <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:ml-[19px]"><p className="text-base font-bold text-black">{fmtDateShort(item.date)}</p><p className="text-sm text-black">{appointmentTime(item)} · {item.type === "online" ? "Online Consultation" : "Offline Consultation"}</p></div>
-                      <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></div>
+                      <div className="ml-auto flex items-center gap-1.5"><AppointmentStatus status={item.data.status} /><AppointmentActions item={item} onJoin={handleJoinCall} onViewPrescription={handleViewApptRx} /></div>
                     </div>
                   ))}
                   {upcomingCount === 0 && <p className="rounded-[13px] border border-[#eee8e3] p-5 text-sm text-gray-500">No upcoming appointments scheduled</p>}
@@ -1574,7 +1571,7 @@ export default function PatientDashboard() {
                         <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
                         <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
                         <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
-                        <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={setVideoCallApptId} onViewPrescription={handleViewApptRx} /></td>
+                        <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={handleJoinCall} onViewPrescription={handleViewApptRx} /></td>
                       </tr>)}
                       {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
                     </tbody>

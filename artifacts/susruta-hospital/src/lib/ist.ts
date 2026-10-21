@@ -128,3 +128,24 @@ export function isOfflineSessionExceeded(date: string, session: "morning" | "eve
   }
 }
 
+/**
+ * Check whether an appointment calendar date is strictly before today in IST (hospital timezone).
+ * This is a DATE-ONLY check. It NEVER checks or compares time.
+ * If the appointment date is today (regardless of time) or in the future, it returns false.
+ */
+export function isAppointmentDatePassed(dateStr?: string | null): boolean {
+  if (!dateStr) return false;
+  const today = todayIST();
+  let apptDate = dateStr.trim();
+  if (apptDate.includes("T")) {
+    apptDate = new Date(apptDate).toLocaleDateString("en-CA", { timeZone: TZ });
+  } else if (!/^\d{4}-\d{2}-\d{2}$/.test(apptDate)) {
+    try {
+      apptDate = new Date(apptDate + "T00:00:00+05:30").toLocaleDateString("en-CA", { timeZone: TZ });
+    } catch {
+      apptDate = apptDate.split("T")[0].trim();
+    }
+  }
+  return apptDate < today;
+}
+

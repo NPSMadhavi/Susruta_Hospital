@@ -1437,6 +1437,7 @@ router.post("/donations", requirePatient, async (req: any, res) => {
     lastSixDigits: lastSixDigits.trim().slice(-6),
     status: "pending",
     thankYouSent: false,
+    isSeen: false,
   }).returning();
 
   // Notify doctor and admin portals in real time

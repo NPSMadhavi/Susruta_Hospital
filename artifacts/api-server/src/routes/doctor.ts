@@ -755,6 +755,50 @@ router.get("/donations/sse", requireDoctor, (req, res) => {
   req.on("close", () => { cleanup(); clearInterval(heartbeat); });
 });
 
+// ── GET /doctor/donations/unseen-count ─────────────────────────
+router.get("/donations/unseen-count", requireDoctor, async (_req, res) => {
+  try {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(donationsTable)
+      .where(and(eq(donationsTable.deleteColumn, 0), eq(donationsTable.isSeen, false)));
+    res.json({ count: result?.count ?? 0 });
+  } catch (err) {
+    console.error("Doctor unseen donations count error:", err);
+    res.status(500).json({ error: "Failed to fetch unseen donations count" });
+  }
+});
+
+// ── POST /doctor/donations/mark-seen ───────────────────────────
+router.post("/donations/mark-seen", requireDoctor, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (Array.isArray(ids) && ids.length > 0) {
+      const validIds = ids.filter((id: any) => typeof id === "number" && !isNaN(id));
+      if (validIds.length > 0) {
+        await db.update(donationsTable)
+          .set({ isSeen: true, seenAt: new Date() })
+          .where(and(
+            inArray(donationsTable.id, validIds),
+            eq(donationsTable.deleteColumn, 0),
+            eq(donationsTable.isSeen, false)
+          ));
+      }
+    } else {
+      await db.update(donationsTable)
+        .set({ isSeen: true, seenAt: new Date() })
+        .where(and(
+          eq(donationsTable.deleteColumn, 0),
+          eq(donationsTable.isSeen, false)
+        ));
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Doctor mark-seen donations error:", err);
+    res.status(500).json({ error: "Failed to mark donations as seen" });
+  }
+});
+
 // ── GET /doctor/donations ──────────────────────────────────────
 router.get("/donations", requireDoctor, async (req, res) => {
   try {
@@ -787,6 +831,10 @@ router.post("/donations/:id/thank-you", requireDoctor, async (req, res) => {
   if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
   const [row] = await db.select().from(donationsTable).where(and(eq(donationsTable.id, id), eq(donationsTable.deleteColumn, 0)));
   if (!row) { res.status(404).json({ error: "not_found" }); return; }
+  if (row.status !== "verified") {
+    res.status(400).json({ error: "not_received", message: "Cannot send thank-you email for a donation that is not marked as Received." });
+    return;
+  }
   if (!row.patientEmail) { res.status(400).json({ error: "no_email", message: "No email address on record for this donation." }); return; }
   if (row.thankYouSent) { res.json({ success: true, skipped: true }); return; }
   try {

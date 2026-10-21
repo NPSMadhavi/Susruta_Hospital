@@ -15,7 +15,7 @@ import { format, parseISO } from "date-fns";
 
 import { AdminVideoRoom } from "@/components/VideoCall";
 import { cn } from "@/lib/utils";
-import { todayIST, fmtTimestamp, fmtTimeIST } from "@/lib/ist";
+import { todayIST, fmtTimestamp, fmtTimeIST, isAppointmentDatePassed } from "@/lib/ist";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { playAppointmentChime } from "@/lib/sound";
 
@@ -925,6 +925,7 @@ function OnlineAppointmentsTable({
   onRenotify,
   onPrescriptionClick,
   onCancel,
+  onReschedule,
   onDelete,
   onResetToPending,
   onMarkDone,
@@ -938,6 +939,7 @@ function OnlineAppointmentsTable({
   onRenotify: (id: number) => void;
   onPrescriptionClick: (appt: OnlineAppt) => void;
   onCancel: (id: number) => void;
+  onReschedule?: (appt: OnlineAppt) => void;
   onDelete: (id: number) => void;
   onResetToPending: (id: number) => void;
   onMarkDone: (id: number) => void;
@@ -978,6 +980,7 @@ function OnlineAppointmentsTable({
               const dateStr = appt.slot?.date ? `${fmtFull(appt.slot.date)} ${slotTime}` : "";
               const hasRx = !!appt.prescription?.photoObjectPath;
               const isExpanded = expanded === appt.id;
+              const isPassed = isAppointmentDatePassed(appt.slot?.date);
 
               return (
                 <React.Fragment key={appt.id}>
@@ -1036,65 +1039,86 @@ function OnlineAppointmentsTable({
                     <td className="py-3.5 px-4 text-left whitespace-nowrap">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Enable Join / End Session / Re-notify */}
-                          {appt.joinEnabled && (
-                            <button
-                              onClick={() => onRenotify(appt.id)}
-                              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition-colors inline-flex items-center gap-1"
-                              title="Re-send chime + voice alert"
-                            >
-                              <Bell size={11} /> Re-notify
-                            </button>
-                          )}
-                          <button
-                            onClick={() => onJoinToggle(appt.id, !appt.joinEnabled)}
-                            className={cn(
-                              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm",
-                              appt.joinEnabled
-                                ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                                : "bg-emerald-600 text-white hover:bg-emerald-700"
-                            )}
-                          >
-                            {appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
-                            {appt.joinEnabled ? "End Session" : "Enable Join"}
-                          </button>
+                          {isPassed && appt.status !== "completed" && appt.status !== "cancelled" ? (
+                            <>
+                              {onReschedule && (
+                                <button
+                                  onClick={() => onReschedule(appt)}
+                                  className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                >
+                                  <RefreshCw size={12} /> Reschedule
+                                </button>
+                              )}
+                              <button
+                                onClick={() => onCancel(appt.id)}
+                                className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                              >
+                                <XCircle size={12} /> Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* Enable Join / End Session / Re-notify */}
+                              {appt.joinEnabled && (
+                                <button
+                                  onClick={() => onRenotify(appt.id)}
+                                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition-colors inline-flex items-center gap-1"
+                                  title="Re-send chime + voice alert"
+                                >
+                                  <Bell size={11} /> Re-notify
+                                </button>
+                              )}
+                              <button
+                                onClick={() => onJoinToggle(appt.id, !appt.joinEnabled)}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm",
+                                  appt.joinEnabled
+                                    ? "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                                    : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                )}
+                              >
+                                {appt.joinEnabled ? <Square size={12} /> : <Play size={12} />}
+                                {appt.joinEnabled ? "End Session" : "Enable Join"}
+                              </button>
 
-                          {/* Upload / View Prescription Popup */}
-                          <button
-                            onClick={() => onPrescriptionClick(appt)}
-                            className={cn(
-                              "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors inline-flex items-center gap-1.5",
-                              hasRx
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                            )}
-                          >
-                            <ImageIcon size={12} />
-                            {hasRx ? "View Rx" : "Upload Rx"}
-                          </button>
+                              {/* Upload / View Prescription Popup */}
+                              <button
+                                onClick={() => onPrescriptionClick(appt)}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors inline-flex items-center gap-1.5",
+                                  hasRx
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                )}
+                              >
+                                <ImageIcon size={12} />
+                                {hasRx ? "View Rx" : "Upload Rx"}
+                              </button>
 
-                          {/* Reset to Pending — only show when completed */}
-                          {appt.status === "completed" && (
-                            <button
-                              onClick={() => onResetToPending(appt.id)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors inline-flex items-center gap-1.5"
-                              title="Reset appointment to pending"
-                            >
-                              <RotateCcw size={12} />
-                              <span>Reset to Pending</span>
-                            </button>
-                          )}
+                              {/* Reset to Pending — only show when completed */}
+                              {appt.status === "completed" && (
+                                <button
+                                  onClick={() => onResetToPending(appt.id)}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors inline-flex items-center gap-1.5"
+                                  title="Reset appointment to pending"
+                                >
+                                  <RotateCcw size={12} />
+                                  <span>Reset to Pending</span>
+                                </button>
+                              )}
 
-                          {/* Mark as Done — shown when reset to pending (status is pending) */}
-                          {appt.status === "pending" && (
-                            <button
-                              onClick={() => onMarkDone(appt.id)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1.5"
-                              title="Mark appointment as done"
-                            >
-                              <CheckCircle2 size={12} />
-                              <span>Mark as Done</span>
-                            </button>
+                              {/* Mark as Done — shown when reset to pending (status is pending) */}
+                              {appt.status === "pending" && (
+                                <button
+                                  onClick={() => onMarkDone(appt.id)}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1.5"
+                                  title="Mark appointment as done"
+                                >
+                                  <CheckCircle2 size={12} />
+                                  <span>Mark as Done</span>
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -1210,6 +1234,7 @@ function OfflineAppointmentsTable({
               const token = (appt as any).token || null;
               const isExpanded = expanded === appt.id;
               const reschedDates: string[] = appt.rescheduleDates ? JSON.parse(appt.rescheduleDates) : [];
+              const isPassed = isAppointmentDatePassed(appt.date);
 
               return (
                 <React.Fragment key={appt.id}>
@@ -1271,14 +1296,8 @@ function OfflineAppointmentsTable({
                     <td className="py-3.5 px-4 text-left whitespace-nowrap">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {appt.status === "pending" && (
+                          {isPassed && appt.status !== "completed" && appt.status !== "cancelled" ? (
                             <>
-                              <button
-                                onClick={() => onApprove(appt.id)}
-                                className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                              >
-                                <CheckCircle2 size={12} /> Approve
-                              </button>
                               <button
                                 onClick={() => onReschedule(appt)}
                                 className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
@@ -1292,46 +1311,71 @@ function OfflineAppointmentsTable({
                                 <XCircle size={12} /> Cancel
                               </button>
                             </>
-                          )}
-                          {appt.status === "confirmed" && (
+                          ) : (
                             <>
-                              <button
-                                onClick={() => onArrive(appt.id)}
-                                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                              >
-                                <UserCheck size={12} /> Arrived
-                              </button>
-                              <button
-                                onClick={() => onCancel(appt)}
-                                className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 text-xs font-medium px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                              >
-                                Cancel
-                              </button>
+                              {appt.status === "pending" && (
+                                <>
+                                  <button
+                                    onClick={() => onApprove(appt.id)}
+                                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <CheckCircle2 size={12} /> Approve
+                                  </button>
+                                  <button
+                                    onClick={() => onReschedule(appt)}
+                                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <RefreshCw size={12} /> Reschedule
+                                  </button>
+                                  <button
+                                    onClick={() => onCancel(appt)}
+                                    className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <XCircle size={12} /> Cancel
+                                  </button>
+                                </>
+                              )}
+                              {appt.status === "confirmed" && (
+                                <>
+                                  <button
+                                    onClick={() => onArrive(appt.id)}
+                                    className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <UserCheck size={12} /> Arrived
+                                  </button>
+                                  <button
+                                    onClick={() => onCancel(appt)}
+                                    className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <XCircle size={12} /> Cancel
+                                  </button>
+                                </>
+                              )}
+                              {appt.status === "arrived" && appt.paymentStatus === "unpaid" && (
+                                <button
+                                  onClick={() => onPay(appt)}
+                                  className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                >
+                                  <Banknote size={12} /> Mark Paid
+                                </button>
+                              )}
+                              {appt.status === "completed" && (
+                                <button
+                                  onClick={() => onPrintReceipt(appt)}
+                                  className="flex items-center gap-1.5 bg-[#1a3d2b] hover:bg-[#15322a] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                >
+                                  <Printer size={12} /> Print Receipt
+                                </button>
+                              )}
+                              {appt.status === "reschedule_accepted" && (
+                                <button
+                                  onClick={() => onApprove(appt.id)}
+                                  className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                                >
+                                  <CheckCircle2 size={12} /> Confirm New Date
+                                </button>
+                              )}
                             </>
-                          )}
-                          {appt.status === "arrived" && appt.paymentStatus === "unpaid" && (
-                            <button
-                              onClick={() => onPay(appt)}
-                              className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                            >
-                              <Banknote size={12} /> Mark Paid
-                            </button>
-                          )}
-                          {appt.status === "completed" && (
-                            <button
-                              onClick={() => onPrintReceipt(appt)}
-                              className="flex items-center gap-1.5 bg-[#1a3d2b] hover:bg-[#15322a] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                            >
-                              <Printer size={12} /> Print Receipt
-                            </button>
-                          )}
-                          {appt.status === "reschedule_accepted" && (
-                            <button
-                              onClick={() => onApprove(appt.id)}
-                              className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-                            >
-                              <CheckCircle2 size={12} /> Confirm New Date
-                            </button>
                           )}
                         </div>
 
@@ -1704,7 +1748,16 @@ export default function AdminAppointments() {
           onConfirm={confirmCancelOffline}
         />
       )}
-      {rescheduleModal && <RescheduleModal appt={rescheduleModal} onClose={() => setRescheduleModal(null)} onProposed={a => { mutate(a); }} />}
+      {rescheduleModal && (
+        <RescheduleModal
+          appt={rescheduleModal}
+          onClose={() => setRescheduleModal(null)}
+          onProposed={a => {
+            mutate(a);
+            loadOnline();
+          }}
+        />
+      )}
       {followUpModal && <FollowUpModal appt={followUpModal} onClose={() => setFollowUpModal(null)} onSet={a => { mutate(a); }} />}
 
       {/* Header */}
@@ -1813,6 +1866,20 @@ export default function AdminAppointments() {
               onRenotify={renotify}
               onPrescriptionClick={appt => setUploadModalAppt(appt)}
               onCancel={cancelAppt}
+              onReschedule={(onlineAppt) => {
+                setRescheduleModal({
+                  id: onlineAppt.id,
+                  patientName: onlineAppt.patient.name,
+                  patientPhone: onlineAppt.patient.phone || "",
+                  patientEmail: onlineAppt.patient.email || "",
+                  date: onlineAppt.slot?.date || "",
+                  timeSlot: onlineAppt.slot ? `${fmtTime(onlineAppt.slot.startTime)} – ${fmtTime(onlineAppt.slot.endTime)}` : "",
+                  status: onlineAppt.status,
+                  followUpConfirmed: false,
+                  paymentStatus: "paid",
+                  createdAt: onlineAppt.createdAt,
+                } as Appt);
+              }}
               onDelete={deleteAppt}
               onResetToPending={resetToPending}
               onMarkDone={markDone}

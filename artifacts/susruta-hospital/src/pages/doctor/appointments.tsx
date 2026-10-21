@@ -11,6 +11,7 @@ import {
   Printer, Plus, Link as LinkIcon, AlertTriangle, Building2, UserCheck, FlaskConical, FileEdit, Trash2, Contact
 } from "lucide-react";
 import { VideoCall } from "@/components/VideoCall";
+import { useActiveCall } from "@/context/ActiveCallContext";
 import { CleanPdfViewer } from "@/components/CleanPdfViewer";
 import logoImg from "@assets/logo_1773840200056.png";
 import { cn } from "@/lib/utils";
@@ -124,6 +125,8 @@ type DonationRow = {
   lastSixDigits: string;
   status: string;
   thankYouSent: boolean;
+  isSeen?: boolean;
+  seenAt?: string | null;
   createdAt: string;
 };
 
@@ -2636,7 +2639,12 @@ function NotesEditor({ apptId, isOnline, initialNotes, patientName, onSaved }: {
 
 // ── Main Doctor Portal Component ──────────────────────────────────
 export default function DoctorPortal() {
-  const [, nav] = useLocation();
+  const [loc, nav] = useLocation();
+  const { activeCall, startCall, minimizeCall, maximizeCall, isCallActive } = useActiveCall();
+  const isCallActiveRef = useRef(isCallActive);
+  isCallActiveRef.current = isCallActive;
+  const activeCallRef = useRef(activeCall);
+  activeCallRef.current = activeCall;
   const [online, setOnline] = useState<OnlineAppt[]>([]);
   const [offline, setOffline] = useState<OfflineAppt[]>([]);
   const [registeredPatients, setRegisteredPatients] = useState<RegisteredPatient[]>([]);
@@ -2644,6 +2652,14 @@ export default function DoctorPortal() {
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
   const [section, setSection] = useState<Section>("online");
+
+  useEffect(() => {
+    if (loc.endsWith("/patients")) setSection("patients");
+    else if (loc.endsWith("/donations")) setSection("donations");
+    else if (loc.endsWith("/rx-needed")) setSection("rxneeded");
+    else if (loc.endsWith("/offline")) setSection("offline");
+    else if (loc.endsWith("/appointments") || loc === "/doctor") setSection("online");
+  }, [loc]);
 
   const [patientSearch, setPatientSearch] = useState("");
   const [lastSeenPatientCount, setLastSeenPatientCount] = useState<number>(() => {
@@ -2706,6 +2722,7 @@ export default function DoctorPortal() {
   const DONATIONS_PAGE_SIZE = 10;
 
   const [donations, setDonations] = useState<DonationRow[]>([]);
+  const [unseenDonationsCount, setUnseenDonationsCount] = useState<number>(0);
   const [donationsLoading, setDonationsLoading] = useState(false);
   const [donationToast, setDonationToast] = useState<string | null>(null);
 
@@ -2728,15 +2745,19 @@ export default function DoctorPortal() {
     setErr("");
     const startTime = Date.now();
     try {
-      const [apptData, patientsData] = await Promise.all([
+      const [apptData, patientsData, unseenDonationData] = await Promise.all([
         doctorFetch("/all-appointments"),
         doctorFetch("/patients"),
+        doctorFetch("/donations/unseen-count").catch(() => ({ count: 0 })),
       ]);
       const onlineAppts: OnlineAppt[] = apptData.online ?? [];
       const offlineAppts: OfflineAppt[] = apptData.offline ?? [];
       setOnline(onlineAppts);
       setOffline(offlineAppts);
       setRegisteredPatients(patientsData ?? []);
+      if (typeof unseenDonationData?.count === "number") {
+        setUnseenDonationsCount(unseenDonationData.count);
+      }
       setLastRefresh(new Date());
 
       // Check active direct call for doctor
@@ -2777,7 +2798,13 @@ export default function DoctorPortal() {
     try {
       const params = allTime ? "" : `?month=${filterMonth}&year=${filterYear}`;
       const data = await doctorFetch(`/donations${params}`);
-      setDonations(Array.isArray(data) ? data : []);
+      const list: DonationRow[] = Array.isArray(data) ? data : [];
+      setDonations(list);
+
+      // When doctor opens/views donations, mark unseen donations as seen in the database
+      doctorFetch("/donations/mark-seen", { method: "POST" }).catch(() => {});
+      setUnseenDonationsCount(0);
+      setDonations(prev => prev.map(d => ({ ...d, isSeen: true })));
     } catch {}
     setDonationsLoading(false);
   }, [filterMonth, filterYear, allTime]);
@@ -2812,8 +2839,10 @@ export default function DoctorPortal() {
         const resolvedCode = payload.patientCode || found?.patient.patientCode;
 
         if (payload.joinEnabled) {
-          playDoctorCallAlert(resolvedName);
-          setIncomingOnlineCall({ id: payload.id, patientName: resolvedName, patientCode: resolvedCode });
+          if (!isCallActiveRef.current && activeCallRef.current?.apptId !== payload.id) {
+            playDoctorCallAlert(resolvedName);
+            setIncomingOnlineCall({ id: payload.id, patientName: resolvedName, patientCode: resolvedCode });
+          }
         } else {
           setIncomingOnlineCall(prevCall => prevCall?.id === payload.id ? null : prevCall);
         }
@@ -2831,8 +2860,10 @@ export default function DoctorPortal() {
         if (payload.status === "active") {
           const patientName = payload.patient?.name || "Patient";
           const patientCode = payload.patient?.patientCode || null;
-          playDoctorCallAlert(patientName);
-          setIncomingDirectCall({ id: payload.id, patientName, patientCode });
+          if (!isCallActiveRef.current && activeCallRef.current?.directCallId !== payload.id) {
+            playDoctorCallAlert(patientName);
+            setIncomingDirectCall({ id: payload.id, patientName, patientCode });
+          }
         } else {
           setIncomingDirectCall(prevCall => prevCall?.id === payload.id ? null : prevCall);
           setDoctorDirectCallId(prevId => prevId === payload.id ? null : prevId);
@@ -2858,6 +2889,7 @@ export default function DoctorPortal() {
     es.addEventListener("new_donation", (e) => {
       const d = JSON.parse((e as MessageEvent).data) as DonationRow;
       setDonations(prev => [d, ...prev]);
+      setUnseenDonationsCount(prev => prev + 1);
     });
     return () => es.close();
   }, []);
@@ -2918,6 +2950,7 @@ export default function DoctorPortal() {
   }
 
   async function sendDonationThankYou(d: DonationRow) {
+    if (d.status !== "verified") return;
     setDonationToast(`Sending to ${d.patientName || "Patient"}…`);
     try {
       const res = await doctorFetch(`/donations/${d.id}/thank-you`, { method: "POST" });
@@ -2995,13 +3028,20 @@ export default function DoctorPortal() {
     { key: "offline" as Section,   label: "Offline Slots",    shortLabel: "Visits",   icon: <Building2 size={18} />,    count: upcomingOffline.length },
     { key: "rxneeded" as Section,  label: "Rx needed",    shortLabel: "Rx",       icon: <ClipboardList size={18} />,count: rxNeeded.length, amber: true },
     { key: "patients" as Section,  label: "Patients",     shortLabel: "Patients", icon: <UserCheck size={18} />,    count: newPatientsCount },
-    { key: "donations" as Section, label: "Donations",    shortLabel: "Donate",   icon: <Heart size={18} />,        count: filteredDonations.length },
+    { key: "donations" as Section, label: "Donations",    shortLabel: "Donate",   icon: <Heart size={18} />,        count: unseenDonationsCount },
   ];
 
   // Handle switching sections strictly reset selection if section is empty
   function selectSection(s: Section) {
-  setSection(s);
-  setPreviewDoc(null);
+    if (isCallActive) {
+      minimizeCall();
+    }
+    setSection(s);
+    setPreviewDoc(null);
+    const path = s === "online" ? "/doctor/appointments" : `/doctor/${s === "rxneeded" ? "rx-needed" : s}`;
+    try {
+      window.history.pushState(null, "", path);
+    } catch {}
 
   if (s === "online") {
     setSelectedApptId(null);
@@ -3028,6 +3068,8 @@ export default function DoctorPortal() {
   } else if (s === "donations") {
     setSelectedApptId(null);
     setSelectedPatientId(null);
+    setUnseenDonationsCount(0);
+    doctorFetch("/donations/mark-seen", { method: "POST" }).catch(() => {});
     loadDonations();
   }
 }
@@ -3109,7 +3151,7 @@ export default function DoctorPortal() {
       )}
 
       {/* Incoming Online Call Modal */}
-      {incomingOnlineCall && (
+      {!isCallActive && incomingOnlineCall && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center border border-emerald-100 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4 relative">
@@ -3127,13 +3169,22 @@ export default function DoctorPortal() {
               onClick={() => {
                 const callId = incomingOnlineCall.id;
                 setIncomingOnlineCall(null);
+                setIncomingDirectCall(null);
                 setSection("online");
                 setSelectedApptId(callId);
-                setDoctorVideoCallApptId(callId);
                 fetch(`${BASE}/api/online-appointments/doctor/${callId}/joined`, {
                   method: "POST",
                   credentials: "include",
                 }).catch(() => {});
+                const appt = online.find(a => a.id === callId);
+                startCall({
+                  apptId: callId,
+                  role: "doctor",
+                  title: `Online Consultation${appt ? ` • ${appt.patient.name}` : ""}`,
+                  onCallEnded: () => {
+                    handleCallEnded(callId);
+                  },
+                });
               }}
               className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -3143,29 +3194,8 @@ export default function DoctorPortal() {
         </div>
       )}
 
-      {/* Doctor Full Screen Video Call Overlay */}
-      {doctorVideoCallApptId && (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200">
-          <VideoCall
-            apptId={doctorVideoCallApptId}
-            role="doctor"
-            autoJoin
-            title={(() => {
-              const appt = online.find(a => a.id === doctorVideoCallApptId);
-              return `Online Consultation${appt ? ` • ${appt.patient.name}` : ""}`;
-            })()}
-            className="w-full h-full rounded-none border-0"
-            onCallEnded={() => {
-              const endedId = doctorVideoCallApptId;
-              setDoctorVideoCallApptId(null);
-              if (endedId) handleCallEnded(endedId);
-            }}
-          />
-        </div>
-      )}
-
       {/* Incoming Direct Call Modal (Doctor) */}
-      {incomingDirectCall && (
+      {!isCallActive && incomingDirectCall && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center border border-emerald-100 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4 relative">
@@ -3183,33 +3213,20 @@ export default function DoctorPortal() {
               onClick={() => {
                 const callId = incomingDirectCall.id;
                 setIncomingDirectCall(null);
-                setDoctorDirectCallId(callId);
+                startCall({
+                  directCallId: callId,
+                  role: "doctor",
+                  title: "Direct Patient Call",
+                  onCallEnded: () => {
+                    fetch(`${BASE}/api/direct-calls/doctor/${callId}/end`, { method: "POST", credentials: "include" }).catch(() => {});
+                  },
+                });
               }}
               className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
               <Video size={18} /> Join Direct Call
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Doctor Full Screen Direct Video Call Overlay */}
-      {doctorDirectCallId && (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200">
-          <VideoCall
-            directCallId={doctorDirectCallId}
-            role="doctor"
-            autoJoin
-            title="Direct Patient Call"
-            className="w-full h-full rounded-none border-0"
-            onCallEnded={() => {
-              const endedId = doctorDirectCallId;
-              setDoctorDirectCallId(null);
-              if (endedId) {
-                fetch(`${BASE}/api/direct-calls/doctor/${endedId}/end`, { method: "POST", credentials: "include" }).catch(() => {});
-              }
-            }}
-          />
         </div>
       )}
 
@@ -3705,19 +3722,29 @@ export default function DoctorPortal() {
                                 </button>
                               </td>
                               <td className="px-5 py-4">
-                                <button
-                                  onClick={() => !d.thankYouSent && sendDonationThankYou(d)}
-                                  disabled={d.thankYouSent}
-                                  className={cn(
-                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer",
-                                    d.thankYouSent
-                                      ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
-                                      : "bg-[#D95B2F]/10 border-[#D95B2F]/20 text-[#D95B2F] hover:bg-[#D95B2F]/20"
-                                  )}
-                                >
-                                  {d.thankYouSent ? <MailCheck size={12} /> : <Mail size={12} />}
-                                  {d.thankYouSent ? "Sent" : "Send Thanks"}
-                                </button>
+                                {(() => {
+                                  const isReceived = d.status === "verified";
+                                  const isSent = d.thankYouSent;
+                                  const isEnabled = isReceived && !isSent;
+
+                                  return (
+                                    <button
+                                      onClick={() => isEnabled && sendDonationThankYou(d)}
+                                      disabled={!isEnabled}
+                                      className={cn(
+                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all select-none",
+                                        isEnabled
+                                          ? "bg-[#D95B2F]/10 border-[#D95B2F]/20 text-[#D95B2F] hover:bg-[#D95B2F]/20 cursor-pointer"
+                                          : isSent
+                                            ? "bg-gray-50 border-gray-200 text-gray-400 cursor-default"
+                                            : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                                      )}
+                                    >
+                                      {isSent ? <MailCheck size={12} /> : <Mail size={12} />}
+                                      {isSent ? "Sent" : "Send Thanks"}
+                                    </button>
+                                  );
+                                })()}
                               </td>
                             </tr>
                           ))}
@@ -4341,18 +4368,36 @@ export default function DoctorPortal() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setDoctorVideoCallApptId(selectedAppt.id);
-                        fetch(`${BASE}/api/online-appointments/doctor/${selectedAppt.id}/joined`, {
-                          method: "POST",
-                          credentials: "include",
-                        }).catch(() => {});
-                      }}
-                      className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer shrink-0"
-                    >
-                      <Video size={16} /> Join Consultation (Full Screen)
-                    </button>
+                    {activeCall?.apptId === selectedAppt.id ? (
+                      <button
+                        onClick={() => maximizeCall()}
+                        className="w-full sm:w-auto px-6 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer shrink-0 animate-pulse"
+                      >
+                        <Video size={16} /> Return to Active Call (Full Screen)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIncomingOnlineCall(null);
+                          setIncomingDirectCall(null);
+                          fetch(`${BASE}/api/online-appointments/doctor/${selectedAppt.id}/joined`, {
+                            method: "POST",
+                            credentials: "include",
+                          }).catch(() => {});
+                          startCall({
+                            apptId: selectedAppt.id,
+                            role: "doctor",
+                            title: `Online Consultation • ${selectedAppt.patient.name}`,
+                            onCallEnded: () => {
+                              handleCallEnded(selectedAppt.id);
+                            },
+                          });
+                        }}
+                        className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                      >
+                        <Video size={16} /> Join Consultation (Full Screen)
+                      </button>
+                    )}
                   </div>
                 </section>
               )}

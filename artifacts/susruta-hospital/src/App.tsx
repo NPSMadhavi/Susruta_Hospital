@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { loadRecaptchaScript } from "@/lib/recaptcha";
 
+import { ActiveCallProvider } from "./context/ActiveCallContext";
+
 // Single public page
 import Home from "./pages/home";
 import Appointments from "./pages/appointments";
@@ -89,6 +91,10 @@ function Router() {
       {/* Doctor Portal Routes */}
       <Route path="/doctor" component={DoctorLogin} />
       <Route path="/doctor/appointments" component={DoctorAppointments} />
+      <Route path="/doctor/patients" component={DoctorAppointments} />
+      <Route path="/doctor/rx-needed" component={DoctorAppointments} />
+      <Route path="/doctor/donations" component={DoctorAppointments} />
+      <Route path="/doctor/offline" component={DoctorAppointments} />
 
       {/* Pharmacy Portal Routes — hidden, enable from code when needed */}
       {/* <Route path="/pharmacy" component={PharmacyLogin} /> */}
@@ -124,7 +130,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <ActiveCallProvider>
+            <Router />
+          </ActiveCallProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
