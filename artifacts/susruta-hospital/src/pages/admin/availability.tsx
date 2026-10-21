@@ -352,7 +352,7 @@ export default function AdminAvailability() {
               {customTimings.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-[#94A3B8]">
-                    No custom day timings configured. Default timings apply (Sunday 10 AM - 1 PM; Mon-Sat 10 AM - 1 PM & 6 PM - 10 PM).
+                    No custom day timings configured. Default timings apply (Mon-Sat 10 AM - 1:30 PM & 6 PM - 10 PM; Sunday 10 AM - 1 PM).
                   </td>
                 </tr>
               ) : (
