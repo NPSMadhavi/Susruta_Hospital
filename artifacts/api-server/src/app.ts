@@ -7,6 +7,9 @@ import router from "./routes";
 
 const app: Express = express();
 
+// Trust reverse proxy (Plesk Nginx / HTTPS terminating proxy)
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -1457,37 +1457,66 @@ router.post("/donations", requirePatient, async (req: any, res) => {
   const { amount, lastSixDigits, appointmentId } = req.body;
 
   if (!amount || typeof amount !== "string" || amount.trim() === "") {
-    res.status(400).json({ error: "amount_required" }); return;
+    res.status(400).json({ error: "amount_required", message: "Please enter a valid donation amount." });
+    return;
   }
   if (!lastSixDigits || typeof lastSixDigits !== "string" || lastSixDigits.trim().length < 4) {
-    res.status(400).json({ error: "last_six_required" }); return;
+    res.status(400).json({ error: "last_six_required", message: "Please enter the last 4 to 6 digits of your transaction reference." });
+    return;
   }
 
   const apptId = appointmentId ? parseInt(appointmentId) : null;
+  let validAppointmentId: number | null = null;
+  if (apptId && !isNaN(apptId) && apptId > 0) {
+    try {
+      const [existing] = await db
+        .select({ id: onlineAppointmentsTable.id })
+        .from(onlineAppointmentsTable)
+        .where(eq(onlineAppointmentsTable.id, apptId))
+        .limit(1);
+      if (existing) {
+        validAppointmentId = existing.id;
+      } else {
+        console.warn(`[Donations] appointmentId ${apptId} not found in online_appointments, saving as null`);
+      }
+    } catch (checkErr) {
+      console.warn("[Donations] Error validating online appointment id:", checkErr);
+    }
+  }
 
-  const [donation] = await db.insert(donationsTable).values({
-    patientId: patient.id,
-    appointmentId: apptId && !isNaN(apptId) ? apptId : null,
-    patientCode: patient.patientCode ?? null,
-    patientName: patient.name,
-    patientEmail: patient.email,
-    amount: amount.trim(),
-    lastSixDigits: lastSixDigits.trim().slice(-6),
-    status: "pending",
-    thankYouSent: false,
-    isSeen: false,
-  }).returning();
+  try {
+    const [donation] = await db.insert(donationsTable).values({
+      patientId: patient.id,
+      appointmentId: validAppointmentId,
+      patientCode: patient.patientCode ?? null,
+      patientName: patient.name,
+      patientEmail: patient.email,
+      amount: amount.trim(),
+      lastSixDigits: lastSixDigits.trim().slice(-6),
+      status: "pending",
+      thankYouSent: false,
+      isSeen: false,
+      deleteColumn: 0,
+    }).returning();
 
-  const donationPayload = {
-    ...donation,
-    createdAt: donation.createdAt instanceof Date ? donation.createdAt.toISOString() : new Date(donation.createdAt).toISOString(),
-  };
+    const donationPayload = {
+      ...donation,
+      createdAt: donation.createdAt instanceof Date ? donation.createdAt.toISOString() : new Date(donation.createdAt).toISOString(),
+    };
 
-  // Notify doctor and admin portals in real time
-  broadcastNewDonation(donationPayload);
-  notifyAdminNewDonation(donationPayload);
+    // Notify doctor and admin portals in real time
+    try {
+      broadcastNewDonation(donationPayload);
+      notifyAdminNewDonation(donationPayload);
+    } catch (sseErr) {
+      console.error("[Donation SSE Broadcast Error]", sseErr);
+    }
 
-  res.json(donation);
+    res.json(donation);
+  } catch (err: any) {
+    console.error("[Donation Creation Error]", err);
+    res.status(500).json({ error: "database_error", message: err?.message || "Failed to record donation. Please try again." });
+  }
 });
 
 export default router;

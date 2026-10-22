@@ -382,16 +382,22 @@ function DonationPopup({
     if (lastSix.trim().length < 4) { setError("Please enter at least the last 4 digits of your transaction."); return; }
     setSubmitting(true);
     try {
-      await fetch(`${BASE}/api/patient/donations`, {
+      const res = await fetch(`${BASE}/api/patient/donations`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: amount.trim(), lastSixDigits: lastSix.trim(), appointmentId: apptId || null }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || data?.error || `Server returned status ${res.status}`);
+      }
       setScreen("receipt");
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: any) {
+      console.error("[Donation Error]", err);
+      setError(err?.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (

@@ -38,17 +38,27 @@ export async function deletePatientSession(token: string) {
 }
 
 export async function requirePatient(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.patient_session;
+  let token = req.cookies?.patient_session;
+  if (!token && typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ")) {
+    token = req.headers.authorization.slice(7).trim();
+  }
+
   if (!token) {
     res.status(401).json({ error: "unauthorized", message: "Please log in" });
     return;
   }
-  const patient = await verifyPatientSession(token);
-  if (!patient) {
-    res.clearCookie("patient_session");
-    res.status(401).json({ error: "unauthorized", message: "Session expired" });
-    return;
+
+  try {
+    const patient = await verifyPatientSession(token);
+    if (!patient) {
+      res.clearCookie("patient_session");
+      res.status(401).json({ error: "unauthorized", message: "Session expired" });
+      return;
+    }
+    (req as any).patient = patient;
+    next();
+  } catch (err: any) {
+    console.error("[requirePatient] Error validating session:", err);
+    res.status(500).json({ error: "auth_error", message: "Authentication service error" });
   }
-  (req as any).patient = patient;
-  next();
 }

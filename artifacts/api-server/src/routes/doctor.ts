@@ -13,7 +13,7 @@ import {
   patientDocumentsTable,
   donationsTable,
 } from "@workspace/db";
-import { eq, desc, inArray, and, gte, lte } from "drizzle-orm";
+import { eq, desc, inArray, and, gte, lte, lt } from "drizzle-orm";
 import { requireDoctor, verifyDoctorSession } from "../lib/doctor-auth";
 import { notifyPatientSessionEnded } from "./patient";
 import { roomService, makeRoomName } from "./livekit";
@@ -809,10 +809,13 @@ router.get("/donations", requireDoctor, async (req, res) => {
       const y = parseInt(year as string);
       const m = parseInt(month as string);
       if (!isNaN(y) && !isNaN(m)) {
-        const from = new Date(y, m - 1, 1);
-        const to = new Date(y, m, 1);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const nextY = m === 12 ? y + 1 : y;
+        const nextM = m === 12 ? 1 : m + 1;
+        const from = new Date(`${y}-${pad(m)}-01T00:00:00+05:30`);
+        const to = new Date(`${nextY}-${pad(nextM)}-01T00:00:00+05:30`);
         query = db.select().from(donationsTable)
-          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lt(donationsTable.createdAt, to)))
           .orderBy(desc(donationsTable.createdAt)) as any;
       }
     }

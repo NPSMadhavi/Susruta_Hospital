@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, pool, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable } from "@workspace/db";
-import { eq, desc, inArray, and, gte, lte, ne, sql, or } from "drizzle-orm";
+import { eq, desc, inArray, and, gte, lte, lt, ne, sql, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod/v4";
@@ -686,10 +686,13 @@ router.get("/donations", requireAdmin, async (req, res) => {
       const y = parseInt(year as string);
       const m = parseInt(month as string);
       if (!isNaN(y) && !isNaN(m)) {
-        const from = new Date(y, m - 1, 1);
-        const to = new Date(y, m, 1);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const nextY = m === 12 ? y + 1 : y;
+        const nextM = m === 12 ? 1 : m + 1;
+        const from = new Date(`${y}-${pad(m)}-01T00:00:00+05:30`);
+        const to = new Date(`${nextY}-${pad(nextM)}-01T00:00:00+05:30`);
         query = db.select().from(donationsTable)
-          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lte(donationsTable.createdAt, to)))
+          .where(and(eq(donationsTable.deleteColumn, 0), gte(donationsTable.createdAt, from), lt(donationsTable.createdAt, to)))
           .orderBy(desc(donationsTable.createdAt)) as any;
       }
     }
