@@ -24,6 +24,7 @@ import AdminSubscribers from "./pages/admin/subscribers";
 import AdminOnlineSlots from "./pages/admin/online-slots";
 import AdminOnlineAppointments from "./pages/admin/online-appointments";
 import AdminPatients from "./pages/admin/patients";
+import AdminAccountDeleteRequests from "./pages/admin/account-delete-requests";
 import AdminDonations from "./pages/admin/donations";
 import AdminMedicines from "./pages/admin/medicines";
 import AdminVisitors from "./pages/admin/visitors";
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/admin/online-slots" component={AdminOnlineSlots} />
       <Route path="/admin/online-appointments">{() => <Redirect to="/admin/appointments" />}</Route>
       <Route path="/admin/patients" component={AdminPatients} />
+      <Route path="/admin/account-delete-requests" component={AdminAccountDeleteRequests} />
       <Route path="/admin/medicines" component={AdminMedicines} />
       <Route path="/admin/donations" component={AdminDonations} />
       <Route path="/admin/visitors" component={AdminVisitors} />

@@ -18,6 +18,7 @@ const TABLES = [
   "direct_calls",
   "medicine_orders",
   "medicine_order_items",
+  "account_deletion_requests",
 ];
 
 export async function runMigration() {

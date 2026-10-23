@@ -607,28 +607,6 @@ export default function AdminPatients() {
         </div>
       )}
 
-      {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-7">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Patient?</h3>
-            <p className="text-sm text-gray-600 mb-1">
-              This will permanently delete <strong>{confirmDelete.name}</strong> {confirmDelete.email ? `(${confirmDelete.email})` : confirmDelete.phone ? `(${confirmDelete.phone})` : ""} and all their appointments and data.
-            </p>
-            <p className="text-xs text-red-600 font-semibold mb-6">This action cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={() => deletePatient(confirmDelete)}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {viewingPatient && (
         <ViewPatientDialog
@@ -845,18 +823,6 @@ export default function AdminPatients() {
                             <span>Call Patient</span>
                           </button>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
-                          disabled={!!actionLoading[p.id]}
-                          title="Delete patient"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                        >
-                          {actionLoading[p.id] === "delete"
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <Trash2 size={12} />
-                          }
-                          <span>Delete</span>
-                        </button>
                       </div>
                     </td>
                   </tr>

@@ -79,9 +79,9 @@ export async function downloadFileDirectly(url: string, defaultName: string): Pr
 
 /**
  * Captures DigitalPrescriptionPages off-screen using modern-screenshot + jsPDF,
- * guaranteeing: PREVIEW = PRINT = DOWNLOAD (one component, one CSS, one A4 layout).
+ * guaranteeing: PREVIEW = PRINT = DOWNLOAD = ZIP EXPORT (one component, one CSS, one A4 layout).
  */
-export async function downloadPrescriptionPdf(data: PrintPrescriptionData, fileName: string) {
+export async function generatePrescriptionPdfBlob(data: PrintPrescriptionData): Promise<Blob> {
   const host = document.createElement("div");
   host.className = "rx-capture";
   Object.assign(host.style, { position: "fixed", left: "-10000px", top: "0", width: "210mm", pointerEvents: "none" });
@@ -99,9 +99,26 @@ export async function downloadPrescriptionPdf(data: PrintPrescriptionData, fileN
       if (i > 0) pdf.addPage("a4", "portrait");
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
     }
-    pdf.save(fileName);
+    return pdf.output("blob");
   } finally {
     root.unmount();
     host.remove();
   }
+}
+
+/**
+ * Downloads a digital prescription PDF rendered with the exact authentic layout.
+ */
+export async function downloadPrescriptionPdf(data: PrintPrescriptionData, fileName: string) {
+  const blob = await generatePrescriptionPdfBlob(data);
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => {
+    window.URL.revokeObjectURL(blobUrl);
+  }, 1000);
 }

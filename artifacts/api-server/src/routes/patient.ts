@@ -1,6 +1,10 @@
 import { Router, Response } from "express";
-import { db, patientsTable, appointmentsTable, prescriptionsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable, customDayTimingsTable } from "@workspace/db";
-import { eq, and, desc, ne, isNotNull, sql, or } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
+import JSZip from "jszip";
+import { db, patientsTable, appointmentsTable, prescriptionsTable, loginTokensTable, siteSettingsTable, patientDocumentsTable, donationsTable, onlineAppointmentsTable, patientOtpsTable, onlineSlotsTable, offlineQrTokensTable, customDayTimingsTable, accountDeletionRequestsTable, patientSessionsTable } from "@workspace/db";
+import { eq, and, desc, ne, isNotNull, sql, or, inArray } from "drizzle-orm";
+import { formatDeletionRequest, syncExpiredDeletionRequests, CANCELLATION_PERIOD_MS } from "../lib/deletion-service";
 import {
   createPatientSession, deletePatientSession, requirePatient,
   verifyPatientSession, hashPassword, verifyPassword,
@@ -16,9 +20,12 @@ import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-
 import { normalizeVerificationEmail } from "../lib/verification";
 import { addDirectCallPatientClient } from "../lib/directCallSse";
 import { registerNewPatientWithNextId } from "../lib/patient-id";
-import { streamPrescriptionDownload } from "../lib/prescription-service";
+import { streamPrescriptionDownload, findExistingFile, getPrescriptionBufferAndName } from "../lib/prescription-service";
 import { verifyRecaptcha } from "../lib/recaptcha";
 import { parseTimeString, generateTimeSlots } from "./availability";
+import { ObjectStorageService } from "../lib/objectStorage";
+
+const objectStorageService = new ObjectStorageService();
 
 const OTP_PEPPER = process.env.UNSUBSCRIBE_SECRET || "susruta-otp-pepper-secure-2026";
 
@@ -290,7 +297,7 @@ router.post("/auth/login", verifyRecaptcha("patient_login"), async (req, res) =>
   const email = parsed.data.email.toLowerCase().trim();
 
   const [patient] = await db.select().from(patientsTable)
-    .where(and(eq(patientsTable.deleteColumn, 0), sql`lower(${patientsTable.email}) = ${email}`));
+    .where(sql`lower(${patientsTable.email}) = ${email}`);
   if (!patient || !patient.passwordHash) {
     res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password." });
     return;
@@ -302,9 +309,56 @@ router.post("/auth/login", verifyRecaptcha("patient_login"), async (req, res) =>
     return;
   }
 
+  if (patient.deleteColumn === 1) {
+    res.status(403).json({
+      error: "account_deactivated",
+      message: "This account has been temporarily deactivated. Click Reactivate to restore access.",
+      canReactivate: true,
+      email: patient.email,
+    });
+    return;
+  }
+
   const sessionToken = await createPatientSession(patient.id);
   res.cookie("patient_session", sessionToken, cookieOpts());
   res.json(serializePatient(patient));
+});
+
+// ── Reactivate Deactivated Account ─────────────────────────────
+router.post("/auth/reactivate", verifyRecaptcha("patient_login"), async (req, res) => {
+  const parsed = LoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "validation_error", message: "Email and password are required." });
+    return;
+  }
+  const { password } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
+
+  const [patient] = await db.select().from(patientsTable)
+    .where(sql`lower(${patientsTable.email}) = ${email}`);
+  if (!patient || !patient.passwordHash) {
+    res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password." });
+    return;
+  }
+
+  const valid = await verifyPassword(password, patient.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: "invalid_credentials", message: "Incorrect email or password." });
+    return;
+  }
+
+  if (patient.deleteColumn === 1) {
+    await db.update(patientsTable).set({ deleteColumn: 0 }).where(eq(patientsTable.id, patient.id));
+    patient.deleteColumn = 0;
+  }
+
+  const sessionToken = await createPatientSession(patient.id);
+  res.cookie("patient_session", sessionToken, cookieOpts());
+  res.json({
+    success: true,
+    message: "Your account has been reactivated successfully.",
+    patient: serializePatient(patient),
+  });
 });
 
 // ── Google OAuth status (disabled) ─────────────────────────────
@@ -500,6 +554,384 @@ router.get("/me", async (req, res) => {
     return;
   }
   res.json(serializePatient(patient));
+});
+
+// ── Helpers for Patient Data ZIP Export ──────────────────────
+async function resolveFileBuffer(objectPath: string | null | undefined): Promise<Buffer | null> {
+  if (!objectPath || typeof objectPath !== "string") return null;
+  const localFile = findExistingFile(objectPath);
+  if (localFile && fs.existsSync(localFile)) {
+    try {
+      return fs.readFileSync(localFile);
+    } catch (e) {
+      console.warn("[export-data] Error reading local file:", localFile, e);
+    }
+  }
+  try {
+    const file = await objectStorageService.getObjectEntityFile(objectPath);
+    const resp = await objectStorageService.downloadObject(file);
+    if (resp.body) {
+      const arrayBuf = await resp.arrayBuffer();
+      return Buffer.from(arrayBuf);
+    }
+  } catch {
+    // Not found in GCS
+  }
+  return null;
+}
+
+function getDeduplicatedFilename(originalName: string, usedNames: Set<string>): string {
+  let cleanName = path.basename(originalName).replace(/[/\\]/g, "_").replace(/\.\./g, "_").trim();
+  if (!cleanName || cleanName === "." || cleanName === "..") {
+    cleanName = "attachment";
+  }
+
+  const parsed = path.parse(cleanName);
+  let finalName = cleanName;
+  let counter = 1;
+
+  while (usedNames.has(finalName.toLowerCase())) {
+    finalName = `${parsed.name}_${counter}${parsed.ext}`;
+    counter++;
+  }
+
+  usedNames.add(finalName.toLowerCase());
+  return finalName;
+}
+
+function hasAppointmentPrescription(rx: { photoObjectPath?: string | null; notes?: string | null } | null | undefined): boolean {
+  if (!rx) return false;
+  if (rx.photoObjectPath) return true;
+  if (!rx.notes) return false;
+  const t = rx.notes.trim();
+  if (!t) return false;
+  if (t.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(t);
+      if (parsed.token && !parsed.digitalPrescription) return false;
+      return !!(parsed.digitalPrescription || (Array.isArray(parsed.formulationRows) && parsed.formulationRows.length > 0) || parsed.diagnosis || (typeof parsed.notes === "string" && parsed.notes.trim().length > 0));
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ── GET /api/patient/me/export-data ─────────────────────────────
+router.get("/me/export-data", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  try {
+    const zip = new JSZip();
+
+    // FOLDER STRUCTURE:
+    // 1. Prescriptions/ (prescriptions directly inside, no "Files" subfolder)
+    // 2. Medical_Documents/ (medical documents directly inside)
+    zip.folder("Prescriptions");
+    zip.folder("Medical_Documents");
+
+    // 1. Fetch authorized prescriptions (both online & offline)
+    const onlineRx = await db
+      .select({
+        id: prescriptionsTable.id,
+        photoObjectPath: prescriptionsTable.photoObjectPath,
+        notes: prescriptionsTable.notes,
+      })
+      .from(prescriptionsTable)
+      .innerJoin(onlineAppointmentsTable, eq(prescriptionsTable.onlineAppointmentId, onlineAppointmentsTable.id))
+      .where(and(
+        eq(onlineAppointmentsTable.patientId, patient.id),
+        eq(onlineAppointmentsTable.deleteColumn, 0),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ));
+
+    const physicalRx = await db
+      .select({
+        id: prescriptionsTable.id,
+        photoObjectPath: prescriptionsTable.photoObjectPath,
+        notes: prescriptionsTable.notes,
+      })
+      .from(prescriptionsTable)
+      .innerJoin(appointmentsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
+      .where(and(
+        eq(appointmentsTable.patientId, patient.id),
+        eq(appointmentsTable.deleteColumn, 0),
+        eq(prescriptionsTable.deleteColumn, 0)
+      ));
+
+    const allValidRx = [...onlineRx, ...physicalRx].filter(r => hasAppointmentPrescription(r));
+    const allRxIds = Array.from(new Set(allValidRx.map(r => r.id)));
+    const rxUsedNames = new Set<string>();
+
+    for (const rxId of allRxIds) {
+      const rxData = await getPrescriptionBufferAndName({
+        rxIdOrApptParam: rxId,
+        authenticatedPatientId: patient.id,
+      });
+
+      if (rxData && rxData.buffer && rxData.buffer.length > 0) {
+        const safeName = getDeduplicatedFilename(rxData.fileName, rxUsedNames);
+        zip.file(`Prescriptions/${safeName}`, rxData.buffer);
+      }
+    }
+
+    // 2. Fetch authorized medical documents
+    const medicalDocs = await db
+      .select()
+      .from(patientDocumentsTable)
+      .where(and(
+        eq(patientDocumentsTable.patientId, patient.id),
+        eq(patientDocumentsTable.deleteColumn, 0)
+      ));
+
+    const docUsedNames = new Set<string>();
+    for (const doc of medicalDocs) {
+      if (!doc.objectPath) continue;
+      const buf = await resolveFileBuffer(doc.objectPath);
+      if (buf && buf.length > 0) {
+        const safeName = getDeduplicatedFilename(doc.name || `document_${doc.id}.pdf`, docUsedNames);
+        zip.file(`Medical_Documents/${safeName}`, buf);
+      }
+    }
+
+    const patientCode = (patient.patientCode && patient.patientCode.trim()) ? patient.patientCode.trim() : `P${patient.id}`;
+    const zipFilename = `Susruta_Hospital_Patient_Data_${patientCode}.zip`;
+
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${zipFilename}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(zipBuffer);
+  } catch (err: any) {
+    console.error("[Export Data Error]", err);
+    res.status(500).json({ error: "export_failed", message: "Unable to download your files. Please try again." });
+  }
+});
+
+// ── POST /api/patient/account/deactivate ─────────────────────────
+router.post("/account/deactivate", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  try {
+    // 1. Invalidate all active patient sessions
+    await db.delete(patientSessionsTable).where(eq(patientSessionsTable.patientId, patient.id));
+
+    // 2. Set deleteColumn = 1 on patientsTable (temporarily deactivated)
+    await db.update(patientsTable).set({ deleteColumn: 1 }).where(eq(patientsTable.id, patient.id));
+
+    // 3. Clear session cookie
+    res.clearCookie("patient_session", cookieOpts());
+
+    res.json({
+      success: true,
+      message: "Your account has been temporarily deactivated.",
+    });
+  } catch (err: any) {
+    console.error("[Account Deactivation Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to deactivate account. Please try again." });
+  }
+});
+
+// ── POST /api/patient/account/delete-request ─────────────────────
+router.post("/account/delete-request", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  try {
+    await syncExpiredDeletionRequests();
+
+    // Check if an existing active deletion request exists (PENDING or ELIGIBLE_FOR_DELETION)
+    const [existing] = await db
+      .select()
+      .from(accountDeletionRequestsTable)
+      .where(and(
+        eq(accountDeletionRequestsTable.patientId, patient.id),
+        inArray(accountDeletionRequestsTable.status, ["PENDING", "ELIGIBLE_FOR_DELETION"]),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ));
+
+    if (existing) {
+      res.status(409).json({
+        error: "already_submitted",
+        message: "Account deletion request already submitted.",
+        request: formatDeletionRequest(existing),
+      });
+      return;
+    }
+
+    const now = new Date();
+    const cancellationDeadline = new Date(now.getTime() + CANCELLATION_PERIOD_MS);
+
+    const [newRequest] = await db
+      .insert(accountDeletionRequestsTable)
+      .values({
+        patientId: patient.id,
+        patientCode: patient.patientCode ?? null,
+        patientName: patient.name,
+        patientEmail: patient.email ?? "",
+        status: "PENDING",
+        reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : null,
+        cancellationDeadline,
+        deleteColumn: 0,
+        createdAt: now,
+      })
+      .returning();
+
+    res.status(201).json({
+      success: true,
+      message: "Your account deletion request has been submitted. You have 15 days to cancel this request.",
+      description: "Your request has been sent to the hospital administrator. You can cancel this request within 15 days from your Patient Profile.",
+      request: formatDeletionRequest(newRequest, now),
+    });
+  } catch (err: any) {
+    console.error("[Account Deletion Request Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to submit account deletion request. Please try again." });
+  }
+});
+
+// ── GET /api/patient/account/delete-request ──────────────────────
+router.get("/account/delete-request", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  try {
+    await syncExpiredDeletionRequests();
+
+    const [existing] = await db
+      .select()
+      .from(accountDeletionRequestsTable)
+      .where(and(
+        eq(accountDeletionRequestsTable.patientId, patient.id),
+        inArray(accountDeletionRequestsTable.status, ["PENDING", "ELIGIBLE_FOR_DELETION"]),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ))
+      .orderBy(desc(accountDeletionRequestsTable.createdAt))
+      .limit(1);
+
+    if (existing) {
+      res.json({
+        hasPendingRequest: true,
+        request: formatDeletionRequest(existing),
+      });
+    } else {
+      res.json({
+        hasPendingRequest: false,
+        request: null,
+      });
+    }
+  } catch (err: any) {
+    console.error("[Get Account Deletion Request Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to fetch deletion request status." });
+  }
+});
+
+// ── POST /api/patient/account/delete-request/cancel ───────────────
+router.post("/account/delete-request/cancel", requirePatient, async (req: any, res) => {
+  const patient = req.patient;
+  try {
+    await syncExpiredDeletionRequests();
+
+    // Fetch the most recent deletion request for this patient
+    const [latestReq] = await db
+      .select()
+      .from(accountDeletionRequestsTable)
+      .where(and(
+        eq(accountDeletionRequestsTable.patientId, patient.id),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ))
+      .orderBy(desc(accountDeletionRequestsTable.createdAt))
+      .limit(1);
+
+    if (!latestReq) {
+      res.status(404).json({
+        error: "not_found",
+        message: "No account deletion request found for this account.",
+      });
+      return;
+    }
+
+    // Edge case: Already cancelled
+    if (latestReq.status === "CANCELLED") {
+      res.status(400).json({
+        error: "already_cancelled",
+        message: "This deletion request has already been cancelled.",
+      });
+      return;
+    }
+
+    // Edge case: Already processed by Admin
+    if (latestReq.status === "COMPLETED" || latestReq.status === "DELETED") {
+      res.status(400).json({
+        error: "already_processed",
+        message: "This deletion request can no longer be cancelled.",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const isExpired =
+      latestReq.status === "ELIGIBLE_FOR_DELETION" ||
+      (latestReq.cancellationDeadline && new Date(latestReq.cancellationDeadline).getTime() <= now.getTime());
+
+    // Edge case: 15-day period expired
+    if (isExpired) {
+      if (latestReq.status !== "ELIGIBLE_FOR_DELETION") {
+        await db
+          .update(accountDeletionRequestsTable)
+          .set({ status: "ELIGIBLE_FOR_DELETION" })
+          .where(eq(accountDeletionRequestsTable.id, latestReq.id));
+      }
+
+      res.status(400).json({
+        error: "cancellation_period_expired",
+        message: "The 15-day cancellation period has expired. This request can no longer be cancelled.",
+      });
+      return;
+    }
+
+    // Atomic cancellation in transaction
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(accountDeletionRequestsTable)
+        .set({
+          status: "CANCELLED",
+          cancelledAt: now,
+          notes: "Account deletion request cancelled by patient during 15-day cancellation grace period.",
+        })
+        .where(and(
+          eq(accountDeletionRequestsTable.id, latestReq.id),
+          eq(accountDeletionRequestsTable.status, "PENDING")
+        ))
+        .returning();
+
+      if (!updated) {
+        throw new Error("concurrent_modification");
+      }
+
+      // Restore patient's active status if deactivated
+      await tx
+        .update(patientsTable)
+        .set({ deleteColumn: 0 })
+        .where(eq(patientsTable.id, patient.id));
+    });
+
+    res.json({
+      success: true,
+      message: "Your account deletion request has been cancelled successfully.",
+    });
+  } catch (err: any) {
+    if (err?.message === "concurrent_modification") {
+      res.status(409).json({
+        error: "conflict",
+        message: "This deletion request could not be cancelled because its status was concurrently modified.",
+      });
+      return;
+    }
+    console.error("[Cancel Account Deletion Request Error]", err);
+    res.status(500).json({
+      error: "server_error",
+      message: "Failed to cancel account deletion request. Please try again.",
+    });
+  }
 });
 
 // ── Profile: Update Full Name ──────────────────────────────────

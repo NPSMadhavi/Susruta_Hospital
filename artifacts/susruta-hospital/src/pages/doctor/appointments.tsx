@@ -1387,7 +1387,12 @@ function DigitalPrescriptionForm({
     return format(new Date(), "dd MMM yyyy • hh:mm a");
   }, [appt?.date, (appt as any)?.timeLabel, (appt as any)?.slotTime, (appt as any)?.time]);
 
-  const [diagnosis, setDiagnosis] = useState("");
+  const existingRxData = useMemo(() => {
+    const rawNotes = (appt as any)?.prescription?.notes || (appt as any)?.notes;
+    return extractDigitalPrescriptionData(rawNotes);
+  }, [appt]);
+
+  const [diagnosis, setDiagnosis] = useState(existingRxData?.diagnosis || "");
 
   const createEmptyRow = () => ({
     id: String(Date.now() + Math.random()),
@@ -1396,6 +1401,8 @@ function DigitalPrescriptionForm({
         id: String(Date.now() + Math.random()),
         name: "",
         dosage: "",
+        medicineId: undefined as string | undefined,
+        medicineDbId: undefined as number | undefined,
       },
     ],
     toBeTaken: "",
@@ -1412,7 +1419,7 @@ function DigitalPrescriptionForm({
 
   const [formulationRows, setFormulationRows] = useState<{
     id: string;
-    medicines: { id: string; name: string; dosage: string }[];
+    medicines: { id: string; name: string; dosage: string; medicineId?: string; medicineDbId?: number }[];
     toBeTaken: string;
     timing: {
       morning: { count: string; mealRelation: "before" | "after" | "" };
@@ -1423,7 +1430,41 @@ function DigitalPrescriptionForm({
     quantity: string;
     medicalNotes: string;
     notes: string;
-  }[]>([createEmptyRow()]);
+  }[]>(() => {
+    if (existingRxData?.formulationRows && existingRxData.formulationRows.length > 0) {
+      return existingRxData.formulationRows.map((r: any) => ({
+        id: r.id || String(Date.now() + Math.random()),
+        medicines: Array.isArray(r.medicines) && r.medicines.length > 0
+          ? r.medicines.map((m: any) => ({
+              id: m.id || String(Date.now() + Math.random()),
+              name: m.name || "",
+              dosage: m.dosage || "",
+              medicineId: m.medicineId,
+              medicineDbId: m.medicineDbId,
+            }))
+          : [
+              {
+                id: String(Date.now() + Math.random()),
+                name: "",
+                dosage: "",
+                medicineId: undefined,
+                medicineDbId: undefined,
+              },
+            ],
+        toBeTaken: r.toBeTaken || "",
+        timing: {
+          morning: { count: r.timing?.morning?.count || "0", mealRelation: r.timing?.morning?.mealRelation || "" },
+          afternoon: { count: r.timing?.afternoon?.count || "0", mealRelation: r.timing?.afternoon?.mealRelation || "" },
+          night: { count: r.timing?.night?.count || "0", mealRelation: r.timing?.night?.mealRelation || "" },
+        },
+        duration: r.duration || "",
+        quantity: r.quantity || "",
+        medicalNotes: (r.medicalNotes ?? r.notes ?? "") || "",
+        notes: (r.medicalNotes ?? r.notes ?? "") || "",
+      }));
+    }
+    return [createEmptyRow()];
+  });
 
   // Medicines dynamically loaded from admin portal database module (ONLY medicines added in admin portal)
   const [dbMedicines, setDbMedicines] = useState<DbMedicine[]>([]);
@@ -1449,7 +1490,7 @@ function DigitalPrescriptionForm({
       .catch(() => {});
   }, []);
 
-  const [doctorNotes, setDoctorNotes] = useState("");
+  const [doctorNotes, setDoctorNotes] = useState(existingRxData?.notes || "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [printData, setPrintData] = useState<PrintPrescriptionData | null>(null);
@@ -1492,6 +1533,8 @@ function DigitalPrescriptionForm({
               id: String(Date.now() + Math.random()),
               name: "",
               dosage: "",
+              medicineId: undefined,
+              medicineDbId: undefined,
             },
           ],
         };
@@ -1518,7 +1561,13 @@ function DigitalPrescriptionForm({
         if (r.id !== rowId) return r;
         return {
           ...r,
-          medicines: r.medicines.map(m => (m.id === subId ? { ...m, [field]: val } : m)),
+          medicines: r.medicines.map(m => {
+            if (m.id !== subId) return m;
+            if (field === "name") {
+              return { ...m, name: val, medicineId: undefined, medicineDbId: undefined };
+            }
+            return { ...m, [field]: val };
+          }),
         };
       })
     );
@@ -1536,6 +1585,8 @@ function DigitalPrescriptionForm({
               ...m,
               name: med.medicineName,
               dosage: med.dosage || (med.formulation ? `${med.formulation} formulation` : "") || m.dosage,
+              medicineId: med.medicineId,
+              medicineDbId: med.id,
             };
           }),
         };
@@ -1684,11 +1735,33 @@ function DigitalPrescriptionForm({
       }
 
       const savedData = await res.json().catch(() => ({}));
+      const finalNotes = savedData?.notes || notesToSave;
       const rxObj = {
         photoObjectPath: null,
-        notes: notesToSave,
+        notes: finalNotes,
         updatedAt: savedData?.updatedAt || new Date().toISOString()
       };
+
+      // Refresh medicines from DB so newly created custom medicines immediately show in future dropdown lookups
+      fetch(`${BASE}/api/medicines`, { credentials: "include" })
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const adminMeds: DbMedicine[] = data.map((m: any) => ({
+              id: m.id,
+              medicineId: m.medicineId,
+              medicineName: m.medicineName,
+              dosage: m.dosage || m.dosageAndFrequency || "",
+              frequency: m.frequency,
+              formulation: m.formulation,
+              properties: m.properties,
+              indications: m.indications,
+            }));
+            setDbMedicines(adminMeds);
+          }
+        })
+        .catch(() => {});
+
       onSaved(rxObj);
       onClose();
     } catch (e: any) {

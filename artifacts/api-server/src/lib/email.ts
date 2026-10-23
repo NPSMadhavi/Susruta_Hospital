@@ -1050,3 +1050,61 @@ export async function sendSlotAvailabilityUpdateBroadcastEmail(details: {
     console.error("⚠️ Failed to broadcast availability update email:", err.message);
   }
 }
+
+
+export async function sendAccountDeletionConfirmationEmail(opts: {
+  to: string;
+  name?: string;
+}): Promise<boolean> {
+  const { to, name = "Patient" } = opts;
+  const subject = "Your Susruta Hospital Account Has Been Deleted";
+
+  const bodyHtml = `
+    <tr><td style="padding:36px 36px 24px;">
+      <p style="color:#444;font-size:15px;margin:0 0 16px;font-family:Arial,sans-serif;">Dear Patient,</p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;font-family:Arial,sans-serif;">
+        Your account deletion request has been successfully processed.
+      </p>
+      <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 24px;font-family:Arial,sans-serif;">
+        Your Susruta Hospital patient account has been deleted, and associated information eligible for deletion has been removed in accordance with applicable data-retention requirements.
+      </p>
+      <p style="color:#444;font-size:15px;margin:0 0 4px;font-family:Arial,sans-serif;">Thank you,</p>
+      <p style="color:#2d6a4f;font-size:15px;font-weight:bold;margin:0;font-family:Arial,sans-serif;">Susruta Hospital Team</p>
+    </td></tr>`;
+
+  const html = emailWrapper(bodyHtml);
+  const text = [
+    "Dear Patient,",
+    "",
+    "Your account deletion request has been successfully processed.",
+    "",
+    "Your Susruta Hospital patient account has been deleted, and associated information eligible for deletion has been removed in accordance with applicable data-retention requirements.",
+    "",
+    "Thank you,",
+    "Susruta Hospital Team",
+    "",
+    "─────────────────────────────────────────",
+    "Susruta Hospital · Tirupati · +91 9492068180",
+  ].join("\n");
+
+  try {
+    const cfg = await getSmtpConfig();
+    if (!cfg) {
+      console.warn("[email] Account deletion email skipped because SMTP is not configured.");
+      return false;
+    }
+
+    await buildTransport(cfg).sendMail({
+      from: senderStr(cfg.fromName, cfg.fromEmail),
+      to,
+      subject,
+      html,
+      text,
+      attachments: logoAttachments(),
+    });
+    return true;
+  } catch (err: any) {
+    console.error(`[email] Failed to send account deletion confirmation email to ${to}:`, err.message);
+    return false;
+  }
+}

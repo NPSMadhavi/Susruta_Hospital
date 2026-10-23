@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound, ChevronDown, MapPin } from "lucide-react";
+import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound, ChevronDown, MapPin, Loader2 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { patientApi } from "@/lib/patient-api";
 import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
@@ -36,6 +36,7 @@ export default function PortalLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [canReactivate, setCanReactivate] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -69,6 +70,7 @@ export default function PortalLogin() {
     const err = params.get("error");
     if (err === "expired_token") setError("This verification link has expired. Please sign in and request a new one.");
     else if (err === "invalid_token") setError("This verification link is invalid.");
+    if (params.get("deactivated") === "true") setSuccess("Your account has been deactivated. You can sign in and reactivate it anytime.");
   }, [search]);
 
   async function submitForgot(e: React.FormEvent) {
@@ -160,6 +162,7 @@ export default function PortalLogin() {
       return;
     }
     setLoading(true);
+    setCanReactivate(false);
     try {
       if (mode === "login") {
         const recaptchaToken = await executeRecaptcha("patient_login");
@@ -167,7 +170,25 @@ export default function PortalLogin() {
       }
       navigate(nextUrl, { replace: true });
     } catch (err: any) {
+      if (err?.error === "account_deactivated" && err?.canReactivate) {
+        setCanReactivate(true);
+      }
       setError(err?.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleReactivate() {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const recaptchaToken = await executeRecaptcha("patient_login");
+      await patientApi.reactivate({ email: form.email, password: form.password }, recaptchaToken);
+      navigate(nextUrl, { replace: true });
+    } catch (err: any) {
+      setError(err?.message || "Failed to reactivate account. Please verify your credentials.");
     } finally {
       setLoading(false);
     }
@@ -271,7 +292,7 @@ export default function PortalLogin() {
                 {(mode === "login" || mode === "register") && (
                   <div className="bg-muted/60 rounded-2xl p-1 flex mb-6">
                     {(["login", "register"] as Mode[]).map((m) => (
-                      <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); setShowPw(false); setShowConfirmPw(false); }}
+                      <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); setCanReactivate(false); setShowPw(false); setShowConfirmPw(false); }}
                         className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${mode === m ? "bg-white shadow-sm" : "hover:opacity-80"}`}
                         style={{ color: "#628474" }}
                       >
@@ -303,6 +324,23 @@ export default function PortalLogin() {
                     className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
                     {error}
                   </motion.div>
+                )}
+
+                {canReactivate && (
+                  <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2.5">
+                    <p className="text-xs text-amber-900 font-medium">
+                      This account is currently deactivated. Would you like to reactivate it now and sign in?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleReactivate}
+                      disabled={loading}
+                      className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      {loading ? <Loader2 size={13} className="animate-spin" /> : null}
+                      Reactivate &amp; Sign In
+                    </button>
+                  </div>
                 )}
 
                 {success && (

@@ -17,6 +17,7 @@ import { broadcastNewOnlineAppointment, broadcastAppointmentUpdated, broadcastPe
 import { setPermission, getPermissions } from "../lib/permissionStore";
 import { notifyAdminCallEnded, notifyAdminNewOnlineAppointment } from "./appointments";
 import { extractClinicalNotes } from "./doctor";
+import { resolvePrescriptionMedicines } from "../lib/prescription-medicine-resolver";
 
 function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -544,9 +545,14 @@ const PrescriptionBody = z.object({
   notes: z.string().optional(),
 });
 
-async function upsertPrescriptionPhoto(apptId: number, photoObjectPath: string, notes: string | undefined, res: any) {
+async function upsertPrescriptionPhoto(apptId: number, photoObjectPath: string, rawNotes: string | undefined, res: any) {
   const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, apptId));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }
+
+  let notes = rawNotes;
+  if (typeof notes === "string") {
+    notes = await resolvePrescriptionMedicines(notes);
+  }
 
   const [existing] = await db.select().from(prescriptionsTable).where(eq(prescriptionsTable.onlineAppointmentId, apptId));
 
@@ -583,8 +589,10 @@ router.put("/doctor/:id/prescription", requireDoctor, async (req, res) => {
 // ── PATCH /api/online-appointments/doctor/:id/notes — save notes only ─
 router.patch("/doctor/:id/notes", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { notes } = req.body;
+  let { notes } = req.body;
   if (typeof notes !== "string") { res.status(400).json({ error: "notes must be a string" }); return; }
+
+  notes = await resolvePrescriptionMedicines(notes);
 
   const [appt] = await db.select().from(onlineAppointmentsTable).where(eq(onlineAppointmentsTable.id, id));
   if (!appt) { res.status(404).json({ error: "not_found" }); return; }

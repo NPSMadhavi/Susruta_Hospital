@@ -37,6 +37,16 @@ export const patientApi = {
       recaptchaToken || body.recaptchaToken
     ),
 
+  reactivate: (
+    body: { email: string; password: string; recaptchaToken?: string },
+    recaptchaToken?: string
+  ) =>
+    req(
+      "/auth/reactivate",
+      { method: "POST", body: JSON.stringify({ ...body, recaptchaToken: recaptchaToken || body.recaptchaToken }) },
+      recaptchaToken || body.recaptchaToken
+    ),
+
   logout: () => req("/logout", { method: "POST" }),
 
   forgotPassword: (email: string, recaptchaToken?: string) =>
@@ -88,4 +98,13 @@ export const patientApi = {
 
   verifyPhoneOtp: (newPhone: string, otp: string) =>
     req("/profile/verify-phone-otp", { method: "POST", body: JSON.stringify({ newPhone, otp }) }),
+
+  deactivateAccount: () => req("/account/deactivate", { method: "POST" }),
+
+  requestAccountDeletion: (reason?: string) =>
+    req("/account/delete-request", { method: "POST", body: JSON.stringify({ reason }) }),
+
+  getAccountDeletionRequest: () => req("/account/delete-request"),
+
+  cancelAccountDeletion: () => req("/account/delete-request/cancel", { method: "POST" }),
 };

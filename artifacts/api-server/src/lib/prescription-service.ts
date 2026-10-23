@@ -82,20 +82,24 @@ function formatFmtTimeIST(timeStr?: string | null): string {
   return timeStr;
 }
 
+export interface PrescriptionFileInfo {
+  buffer: Buffer;
+  fileName: string;
+  contentType: string;
+}
+
 /**
- * Handles downloading a prescription as a real file with application/pdf headers.
+ * Resolves a prescription to its genuine file buffer (uploaded attachment or generated digital PDF).
  */
-export async function streamPrescriptionDownload({
+export async function getPrescriptionBufferAndName({
   rxIdOrApptParam,
   requestedFileName,
   authenticatedPatientId,
-  res,
 }: {
-  rxIdOrApptParam: string;
+  rxIdOrApptParam: string | number;
   requestedFileName?: string;
   authenticatedPatientId?: number;
-  res: Response;
-}) {
+}): Promise<PrescriptionFileInfo | null> {
   let rx: any = null;
   let onlineAppt: any = null;
   let offlineAppt: any = null;
@@ -260,14 +264,12 @@ export async function streamPrescriptionDownload({
   }
 
   if (!rx && !onlineAppt && !offlineAppt) {
-    res.status(404).json({ error: "prescription_not_found", message: "Prescription record not found." });
-    return;
+    return null;
   }
 
   // Security check for patient portal
   if (authenticatedPatientId && patient && patient.id !== authenticatedPatientId) {
-    res.status(403).json({ error: "forbidden", message: "Access denied to this prescription." });
-    return;
+    return null;
   }
 
   // Construct standard filename, e.g. "Prescription_11_Oct.pdf"
@@ -283,16 +285,23 @@ export async function streamPrescriptionDownload({
   if (rx?.photoObjectPath) {
     const existingFilePath = findExistingFile(rx.photoObjectPath);
     if (existingFilePath) {
-      const stat = fs.statSync(existingFilePath);
       const isPdf = existingFilePath.toLowerCase().endsWith(".pdf") || standardFileName.toLowerCase().endsWith(".pdf");
       const contentType = isPdf ? "application/pdf" : "image/jpeg";
+      const buffer = fs.readFileSync(existingFilePath);
 
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(standardFileName)}"`);
-      res.setHeader("Content-Length", stat.size);
-      res.setHeader("Cache-Control", "no-cache");
-      fs.createReadStream(existingFilePath).pipe(res);
-      return;
+      let originalName = path.basename(rx.photoObjectPath);
+      const metaPath = `${existingFilePath}.json`;
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+          if (meta.name) originalName = meta.name;
+        } catch {}
+      }
+      if (originalName.startsWith("local-") || !originalName.includes(".")) {
+        originalName = standardFileName;
+      }
+
+      return { buffer, fileName: originalName, contentType };
     }
   }
 
@@ -301,13 +310,8 @@ export async function streamPrescriptionDownload({
   const cachedFilePath = findExistingFile(rxIdKey);
 
   if (cachedFilePath) {
-    const stat = fs.statSync(cachedFilePath);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(standardFileName)}"`);
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Cache-Control", "no-cache");
-    fs.createReadStream(cachedFilePath).pipe(res);
-    return;
+    const buffer = fs.readFileSync(cachedFilePath);
+    return { buffer, fileName: standardFileName, contentType: "application/pdf" };
   }
 
   // CASE 3: Generate PDF server-side and persist to storage
@@ -348,9 +352,37 @@ export async function streamPrescriptionDownload({
   saveFileToUploads(rxIdKey, pdfBuffer);
   saveFileToUploads(standardFileName, pdfBuffer);
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(standardFileName)}"`);
-  res.setHeader("Content-Length", pdfBuffer.length);
+  return { buffer: pdfBuffer, fileName: standardFileName, contentType: "application/pdf" };
+}
+
+/**
+ * Handles downloading a prescription as a real file with application/pdf headers.
+ */
+export async function streamPrescriptionDownload({
+  rxIdOrApptParam,
+  requestedFileName,
+  authenticatedPatientId,
+  res,
+}: {
+  rxIdOrApptParam: string;
+  requestedFileName?: string;
+  authenticatedPatientId?: number;
+  res: Response;
+}) {
+  const result = await getPrescriptionBufferAndName({
+    rxIdOrApptParam,
+    requestedFileName,
+    authenticatedPatientId,
+  });
+
+  if (!result) {
+    res.status(404).json({ error: "prescription_not_found", message: "Prescription record not found." });
+    return;
+  }
+
+  res.setHeader("Content-Type", result.contentType);
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.fileName)}"`);
+  res.setHeader("Content-Length", result.buffer.length);
   res.setHeader("Cache-Control", "no-cache");
-  res.send(pdfBuffer);
+  res.send(result.buffer);
 }

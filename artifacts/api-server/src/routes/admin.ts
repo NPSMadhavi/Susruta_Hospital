@@ -1,12 +1,24 @@
 import { Router } from "express";
-import { db, pool, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable } from "@workspace/db";
+import fs from "fs";
+import path from "path";
+import { db, pool, siteSettingsTable, patientsTable, loginTokensTable, patientSessionsTable, onlineAppointmentsTable, prescriptionsTable, donationsTable, appointmentsTable, patientDocumentsTable, directCallsTable, patientOtpsTable, medicineOrdersTable, medicineOrderItemsTable, accountDeletionRequestsTable } from "@workspace/db";
 import { eq, desc, inArray, and, gte, lte, lt, ne, sql, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod/v4";
 import { createAdminSession, deleteAdminSession, requireAdmin } from "../lib/auth";
-import { sendMagicLink, testSmtpConnection, sendDonationThankYou, type SmtpConfig } from "../lib/email";
+import { sendMagicLink, testSmtpConnection, sendDonationThankYou, sendAccountDeletionConfirmationEmail, type SmtpConfig } from "../lib/email";
 import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSse";
+import { findExistingFile } from "../lib/prescription-service";
+import { ObjectStorageService } from "../lib/objectStorage";
+
+const objectStorageService = new ObjectStorageService();
+import {
+  formatDeletionRequest,
+  syncExpiredDeletionRequests,
+  calculateDaysRemaining,
+  isCancellationPeriodActive,
+} from "../lib/deletion-service";
 import {
   normalizeVerificationEmail,
   verificationEmailMatchesPatient,
@@ -646,6 +658,305 @@ router.delete("/patients/:id", requireAdmin, async (req, res) => {
   await db.update(patientsTable).set({ deleteColumn: 1 }).where(and(inArray(patientsTable.id, allPatientIds), eq(patientsTable.deleteColumn, 0)));
 
   res.json({ success: true });
+});
+
+// ── GET /admin/account-deletion-requests ────────────────────────
+router.get("/account-deletion-requests", requireAdmin, async (_req, res) => {
+  try {
+    await syncExpiredDeletionRequests();
+
+    const requests = await db
+      .select()
+      .from(accountDeletionRequestsTable)
+      .where(eq(accountDeletionRequestsTable.deleteColumn, 0))
+      .orderBy(
+        sql`CASE 
+          WHEN ${accountDeletionRequestsTable.status} = 'ELIGIBLE_FOR_DELETION' THEN 0 
+          WHEN ${accountDeletionRequestsTable.status} = 'PENDING' THEN 1 
+          WHEN ${accountDeletionRequestsTable.status} = 'CANCELLED' THEN 2 
+          ELSE 3 
+        END`,
+        desc(accountDeletionRequestsTable.createdAt)
+      );
+
+    const now = new Date();
+    res.json(requests.map(r => formatDeletionRequest(r, now)));
+  } catch (err: any) {
+    console.error("[Get Account Deletion Requests Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to fetch deletion requests." });
+  }
+});
+
+// ── GET /admin/account-deletion-requests/count ──────────────────
+router.get("/account-deletion-requests/count", requireAdmin, async (_req, res) => {
+  try {
+    await syncExpiredDeletionRequests();
+
+    const active = await db
+      .select({ id: accountDeletionRequestsTable.id, status: accountDeletionRequestsTable.status })
+      .from(accountDeletionRequestsTable)
+      .where(and(
+        inArray(accountDeletionRequestsTable.status, ["PENDING", "ELIGIBLE_FOR_DELETION"]),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ));
+
+    const eligibleCount = active.filter(r => r.status === "ELIGIBLE_FOR_DELETION").length;
+    const pendingCount = active.filter(r => r.status === "PENDING").length;
+
+    res.json({
+      count: active.length,
+      pendingCount,
+      eligibleCount,
+    });
+  } catch (err: any) {
+    console.error("[Get Deletion Count Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to count deletion requests." });
+  }
+});
+
+// ── POST /admin/account-deletion-requests/:id/process-delete ────
+router.post("/account-deletion-requests/:id/process-delete", requireAdmin, async (req, res) => {
+  const requestId = parseInt(req.params.id);
+  if (isNaN(requestId)) {
+    res.status(400).json({ error: "invalid_id", message: "Invalid request ID." });
+    return;
+  }
+
+  await syncExpiredDeletionRequests();
+
+  // 1. Load deletion request
+  const [delReq] = await db
+    .select()
+    .from(accountDeletionRequestsTable)
+    .where(and(
+      eq(accountDeletionRequestsTable.id, requestId),
+      eq(accountDeletionRequestsTable.deleteColumn, 0)
+    ));
+
+  if (!delReq) {
+    res.status(404).json({ error: "not_found", message: "Account deletion request not found." });
+    return;
+  }
+
+  if (delReq.status === "CANCELLED") {
+    res.status(400).json({
+      error: "request_cancelled",
+      message: "This deletion request was cancelled by the patient and cannot be processed.",
+    });
+    return;
+  }
+
+  if (delReq.status === "COMPLETED" || delReq.status === "DELETED") {
+    res.status(400).json({
+      error: "already_processed",
+      message: "This deletion request has already been permanently processed.",
+    });
+    return;
+  }
+
+  const now = new Date();
+  const deadline = delReq.cancellationDeadline ? new Date(delReq.cancellationDeadline) : null;
+  const isStillInGracePeriod =
+    delReq.status === "PENDING" && deadline && deadline.getTime() > now.getTime();
+
+  if (isStillInGracePeriod) {
+    const daysRemaining = calculateDaysRemaining(deadline, now);
+    res.status(400).json({
+      error: "cancellation_grace_period_active",
+      message: `The 15-day cancellation grace period is still active (${daysRemaining} day${daysRemaining === 1 ? "" : "s"} remaining). The account cannot be deleted until the cancellation period expires.`,
+    });
+    return;
+  }
+
+  const patientId = delReq.patientId;
+  if (!patientId) {
+    res.status(400).json({
+      error: "no_patient_id",
+      message: "No stable patient ID associated with this deletion request.",
+    });
+    return;
+  }
+
+  // 2. Fetch patient record before deletion
+  const [patient] = await db
+    .select()
+    .from(patientsTable)
+    .where(eq(patientsTable.id, patientId));
+
+  if (!patient) {
+    // Patient was already deleted or doesn't exist; update request status to DELETED
+    await db
+      .update(accountDeletionRequestsTable)
+      .set({
+        status: "DELETED",
+        processedAt: new Date(),
+        processedBy: "admin",
+        notes: "Target patient record was not found or already deleted.",
+      })
+      .where(eq(accountDeletionRequestsTable.id, requestId));
+
+    res.json({ success: true, message: "Request marked as completed (patient not found)." });
+    return;
+  }
+
+  // 3. Capture email for confirmation notice before deleting record
+  const patientEmail = delReq.patientEmail || patient.email || null;
+  const patientName = delReq.patientName || patient.name || "Patient";
+
+  // 4. Identify physical files eligible for deletion (exclusively owned by this patient)
+  const filesToDelete: string[] = [];
+
+  try {
+    const patientDocs = await db
+      .select({ objectPath: patientDocumentsTable.objectPath })
+      .from(patientDocumentsTable)
+      .where(eq(patientDocumentsTable.patientId, patientId));
+
+    for (const d of patientDocs) {
+      if (d.objectPath) filesToDelete.push(d.objectPath);
+    }
+
+    // Prescription photos exclusively linked to this patient's appointments
+    const onlineAppts = await db
+      .select({ id: onlineAppointmentsTable.id })
+      .from(onlineAppointmentsTable)
+      .where(eq(onlineAppointmentsTable.patientId, patientId));
+    const onlineApptIds = onlineAppts.map(a => a.id);
+
+    const physicalAppts = await db
+      .select({ id: appointmentsTable.id })
+      .from(appointmentsTable)
+      .where(eq(appointmentsTable.patientId, patientId));
+    const physicalApptIds = physicalAppts.map(a => a.id);
+
+    if (onlineApptIds.length > 0) {
+      const rxOnline = await db
+        .select({ photoObjectPath: prescriptionsTable.photoObjectPath })
+        .from(prescriptionsTable)
+        .where(inArray(prescriptionsTable.onlineAppointmentId, onlineApptIds));
+      for (const rx of rxOnline) {
+        if (rx.photoObjectPath) filesToDelete.push(rx.photoObjectPath);
+      }
+    }
+
+    if (physicalApptIds.length > 0) {
+      const rxPhysical = await db
+        .select({ photoObjectPath: prescriptionsTable.photoObjectPath })
+        .from(prescriptionsTable)
+        .where(inArray(prescriptionsTable.appointmentId, physicalApptIds));
+      for (const rx of rxPhysical) {
+        if (rx.photoObjectPath) filesToDelete.push(rx.photoObjectPath);
+      }
+    }
+  } catch (collectErr) {
+    console.warn("[Process Deletion] Error collecting file paths:", collectErr);
+  }
+
+  // 5. Execute transactional permanent deletion
+  try {
+    await db.transaction(async (tx) => {
+      // 5a. Delete transient auth and OTP tokens
+      await tx.delete(loginTokensTable).where(eq(loginTokensTable.patientId, patientId));
+      await tx.delete(patientOtpsTable).where(eq(patientOtpsTable.patientId, patientId));
+      if (patientEmail) {
+        await tx.delete(patientOtpsTable).where(eq(patientOtpsTable.targetValue, patientEmail));
+      }
+      await tx.delete(patientSessionsTable).where(eq(patientSessionsTable.patientId, patientId));
+
+      // 5b. Delete patient documents metadata
+      await tx.delete(patientDocumentsTable).where(eq(patientDocumentsTable.patientId, patientId));
+
+      // 5c. Delete direct calls
+      await tx.delete(directCallsTable).where(eq(directCallsTable.patientId, patientId));
+
+      // 5d. Find and delete medicine orders & items
+      const userOrders = await tx
+        .select({ id: medicineOrdersTable.id })
+        .from(medicineOrdersTable)
+        .where(eq(medicineOrdersTable.patientId, patientId));
+      if (userOrders.length > 0) {
+        const orderIds = userOrders.map(o => o.id);
+        await tx.delete(medicineOrderItemsTable).where(inArray(medicineOrderItemsTable.orderId, orderIds));
+        await tx.delete(medicineOrdersTable).where(inArray(medicineOrdersTable.id, orderIds));
+      }
+
+      // 5e. Delete prescriptions tied to online or physical appointments
+      const userOnlineAppts = await tx
+        .select({ id: onlineAppointmentsTable.id })
+        .from(onlineAppointmentsTable)
+        .where(eq(onlineAppointmentsTable.patientId, patientId));
+      const userOnlineIds = userOnlineAppts.map(a => a.id);
+      if (userOnlineIds.length > 0) {
+        await tx.delete(prescriptionsTable).where(inArray(prescriptionsTable.onlineAppointmentId, userOnlineIds));
+        await tx.delete(onlineAppointmentsTable).where(inArray(onlineAppointmentsTable.id, userOnlineIds));
+      }
+
+      const userPhysicalAppts = await tx
+        .select({ id: appointmentsTable.id })
+        .from(appointmentsTable)
+        .where(eq(appointmentsTable.patientId, patientId));
+      const userPhysicalIds = userPhysicalAppts.map(a => a.id);
+      if (userPhysicalIds.length > 0) {
+        await tx.delete(prescriptionsTable).where(inArray(prescriptionsTable.appointmentId, userPhysicalIds));
+        await tx.delete(appointmentsTable).where(inArray(appointmentsTable.id, userPhysicalIds));
+      }
+
+      // 5f. Delete donations exclusively tied to patient
+      await tx.delete(donationsTable).where(eq(donationsTable.patientId, patientId));
+
+      // 5g. Update account deletion request status to DELETED
+      await tx
+        .update(accountDeletionRequestsTable)
+        .set({
+          status: "DELETED",
+          processedAt: new Date(),
+          processedBy: "admin",
+          notes: "Patient account and eligible records permanently deleted by administrator.",
+        })
+        .where(eq(accountDeletionRequestsTable.id, requestId));
+
+      // 5h. Permanently delete patient account from patients table
+      await tx.delete(patientsTable).where(eq(patientsTable.id, patientId));
+    });
+  } catch (txErr: any) {
+    console.error("[Permanent Deletion Transaction Failed]", txErr);
+    res.status(500).json({
+      error: "deletion_failed",
+      message: "Database transaction failed. All database operations have been safely rolled back.",
+    });
+    return;
+  }
+
+  // 6. Post-transaction: physical file cleanup (safe, idempotent, never throws)
+  for (const objPath of filesToDelete) {
+    try {
+      const localP = findExistingFile(objPath);
+      if (localP && fs.existsSync(localP)) {
+        try { fs.unlinkSync(localP); } catch {}
+        const metaP = `${localP}.json`;
+        if (fs.existsSync(metaP)) {
+          try { fs.unlinkSync(metaP); } catch {}
+        }
+      }
+    } catch (cleanErr) {
+      console.warn("[File Cleanup Warning]", cleanErr);
+    }
+  }
+
+  // 7. Send deletion confirmation email to captured email
+  if (patientEmail) {
+    sendAccountDeletionConfirmationEmail({
+      to: patientEmail,
+      name: patientName,
+    }).catch(emailErr => {
+      console.warn("[Email Notification Error] Could not deliver deletion confirmation email:", emailErr);
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "Patient account permanently deleted successfully.",
+  });
 });
 
 // ── GET /admin/donations/sse — live updates ────────────────────

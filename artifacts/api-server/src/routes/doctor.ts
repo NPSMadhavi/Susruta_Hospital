@@ -24,6 +24,7 @@ import { addDonationSseClient, broadcastDonationUpdate } from "../lib/donationSs
 import { addAppointmentSseClient } from "../lib/appointmentSse";
 import { streamPrescriptionDownload } from "../lib/prescription-service";
 import { verifyRecaptcha } from "../lib/recaptcha";
+import { resolvePrescriptionMedicines } from "../lib/prescription-medicine-resolver";
 
 const router = Router();
 const COOKIE = "doctor_session";
@@ -532,7 +533,10 @@ router.patch("/offline-appointments/:id/done", requireDoctor, async (req, res) =
 // ── PUT /api/doctor/offline-appointments/:id/prescription ────
 router.put("/offline-appointments/:id/prescription", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { photoObjectPath, notes } = req.body;
+  let { photoObjectPath, notes } = req.body;
+  if (typeof notes === "string") {
+    notes = await resolvePrescriptionMedicines(notes);
+  }
 
   const [existing] = await db
     .select()
@@ -572,8 +576,10 @@ router.put("/offline-appointments/:id/prescription", requireDoctor, async (req, 
 // ── PATCH /api/doctor/offline-appointments/:id/notes ──────────
 router.patch("/offline-appointments/:id/notes", requireDoctor, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { notes } = req.body;
+  let { notes } = req.body;
   if (typeof notes !== "string") { res.status(400).json({ error: "notes must be a string" }); return; }
+
+  notes = await resolvePrescriptionMedicines(notes);
 
   const [updated] = await db
     .update(appointmentsTable)

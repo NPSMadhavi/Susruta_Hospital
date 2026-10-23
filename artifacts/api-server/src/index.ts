@@ -18,6 +18,7 @@ import app from "./app";
 import { startVerificationReminderWorker } from "./lib/verification-reminders";
 import { ensureWebsiteVisitorsTable } from "./migrations/create_website_visitors";
 import { ensureDonationsTable } from "./migrations/ensure_donations_table";
+import { ensureAccountDeletionRequestsTable } from "./migrations/ensure_account_deletion_requests";
 import { runMigration as runSoftDeleteMigration } from "./migrations/add_soft_delete";
 
 /**
@@ -91,5 +92,6 @@ app.listen(port, "0.0.0.0", () => {
   startVerificationReminderWorker();
   ensureWebsiteVisitorsTable().catch((err) => console.error("ensureWebsiteVisitorsTable error:", err));
   ensureDonationsTable().catch((err) => console.error("ensureDonationsTable error:", err));
+  ensureAccountDeletionRequestsTable().catch((err) => console.error("ensureAccountDeletionRequestsTable error:", err));
   runSoftDeleteMigration().catch((err) => console.error("runSoftDeleteMigration error:", err));
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetAdminMe, useAdminLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, X, Bell, Heart, BriefcaseMedical } from "lucide-react";
+import { Calendar, Clock, MessageSquare, Settings, LogOut, LayoutDashboard, ChevronLeft, Users, Video, UserCheck, UserX, X, Bell, Heart, BriefcaseMedical } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 
@@ -38,6 +38,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const logoutMutation = useAdminLogout();
   const { permission, requestPermission, notify, toasts, dismissToast } = useAdminNotifications();
   const [donationCount, setDonationCount] = useState<number>(0);
+  const [pendingDeletionCount, setPendingDeletionCount] = useState<number>(0);
 
   useEffect(() => {
     if (!admin) return;
@@ -45,6 +46,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       .then(res => {
         if (typeof res?.count === "number") {
           setDonationCount(res.count);
+        }
+      })
+      .catch(() => {});
+
+    adminFetch("/account-deletion-requests/count")
+      .then(res => {
+        if (typeof res?.count === "number") {
+          setPendingDeletionCount(res.count);
         }
       })
       .catch(() => {});
@@ -59,8 +68,20 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         setDonationCount(prev => Math.max(0, prev + detail.delta));
       }
     };
+    const onDeletionCountChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail?.count === "number") {
+        setPendingDeletionCount(detail.count);
+      } else if (typeof detail?.delta === "number") {
+        setPendingDeletionCount(prev => Math.max(0, prev + detail.delta));
+      }
+    };
     window.addEventListener("susruta:donation_count_change", onCountChange);
-    return () => window.removeEventListener("susruta:donation_count_change", onCountChange);
+    window.addEventListener("susruta:deletion_request_count_change", onDeletionCountChange);
+    return () => {
+      window.removeEventListener("susruta:donation_count_change", onCountChange);
+      window.removeEventListener("susruta:deletion_request_count_change", onDeletionCountChange);
+    };
   }, []);
 
   // Track seen appointment IDs to detect new arrivals
@@ -157,6 +178,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/testimonials", icon: <MessageSquare size={18}/>, label: "Testimonials" },
     { href: "/admin/subscribers", icon: <Users size={18}/>, label: "Subscribers" },
     { href: "/admin/visitors", icon: <CarbonUserActivity size={18}/>, label: "Visitors" },
+    { href: "/admin/account-delete-requests", icon: <UserX size={18}/>, label: "Account Delete Requests", count: pendingDeletionCount },
     { href: "/admin/settings", icon: <Settings size={18}/>, label: "Settings" },
   ];
 

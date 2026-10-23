@@ -1,58 +1,12 @@
 import { Router } from "express";
 import { db, medicinesTable } from "@workspace/db";
-import { eq, desc, or, ilike, sql, and } from "drizzle-orm";
+import { eq, desc, or, ilike, and } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
+import { ensureTableExists, generateMedicineId } from "../lib/prescription-medicine-resolver";
 
 const router = Router();
 
-// Ensure table exists in PostgreSQL database on route load
-async function ensureTableExists() {
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS medicines (
-        id SERIAL PRIMARY KEY,
-        medicine_id VARCHAR(50) NOT NULL UNIQUE,
-        medicine_name VARCHAR(255) NOT NULL,
-        dosage TEXT,
-        frequency VARCHAR(100),
-        formulation VARCHAR(100),
-        properties TEXT,
-        indications TEXT,
-        delete_column INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-      );
-      ALTER TABLE medicines ADD COLUMN IF NOT EXISTS indications TEXT;
-      ALTER TABLE medicines ADD COLUMN IF NOT EXISTS delete_column INTEGER NOT NULL DEFAULT 0;
-    `);
-  } catch (err) {
-    console.error("⚠️ Failed to ensure medicines table exists:", err);
-  }
-}
-
 ensureTableExists();
-
-// Helper to generate consistent unique Medicine ID (AY-MED-XXXX)
-async function generateMedicineId(): Promise<string> {
-  await ensureTableExists();
-  const records = await db.select({ medicineId: medicinesTable.medicineId, id: medicinesTable.id }).from(medicinesTable);
-  
-  let maxNum = 100; // Base so first medicine is AY-MED-0101
-  for (const r of records) {
-    if (r.medicineId) {
-      const match = r.medicineId.match(/(?:AY-MED-|MED-)(\d+)/i);
-      if (match && match[1]) {
-        const parsed = parseInt(match[1], 10);
-        if (!isNaN(parsed) && parsed > maxNum) {
-          maxNum = parsed;
-        }
-      }
-    }
-  }
-  
-  const nextNum = maxNum + 1;
-  return `AY-MED-${String(nextNum).padStart(4, "0")}`;
-}
 
 // ── GET /api/medicines/next-id — Pre-fetch next medicine ID ─
 router.get("/next-id", async (_req, res) => {
