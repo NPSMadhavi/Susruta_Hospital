@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePatientEmail, validatePatientPhone } from "./index";
+import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone } from "./index";
 
 test("accepts an Indian local number and normalizes it to E.164", () => {
   assert.deepEqual(validatePatientPhone("9876543210", "IN"), {
@@ -55,6 +55,19 @@ test("rejects an incomplete Singapore number", () => {
 
 test("uses country-specific rules for a representative international number", () => {
   assert.equal(validatePatientPhone("2025550123", "US").valid, true);
+});
+
+test("detects country from phone numbers accurately", () => {
+  assert.equal(detectCountryFromPhone("+919876543210")?.code, "IN");
+  assert.equal(detectCountryFromPhone("+918768768768")?.code, "IN");
+  assert.equal(detectCountryFromPhone("9876543210")?.code, "IN");
+  assert.equal(detectCountryFromPhone("+971501234567")?.code, "AE");
+  assert.equal(detectCountryFromPhone("+12025550123")?.code, "US");
+  assert.equal(detectCountryFromPhone("+447911123456")?.code, "GB");
+  assert.equal(detectCountryFromPhone("+6581234567")?.code, "SG");
+  assert.equal(detectCountryFromPhone("+966501234567")?.code, "SA");
+  assert.equal(detectCountryFromPhone(""), undefined);
+  assert.equal(detectCountryFromPhone(null), undefined);
 });
 
 test("normalizes and rejects malformed email addresses", () => {

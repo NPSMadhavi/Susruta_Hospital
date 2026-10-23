@@ -93,11 +93,11 @@ export const patientApi = {
   verifyEmailOtp: (newEmail: string, otp: string) =>
     req("/profile/verify-email-otp", { method: "POST", body: JSON.stringify({ newEmail, otp }) }),
 
-  requestPhoneOtp: (newPhone: string) =>
-    req("/profile/request-phone-otp", { method: "POST", body: JSON.stringify({ newPhone }) }),
+  requestPhoneOtp: (newPhone: string, countryCode?: string) =>
+    req("/profile/request-phone-otp", { method: "POST", body: JSON.stringify({ newPhone, countryCode }) }),
 
-  verifyPhoneOtp: (newPhone: string, otp: string) =>
-    req("/profile/verify-phone-otp", { method: "POST", body: JSON.stringify({ newPhone, otp }) }),
+  verifyPhoneOtp: (newPhone: string, otp: string, countryCode?: string) =>
+    req("/profile/verify-phone-otp", { method: "POST", body: JSON.stringify({ newPhone, otp, countryCode }) }),
 
   deactivateAccount: () => req("/account/deactivate", { method: "POST" }),
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { ChevronLeft, CheckCircle2, Printer, X, Search, Loader2, UserPlus } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Printer, X, Search, Loader2, UserPlus, Globe, ChevronDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import QRCode from "qrcode";
 import { isOfflineSessionExceeded, getDefaultOfflineSession } from "@/lib/ist";
+import { COUNTRIES, validatePatientPhone, detectCountryFromPhone } from "@workspace/patient-contact";
 import logoImg from "@assets/logo_1773840200056.png";
 
 const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
@@ -54,11 +55,14 @@ export default function AdminOfflineRegister() {
 
   // Form patient details
   const [patientName, setPatientName] = useState("");
+  const [patientCountryCode, setPatientCountryCode] = useState<string>("IN");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
   const [address, setAddress] = useState("");
+
+  const selectedCountry = COUNTRIES.find((c) => c.code === patientCountryCode) || COUNTRIES[0];
 
   // Appointment details
   const [appointmentDate, setAppointmentDate] = useState(todayStr);
@@ -259,8 +263,20 @@ export default function AdminOfflineRegister() {
     setSelectedPatient(patient);
     setSearchState("found");
     setPatientName(patient.name || "");
-    const cleanP = patient.phone ? patient.phone.replace(/\D/g, "").slice(-10) : "";
-    setPatientPhone(cleanP);
+    const detected = detectCountryFromPhone(patient.phone);
+    if (detected) {
+      setPatientCountryCode(detected.code);
+      let rawDigits = (patient.phone || "").replace(/\D/g, "");
+      const dialDigits = detected.dial.replace(/\D/g, "");
+      if (rawDigits.startsWith(dialDigits)) {
+        rawDigits = rawDigits.slice(dialDigits.length);
+      }
+      setPatientPhone(rawDigits);
+    } else {
+      setPatientCountryCode("IN");
+      const cleanP = patient.phone ? patient.phone.replace(/\D/g, "").slice(-10) : "";
+      setPatientPhone(cleanP);
+    }
     setPatientEmail(patient.email || "");
     setAge(patient.age !== undefined && patient.age !== null ? String(patient.age) : "");
     setGender(patient.gender || "");
@@ -275,6 +291,7 @@ export default function AdminOfflineRegister() {
     setSearchQuery("");
     setSearchResults([]);
     setPatientName("");
+    setPatientCountryCode("IN");
     setPatientPhone("");
     setPatientEmail("");
     setAge("");
@@ -291,6 +308,7 @@ export default function AdminOfflineRegister() {
     setSelectedPatient(null);
 
     setPatientName("");
+    setPatientCountryCode("IN");
     setPatientPhone("");
     setPatientEmail("");
     setAge("");
@@ -326,14 +344,9 @@ export default function AdminOfflineRegister() {
       setErrorMsg("Please enter patient name.");
       return;
     }
-    const rawDigits = patientPhone.replace(/\D/g, "");
-    const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
-    if (!cleanPhone) {
-      setErrorMsg("Please enter patient phone number.");
-      return;
-    }
-    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
-      setErrorMsg("Please enter a valid 10-digit Indian phone number (starting with 6, 7, 8, or 9).");
+    const phoneValidation = validatePatientPhone(patientPhone, patientCountryCode);
+    if (!phoneValidation.valid) {
+      setErrorMsg(phoneValidation.message);
       return;
     }
     const parsedAge = age.trim() === "" ? null : Number(age.trim());
@@ -364,7 +377,7 @@ export default function AdminOfflineRegister() {
     const tokenComputed = `T${String(currentBooked + 1).padStart(3, "0")}`;
 
     try {
-      const phoneWithCountry = `+91${cleanPhone}`;
+      const phoneWithCountry = phoneValidation.e164;
       const emailPayload = trimmedEmail || undefined;
       const res = await fetch(`${API}/appointments/offline`, {
         method: "POST",
@@ -374,6 +387,7 @@ export default function AdminOfflineRegister() {
           selectedPatientId: selectedPatient ? selectedPatient.id : undefined,
           patientName: patientName.trim(),
           patientPhone: phoneWithCountry,
+          countryCode: patientCountryCode,
           patientEmail: emailPayload,
           age: parsedAge,
           gender: gender.trim(),
@@ -407,7 +421,7 @@ export default function AdminOfflineRegister() {
         patientId: data.patientId || selectedPatient?.id,
         patientCode: data.patientCode || selectedPatient?.patientCode || "",
         patientName: patientName.trim(),
-        patientPhone: cleanPhone,
+        patientPhone: data.patientPhone || phoneWithCountry,
         patientEmail: data.patientEmail || emailPayload || "",
         age: data.age !== undefined ? data.age : parsedAge,
         gender: data.gender || gender,
@@ -659,8 +673,36 @@ export default function AdminOfflineRegister() {
                     </div>
                   </div>
 
-                  {/* Row 2: Phone Number & Email */}
+                  {/* Row 2: Country & Phone Number */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
+                        Country <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none z-10" size={16} />
+                        <select
+                          value={patientCountryCode}
+                          disabled={Boolean(selectedPatient)}
+                          onChange={(e) => {
+                            setPatientCountryCode(e.target.value);
+                            setPatientPhone("");
+                            if (errorMsg) setErrorMsg("");
+                          }}
+                          className={`w-full pl-10 pr-9 py-2.5 rounded-xl border border-[#CBD5E1] text-sm font-semibold text-[#1E293B] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/20 focus:border-[#D95B2F] transition-all cursor-pointer ${
+                            selectedPatient ? "bg-slate-100 cursor-not-allowed text-[#475569]" : ""
+                          }`}
+                        >
+                          {COUNTRIES.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.flag} {c.name} ({c.dial})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none z-10" size={16} />
+                      </div>
+                    </div>
+
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="block text-xs font-bold text-[#475569] tracking-wider">
@@ -669,50 +711,46 @@ export default function AdminOfflineRegister() {
                         {patientPhone.length > 0 && (
                           <span
                             className={`text-[11px] font-semibold ${
-                              patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
+                              validatePatientPhone(patientPhone, patientCountryCode).valid
                                 ? "text-emerald-600"
                                 : "text-[#94A3B8]"
                             }`}
                           >
-                            {patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
-                              ? "✓ Valid 10-digit number"
-                              : `${patientPhone.length}/10 digits`}
+                            {validatePatientPhone(patientPhone, patientCountryCode).valid
+                              ? `✓ Valid ${selectedCountry.name} number`
+                              : `${patientPhone.length}/${selectedCountry.maxLength} digits`}
                           </span>
                         )}
                       </div>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#64748B] select-none">
-                          +91
-                        </span>
+                      <div className="flex rounded-xl border border-[#CBD5E1] overflow-hidden focus-within:ring-2 focus-within:ring-[#D95B2F]/20 focus-within:border-[#D95B2F] transition-all bg-white">
+                        <div className="flex items-center gap-1.5 px-3 bg-slate-100 border-r border-[#CBD5E1] shrink-0 text-xs font-bold text-[#475569] select-none">
+                          <span>{selectedCountry.flag}</span>
+                          <span>{selectedCountry.dial}</span>
+                        </div>
                         <input
                           type="tel"
                           inputMode="numeric"
-                          maxLength={10}
-                          pattern="[6-9][0-9]{9}"
+                          maxLength={selectedCountry.maxLength}
                           required
                           readOnly={Boolean(selectedPatient)}
                           disabled={Boolean(selectedPatient)}
-                          placeholder="Enter 10-digit phone number"
+                          placeholder={selectedCountry.placeholder}
                           value={patientPhone}
                           onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                            const val = e.target.value.replace(/\D/g, "").slice(0, selectedCountry.maxLength);
                             setPatientPhone(val);
                             if (errorMsg) setErrorMsg("");
                           }}
-                          className={`w-full pl-12 pr-4 py-2.5 rounded-xl border text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 transition-all ${
-                            selectedPatient
-                              ? "bg-slate-100 font-semibold cursor-not-allowed border-[#CBD5E1] text-[#475569]"
-                              : patientPhone.length > 0 && !/^[6-9]/.test(patientPhone)
-                              ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
-                              : patientPhone.length === 10 && /^[6-9]\d{9}$/.test(patientPhone)
-                              ? "border-emerald-400 focus:ring-emerald-500/20 focus:border-emerald-500"
-                              : "border-[#CBD5E1] focus:ring-[#D95B2F]/20 focus:border-[#D95B2F]"
+                          className={`flex-1 px-3.5 py-2.5 text-sm text-[#1E293B] placeholder-[#94A3B8] focus:outline-none bg-transparent ${
+                            selectedPatient ? "bg-slate-100 font-semibold cursor-not-allowed text-[#475569]" : ""
                           }`}
                         />
                       </div>
-                      {patientPhone.length > 0 && !/^[6-9]/.test(patientPhone) && !selectedPatient && (
+                      {patientPhone.length > 0 && !validatePatientPhone(patientPhone, patientCountryCode).valid && !selectedPatient && (
                         <p className="text-[11px] text-red-500 font-medium mt-1">
-                          Indian mobile numbers must start with 6, 7, 8, or 9
+                          {selectedCountry.code === "IN"
+                            ? "Indian mobile numbers must start with 6, 7, 8, or 9 (10 digits)"
+                            : `${selectedCountry.localFormat} after ${selectedCountry.dial}`}
                         </p>
                       )}
                       {errorMsg && errorMsg.toLowerCase().includes("phone") && (
@@ -721,7 +759,10 @@ export default function AdminOfflineRegister() {
                         </p>
                       )}
                     </div>
+                  </div>
 
+                  {/* Row 3: Email & Age */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
                         Email <span className="text-red-500">*</span>
@@ -751,10 +792,7 @@ export default function AdminOfflineRegister() {
                         </p>
                       )}
                     </div>
-                  </div>
 
-                  {/* Row 3: Age & Gender */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
                         Age <span className="text-red-500">*</span>
@@ -778,7 +816,10 @@ export default function AdminOfflineRegister() {
                         }`}
                       />
                     </div>
+                  </div>
 
+                  {/* Row 4: Gender */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-[#475569] tracking-wider mb-2">
                         Gender <span className="text-red-500">*</span>
@@ -1030,9 +1071,9 @@ export default function AdminOfflineRegister() {
                         <span className="text-[#94A3B8] italic">
                           * Select PAID to enable token generation
                         </span>
-                      ) : patientPhone.length > 0 && (patientPhone.replace(/\D/g, "").length !== 10 || !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, ""))) ? (
+                      ) : patientPhone.length > 0 && !validatePatientPhone(patientPhone, patientCountryCode).valid ? (
                         <span className="text-red-500 font-semibold">
-                          * Enter valid 10-digit Indian mobile number
+                          * Enter valid phone number for {selectedCountry.name}
                         </span>
                       ) : null}
                     </div>
@@ -1051,8 +1092,7 @@ export default function AdminOfflineRegister() {
                           !isCurrentSessionAvailable ||
                           paymentStatus !== "paid" ||
                           !patientName.trim() ||
-                          patientPhone.replace(/\D/g, "").length !== 10 ||
-                          !/^[6-9]\d{9}$/.test(patientPhone.replace(/\D/g, "")) ||
+                          !validatePatientPhone(patientPhone, patientCountryCode).valid ||
                           !age.trim() ||
                           !gender.trim() ||
                           isSubmitting ||

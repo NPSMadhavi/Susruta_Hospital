@@ -9,14 +9,14 @@ import {
   createPatientSession, deletePatientSession, requirePatient,
   verifyPatientSession, hashPassword, verifyPassword,
 } from "../lib/patient-auth";
-import { sendMagicLink, sendPasswordResetEmail, sendProfileEmailOtp, sendEmailChangeNotification, sendAppointmentAckEmail } from "../lib/email";
+import { sendMagicLink, sendPasswordResetEmail, sendProfileEmailOtp, sendProfilePhoneOtp, sendEmailChangeNotification, sendAppointmentAckEmail } from "../lib/email";
 import { sendMobileOtp } from "../lib/sms";
 import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes, randomInt, createHash, timingSafeEqual } from "crypto";
 import { z } from "zod/v4";
 import { notifyNewAppointment, notifyAdminNewDonation } from "./appointments";
 import { extractClinicalNotes } from "./doctor";
-import { normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone } from "@workspace/patient-contact";
 import { normalizeVerificationEmail } from "../lib/verification";
 import { addDirectCallPatientClient } from "../lib/directCallSse";
 import { registerNewPatientWithNextId } from "../lib/patient-id";
@@ -1148,14 +1148,17 @@ router.post("/profile/verify-email-otp", requirePatient, async (req: any, res) =
 
 // ── Profile: Request Phone Change OTP ─────────────────────────
 router.post("/profile/request-phone-otp", requirePatient, async (req: any, res) => {
-  const { newPhone } = req.body;
-  const parsed = parseIndianPhoneNumber(newPhone);
+  const { newPhone, countryCode } = req.body;
+  const detected = detectCountryFromPhone(newPhone);
+  const effectiveCountry = countryCode || detected?.code || "IN";
+  const parsed = validatePatientPhone(newPhone, effectiveCountry);
   if (!parsed.valid) {
     res.status(400).json({ error: "validation_error", message: parsed.message });
     return;
   }
+  const formattedPhone = parsed.e164;
 
-  if (req.patient.phone === parsed.formatted) {
+  if (req.patient.phone === formattedPhone) {
     res.status(400).json({ error: "same_phone", message: "This is already your current registered phone number." });
     return;
   }
@@ -1196,14 +1199,14 @@ router.post("/profile/request-phone-otp", requirePatient, async (req: any, res) 
   );
 
   const otp = randomInt(100000, 1000000).toString();
-  const otpHash = hashOtp(req.patient.id, parsed.formatted, otp);
+  const otpHash = hashOtp(req.patient.id, formattedPhone, otp);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
   const resendAfter = new Date(Date.now() + 60 * 1000);
 
   await db.insert(patientOtpsTable).values({
     patientId: req.patient.id,
     type: "phone_change",
-    targetValue: parsed.formatted,
+    targetValue: formattedPhone,
     otpHash,
     attempts: 0,
     expiresAt,
@@ -1211,44 +1214,41 @@ router.post("/profile/request-phone-otp", requirePatient, async (req: any, res) 
     verified: false,
   });
 
-  // Send OTP directly to mobile number via SMS (do not send to email, do not log OTP in terminal)
-  const smsResult = await sendMobileOtp({ phone: parsed.formatted, otp });
-  if (!smsResult.success) {
-    if (smsResult.error === "sms_not_configured") {
-      res.status(503).json({
-        error: "sms_not_configured",
-        message: "SMS Gateway is not configured. Please add FAST2SMS_API_KEY (or your SMS provider key) in .env to deliver SMS.",
-      });
-      return;
-    }
-    res.status(502).json({
-      error: "sms_send_failed",
-      message: `Failed to deliver SMS to ${parsed.formatted}: ${smsResult.error || "Provider error"}. Please check your SMS provider balance.`,
-    });
-    return;
-  }
+  // Send OTP directly to registered email
+  sendProfilePhoneOtp({
+    to: req.patient.email,
+    name: req.patient.name,
+    otp,
+    newPhone: formattedPhone,
+  }).catch((err) => {
+    console.error("Failed to send phone update verification code email:", err);
+  });
 
   res.json({
     success: true,
-    message: `Verification code sent via SMS to ${parsed.formatted}.`,
+    message: `Verification code sent to your registered email (${req.patient.email}). It expires in 10 minutes.`,
+    registeredEmail: req.patient.email,
     cooldownSeconds: 60,
   });
 });
 
 // ── Profile: Verify Phone Change OTP ──────────────────────────
 router.post("/profile/verify-phone-otp", requirePatient, async (req: any, res) => {
-  const { newPhone, otp } = req.body;
-  const parsed = parseIndianPhoneNumber(newPhone);
+  const { newPhone, countryCode, otp } = req.body;
+  const detected = detectCountryFromPhone(newPhone);
+  const effectiveCountry = countryCode || detected?.code || "IN";
+  const parsed = validatePatientPhone(newPhone, effectiveCountry);
   if (!parsed.valid || !otp || typeof otp !== "string" || !/^\d{6}$/.test(otp.trim())) {
-    res.status(400).json({ error: "validation_error", message: "Valid 10-digit Indian phone number and 6-digit code are required." });
+    res.status(400).json({ error: "validation_error", message: parsed.valid ? "A 6-digit verification code is required." : parsed.message });
     return;
   }
+  const formattedPhone = parsed.e164;
 
   const [record] = await db.select().from(patientOtpsTable).where(
     and(
       eq(patientOtpsTable.patientId, req.patient.id),
       eq(patientOtpsTable.type, "phone_change"),
-      eq(patientOtpsTable.targetValue, parsed.formatted),
+      eq(patientOtpsTable.targetValue, formattedPhone),
       eq(patientOtpsTable.verified, false)
     )
   );
@@ -1263,7 +1263,7 @@ router.post("/profile/verify-phone-otp", requirePatient, async (req: any, res) =
     return;
   }
 
-  const isValid = verifyOtpHash(req.patient.id, parsed.formatted, otp.trim(), record.otpHash);
+  const isValid = verifyOtpHash(req.patient.id, formattedPhone, otp.trim(), record.otpHash);
   if (!isValid) {
     const newAttempts = record.attempts + 1;
     await db.update(patientOtpsTable).set({ attempts: newAttempts }).where(eq(patientOtpsTable.id, record.id));
@@ -1279,7 +1279,7 @@ router.post("/profile/verify-phone-otp", requirePatient, async (req: any, res) =
   await db.update(patientOtpsTable).set({ verified: true }).where(eq(patientOtpsTable.id, record.id));
 
   const [updated] = await db.update(patientsTable)
-    .set({ phone: parsed.formatted })
+    .set({ phone: formattedPhone })
     .where(eq(patientsTable.id, req.patient.id))
     .returning();
 

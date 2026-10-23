@@ -4,6 +4,7 @@ import { db, appointmentsTable, onlineAppointmentsTable, patientsTable, onlineSl
 import { eq, and, desc, ne, sql, inArray } from "drizzle-orm";
 import { parseTimeString, generateTimeSlots } from "./availability";
 import { CreateAppointmentBody, UpdateAppointmentBody } from "@workspace/api-zod";
+import { validatePatientPhone, detectCountryFromPhone } from "@workspace/patient-contact";
 import { requireAdmin } from "../lib/auth";
 import { verifyPatientSession } from "../lib/patient-auth";
 import { sendAppointmentAckEmail } from "../lib/email";
@@ -438,6 +439,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
     patientName,
     patientPhone,
     patientEmail,
+    countryCode,
     date,
     timeSlot,
     amount,
@@ -455,16 +457,18 @@ router.post("/offline", requireAdmin, async (req, res) => {
     return;
   }
 
-  // Strictly validate 10-digit Indian mobile number (handling optional +91 prefix)
-  const rawDigits = String(patientPhone || "").replace(/\D/g, "");
-  const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
-  if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+  // Validate phone number according to country code (or detected country, default "IN")
+  const detected = detectCountryFromPhone(String(patientPhone));
+  const effectiveCountry = countryCode || detected?.code || "IN";
+  const phoneValidation = validatePatientPhone(String(patientPhone), effectiveCountry);
+  if (!phoneValidation.valid) {
     res.status(400).json({
       error: "invalid_phone",
-      message: "Please enter a valid 10-digit Indian phone number (starting with 6, 7, 8, or 9)."
+      message: phoneValidation.message
     });
     return;
   }
+  const formattedPhone = phoneValidation.e164;
 
   // Age validation: numeric, reasonable human age (0 to 150)
   const parsedAge = age !== undefined && age !== null && String(age).trim() !== "" ? Number(age) : null;
@@ -496,7 +500,6 @@ router.post("/offline", requireAdmin, async (req, res) => {
     return;
   }
 
-  const formattedPhone = `+91${cleanPhone}`;
   const resolvedPaymentThrough = paymentThrough === "Cash" || paymentThrough === "cash" ? "Cash" : "UPI";
 
   // Mandatory email validation
@@ -703,7 +706,7 @@ router.post("/offline", requireAdmin, async (req, res) => {
     patientId: patient.id,
     patientCode: patient.patientCode,
     patientName: patient.name,
-    patientPhone: cleanPhone,
+    patientPhone: formattedPhone,
     patientEmail: patient.email || "",
     age: patient.age,
     gender: patient.gender,

@@ -46,6 +46,36 @@ export function getCountryCode(countryCode: string): SupportedCountryCode | unde
   return getCountry(countryCode)?.code;
 }
 
+export function detectCountryFromPhone(phoneInput: string | null | undefined): typeof COUNTRIES[number] | undefined {
+  if (!phoneInput || typeof phoneInput !== "string") return undefined;
+  const trimmed = phoneInput.trim();
+  if (!trimmed) return undefined;
+
+  const withPlus = trimmed.startsWith("+") ? trimmed : `+${trimmed}`;
+
+  try {
+    const parsed = parsePhoneNumberFromString(withPlus);
+    if (parsed && parsed.country) {
+      const match = COUNTRIES.find((c) => c.code === parsed.country);
+      if (match) return match;
+    }
+  } catch {}
+
+  const sortedByDial = [...COUNTRIES].sort((a, b) => b.dial.length - a.dial.length);
+  for (const c of sortedByDial) {
+    if (withPlus.startsWith(c.dial)) {
+      return c;
+    }
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10 && /^[6-9]/.test(digits)) {
+    return COUNTRIES.find((c) => c.code === "IN");
+  }
+
+  return undefined;
+}
+
 export function getPhoneHint(countryCode: string): string {
   const country = getCountry(countryCode);
   return country ? `${country.localFormat} after ${country.dial}` : "Enter a valid local phone number";
