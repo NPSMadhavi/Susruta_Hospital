@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Leaf, Mail, Lock, Eye, EyeOff, User, Phone, ArrowRight, Globe, KeyRound, CheckCircle2, ChevronDown, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
-import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { COUNTRIES, normalizePatientEmail, validatePatientPhone, checkPasswordRequirements, validatePatientPassword } from "@workspace/patient-contact";
 import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 const API_BASE = `${import.meta.env.BASE_URL ?? "/"}api/patient`.replace(/\/\//g, "/");
@@ -41,6 +41,39 @@ async function detectCountryCode(): Promise<string> {
   } catch {
     return "IN";
   }
+}
+
+function PasswordRequirementsGuide({ password }: { password?: string }) {
+  const status = checkPasswordRequirements(password || "");
+  return (
+    <div className="mt-2 p-2.5 bg-muted/40 rounded-xl border border-border/60 text-xs">
+      <div className="text-[10px] font-semibold text-foreground/75 uppercase tracking-wider mb-1.5">
+        Password requirements:
+      </div>
+      <div className="grid grid-cols-2 gap-1 text-[11px]">
+        <div className={`flex items-center gap-1.5 transition-colors ${status.firstCapital ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
+          {status.firstCapital ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+          <span>First letter Capital</span>
+        </div>
+        <div className={`flex items-center gap-1.5 transition-colors ${status.lowercase ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
+          {status.lowercase ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+          <span>Small letters</span>
+        </div>
+        <div className={`flex items-center gap-1.5 transition-colors ${status.number ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
+          {status.number ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+          <span>Numbers</span>
+        </div>
+        <div className={`flex items-center gap-1.5 transition-colors ${status.symbol ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
+          {status.symbol ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+          <span>Symbols</span>
+        </div>
+      </div>
+      <div className={`flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border/40 text-[11px] transition-colors ${status.minLength ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
+        {status.minLength ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+        <span>Minimum 6 characters</span>
+      </div>
+    </div>
+  );
 }
 
 export function BookingLoginModal({ open, onClose }: Props) {
@@ -133,7 +166,8 @@ export function BookingLoginModal({ open, onClose }: Props) {
         setError("Please enter your address.");
         return;
       }
-      if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+      const passwordValidation = validatePatientPassword(form.password);
+      if (!passwordValidation.valid) { setError(passwordValidation.message); return; }
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
       if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer."); return; }
       if (!agreeTerms) { setError("Please accept the Terms & Conditions and Privacy Policy."); return; }
@@ -428,6 +462,7 @@ export function BookingLoginModal({ open, onClose }: Props) {
                           {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
+                      {mode === "register" && <PasswordRequirementsGuide password={form.password} />}
 
                       {/* Forgot password link — login mode only */}
                       {mode === "login" && (

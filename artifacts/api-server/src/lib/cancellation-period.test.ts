@@ -94,6 +94,8 @@ describe("15-Day Account Deletion Cancellation Period Unit Tests", () => {
       processedAt: null,
       processedBy: null,
       notes: null,
+      isSeen: false,
+      seenAt: null,
       deleteColumn: 0,
       createdAt,
     };
@@ -125,6 +127,8 @@ describe("15-Day Account Deletion Cancellation Period Unit Tests", () => {
       processedAt: null,
       processedBy: null,
       notes: null,
+      isSeen: false,
+      seenAt: null,
       deleteColumn: 0,
       createdAt,
     };
@@ -154,6 +158,8 @@ describe("15-Day Account Deletion Cancellation Period Unit Tests", () => {
       processedAt: null,
       processedBy: null,
       notes: "Cancelled by patient",
+      isSeen: false,
+      seenAt: null,
       deleteColumn: 0,
       createdAt,
     };
@@ -183,6 +189,8 @@ describe("15-Day Account Deletion Cancellation Period Unit Tests", () => {
       processedAt,
       processedBy: "admin",
       notes: "Account permanently deleted",
+      isSeen: true,
+      seenAt: processedAt,
       deleteColumn: 0,
       createdAt,
     };

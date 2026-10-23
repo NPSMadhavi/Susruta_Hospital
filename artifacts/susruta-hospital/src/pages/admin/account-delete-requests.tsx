@@ -63,6 +63,16 @@ export default function AdminAccountDeleteRequests() {
         const data = await res.json();
         setRequests(Array.isArray(data) ? data : []);
       }
+
+      // Mark all deletion requests as seen so notification count badge clears
+      await fetch(`${BASE}/api/admin/account-deletion-requests/mark-seen`, {
+        method: "PATCH",
+        credentials: "include",
+      }).catch(() => {});
+
+      window.dispatchEvent(
+        new CustomEvent("susruta:deletion_request_count_change", { detail: { count: 0 } })
+      );
     } catch (err) {
       console.error("Failed to load deletion requests:", err);
     } finally {
@@ -72,6 +82,25 @@ export default function AdminAccountDeleteRequests() {
 
   useEffect(() => {
     loadRequests();
+  }, [loadRequests]);
+
+  // Real-time updates when on this page
+  useEffect(() => {
+    const handleNotification = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.type === "new_deletion_request") {
+        loadRequests();
+      } else if (detail?.type === "deletion_request_cancelled" && detail.request?.id) {
+        setRequests((prev) =>
+          prev.map((r) => (r.id === detail.request.id ? { ...r, status: "CANCELLED" } : r))
+        );
+      }
+    };
+
+    window.addEventListener("susruta:admin_notification", handleNotification);
+    return () => {
+      window.removeEventListener("susruta:admin_notification", handleNotification);
+    };
   }, [loadRequests]);
 
   const filteredRequests = requests.filter((r) => {

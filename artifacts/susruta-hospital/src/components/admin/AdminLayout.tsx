@@ -84,6 +84,13 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // When admin navigates to /admin/account-delete-requests, clear the unseen badge count
+  useEffect(() => {
+    if (location === "/admin/account-delete-requests") {
+      setPendingDeletionCount(0);
+    }
+  }, [location]);
+
   // Track seen appointment IDs to detect new arrivals
   const seenIdsRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
@@ -145,6 +152,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           const name = data.donation?.patientName || "A donor";
           const amount = data.donation?.amount ? `₹${data.donation.amount}` : "";
           notify("New Donation Received!", `${name} made a donation of ${amount}.`);
+        } else if (data.type === "new_deletion_request") {
+          if (window.location.pathname === "/admin/account-delete-requests") {
+            setPendingDeletionCount(0);
+          } else {
+            setPendingDeletionCount(prev => prev + 1);
+          }
+          const name = data.request?.patientName || "A patient";
+          notify("Account Deletion Request", `${name} requested account deletion (15-day cancellation period active).`);
+        } else if (data.type === "deletion_request_cancelled") {
+          setPendingDeletionCount(prev => Math.max(0, prev - 1));
         }
       } catch { /* ignore parse errors */ }
     };

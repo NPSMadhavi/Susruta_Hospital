@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, timestamp, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, timestamp, text, boolean } from "drizzle-orm/pg-core";
 import { patientsTable } from "./patients";
 
 export const accountDeletionRequestsTable = pgTable("account_deletion_requests", {
@@ -14,6 +14,8 @@ export const accountDeletionRequestsTable = pgTable("account_deletion_requests",
   processedAt: timestamp("processed_at", { withTimezone: true }),
   processedBy: varchar("processed_by", { length: 100 }),
   notes: text("notes"),
+  isSeen: boolean("is_seen").notNull().default(false),
+  seenAt: timestamp("seen_at", { withTimezone: true }),
   deleteColumn: integer("delete_column").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

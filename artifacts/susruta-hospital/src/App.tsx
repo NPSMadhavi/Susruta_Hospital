@@ -74,6 +74,7 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
 
       {/* Patient Portal Routes */}
+      <Route path="/login" component={PortalLogin} />
       <Route path="/portal" component={PortalLogin} />
       <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/dashboard" component={PatientDashboard} />

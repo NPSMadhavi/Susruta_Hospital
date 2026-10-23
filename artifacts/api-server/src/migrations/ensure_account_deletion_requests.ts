@@ -22,6 +22,8 @@ export async function ensureAccountDeletionRequestsTable(): Promise<void> {
         "processed_at" TIMESTAMP WITH TIME ZONE,
         "processed_by" VARCHAR(100),
         "notes" TEXT,
+        "is_seen" BOOLEAN NOT NULL DEFAULT false,
+        "seen_at" TIMESTAMP WITH TIME ZONE,
         "delete_column" INTEGER NOT NULL DEFAULT 0,
         "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       );
@@ -40,6 +42,8 @@ export async function ensureAccountDeletionRequestsTable(): Promise<void> {
       `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "processed_at" TIMESTAMP WITH TIME ZONE;`,
       `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "processed_by" VARCHAR(100);`,
       `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "notes" TEXT;`,
+      `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "is_seen" BOOLEAN NOT NULL DEFAULT false;`,
+      `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "seen_at" TIMESTAMP WITH TIME ZONE;`,
       `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "delete_column" INTEGER NOT NULL DEFAULT 0;`,
       `ALTER TABLE "account_deletion_requests" ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();`,
     ];
@@ -52,6 +56,7 @@ export async function ensureAccountDeletionRequestsTable(): Promise<void> {
     await client.query(`
       UPDATE "account_deletion_requests" SET "delete_column" = 0 WHERE "delete_column" IS NULL;
       UPDATE "account_deletion_requests" SET "status" = 'PENDING' WHERE "status" IS NULL;
+      UPDATE "account_deletion_requests" SET "is_seen" = false WHERE "is_seen" IS NULL;
       UPDATE "account_deletion_requests" 
       SET "cancellation_deadline" = "created_at" + INTERVAL '15 days' 
       WHERE "cancellation_deadline" IS NULL;
@@ -64,6 +69,7 @@ export async function ensureAccountDeletionRequestsTable(): Promise<void> {
     await client.query(`
       CREATE INDEX IF NOT EXISTS "idx_account_deletion_requests_patient_id" ON "account_deletion_requests"("patient_id");
       CREATE INDEX IF NOT EXISTS "idx_account_deletion_requests_status" ON "account_deletion_requests"("status");
+      CREATE INDEX IF NOT EXISTS "idx_account_deletion_requests_is_seen" ON "account_deletion_requests"("is_seen");
       CREATE INDEX IF NOT EXISTS "idx_account_deletion_requests_delete_column" ON "account_deletion_requests"("delete_column");
       CREATE INDEX IF NOT EXISTS "idx_account_deletion_requests_cancellation_deadline" ON "account_deletion_requests"("cancellation_deadline");
     `);

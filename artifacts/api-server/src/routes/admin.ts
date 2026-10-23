@@ -679,6 +679,15 @@ router.get("/account-deletion-requests", requireAdmin, async (_req, res) => {
         desc(accountDeletionRequestsTable.createdAt)
       );
 
+    // Automatically mark all unseen deletion requests as seen since admin is viewing them
+    await db
+      .update(accountDeletionRequestsTable)
+      .set({ isSeen: true, seenAt: new Date() })
+      .where(and(
+        eq(accountDeletionRequestsTable.isSeen, false),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ));
+
     const now = new Date();
     res.json(requests.map(r => formatDeletionRequest(r, now)));
   } catch (err: any) {
@@ -687,10 +696,36 @@ router.get("/account-deletion-requests", requireAdmin, async (_req, res) => {
   }
 });
 
+// ── PATCH /admin/account-deletion-requests/mark-seen ───────────
+router.patch("/account-deletion-requests/mark-seen", requireAdmin, async (_req, res) => {
+  try {
+    await db
+      .update(accountDeletionRequestsTable)
+      .set({ isSeen: true, seenAt: new Date() })
+      .where(and(
+        eq(accountDeletionRequestsTable.isSeen, false),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ));
+
+    res.json({ success: true, count: 0 });
+  } catch (err: any) {
+    console.error("[Mark Deletion Requests Seen Error]", err);
+    res.status(500).json({ error: "server_error", message: "Failed to mark deletion requests as seen." });
+  }
+});
+
 // ── GET /admin/account-deletion-requests/count ──────────────────
 router.get("/account-deletion-requests/count", requireAdmin, async (_req, res) => {
   try {
     await syncExpiredDeletionRequests();
+
+    const unseen = await db
+      .select({ id: accountDeletionRequestsTable.id })
+      .from(accountDeletionRequestsTable)
+      .where(and(
+        eq(accountDeletionRequestsTable.isSeen, false),
+        eq(accountDeletionRequestsTable.deleteColumn, 0)
+      ));
 
     const active = await db
       .select({ id: accountDeletionRequestsTable.id, status: accountDeletionRequestsTable.status })
@@ -704,7 +739,9 @@ router.get("/account-deletion-requests/count", requireAdmin, async (_req, res) =
     const pendingCount = active.filter(r => r.status === "PENDING").length;
 
     res.json({
-      count: active.length,
+      count: unseen.length,
+      unseenCount: unseen.length,
+      activeCount: active.length,
       pendingCount,
       eligibleCount,
     });

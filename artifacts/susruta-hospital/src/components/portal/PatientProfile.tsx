@@ -415,7 +415,7 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
     setDeactivating(true);
     try {
       await patientApi.deactivateAccount();
-      window.location.href = `${BASE}/login?deactivated=1`;
+      window.location.href = `${BASE}/portal/login?deactivated=1`;
     } catch (err: any) {
       setDeactivateError(err?.message || "Failed to deactivate account. Please try again.");
       setDeactivating(false);
@@ -650,7 +650,7 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
     .join("");
 
   return (
-    <div className="w-full max-w-6xl space-y-6 pb-12 animate-in fade-in duration-200 font-sans">
+    <div className="w-full space-y-6 pb-12 animate-in fade-in duration-200 font-sans">
       {/* ── Page Header ── */}
       <div className="space-y-1">
         <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight font-sans">Profile</h1>
@@ -951,11 +951,6 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className="font-bold text-sm text-gray-900 truncate">
                       {patient.email}
-                    </span>
-
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold font-sans">
-                      <CheckCircle2 size={12} />
-                      Verified
                     </span>
                   </div>
                 </div>
@@ -1722,7 +1717,7 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
                 type="button"
                 onClick={handleDeactivateAccount}
                 disabled={deactivating}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white transition-colors flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-[#D95B2F] hover:bg-amber-700 text-xs font-bold text-white transition-colors flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
               >
                 {deactivating ? <Loader2 size={13} className="animate-spin" /> : null}
                 Deactivate Account
@@ -1741,7 +1736,7 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
                 <AlertTriangle size={20} />
               </div>
               <div>
-                <DialogTitle className="text-lg font-bold text-gray-900">Request Account Deletion</DialogTitle>
+                <DialogTitle className="text-lg font-bold text-gray-900"style={{ fontFamily: "'DM Sans', sans-serif" }}>Request Account Deletion</DialogTitle>
                 <p className="text-xs text-gray-500">Permanent data removal request</p>
               </div>
             </div>

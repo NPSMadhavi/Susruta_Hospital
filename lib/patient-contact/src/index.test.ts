@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone } from "./index";
+import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone, validatePatientPassword, checkPasswordRequirements } from "./index";
 
 test("accepts an Indian local number and normalizes it to E.164", () => {
   assert.deepEqual(validatePatientPhone("9876543210", "IN"), {
@@ -77,4 +77,108 @@ test("normalizes and rejects malformed email addresses", () => {
   assert.equal(normalizePatientEmail("patient..name@example.com"), null);
   assert.equal(normalizePatientEmail("patient()@example.com"), null);
   assert.equal(normalizePatientEmail("patient<>@example.com"), null);
+});
+
+test("validates patient password complexity requirements", () => {
+  // Valid passwords
+  const valid1 = validatePatientPassword("Password123!");
+  assert.equal(valid1.valid, true);
+  assert.equal(valid1.status.allValid, true);
+
+  const valid2 = validatePatientPassword("Susruta@2024");
+  assert.equal(valid2.valid, true);
+  assert.equal(valid2.status.allValid, true);
+
+  const valid3 = validatePatientPassword("Pass#1");
+  assert.equal(valid3.valid, true);
+  assert.equal(valid3.status.allValid, true);
+
+  const valid4 = validatePatientPassword("Admin$99");
+  assert.equal(valid4.valid, true);
+
+  // Missing first letter capital (starts with lowercase)
+  const noFirstCap = validatePatientPassword("password123!");
+  assert.equal(noFirstCap.valid, false);
+  if (!noFirstCap.valid) {
+    assert.equal(noFirstCap.error, "first_capital");
+    assert.match(noFirstCap.message, /start with a capital letter/);
+  }
+
+  // Starts with number instead of capital letter
+  const startsWithNumber = validatePatientPassword("1Password@");
+  assert.equal(startsWithNumber.valid, false);
+  if (!startsWithNumber.valid) {
+    assert.equal(startsWithNumber.error, "first_capital");
+  }
+
+  // Starts with symbol instead of capital letter
+  const startsWithSymbol = validatePatientPassword("@Password123");
+  assert.equal(startsWithSymbol.valid, false);
+  if (!startsWithSymbol.valid) {
+    assert.equal(startsWithSymbol.error, "first_capital");
+  }
+
+  // Missing small letters
+  const noSmall = validatePatientPassword("PASSWORD123!");
+  assert.equal(noSmall.valid, false);
+  if (!noSmall.valid) {
+    assert.equal(noSmall.error, "lowercase");
+    assert.match(noSmall.message, /small letters/);
+  }
+
+  // Missing numbers
+  const noNumber = validatePatientPassword("Password@!");
+  assert.equal(noNumber.valid, false);
+  if (!noNumber.valid) {
+    assert.equal(noNumber.error, "number");
+    assert.match(noNumber.message, /numbers/);
+  }
+
+  // Missing symbols
+  const noSymbol = validatePatientPassword("Password123");
+  assert.equal(noSymbol.valid, false);
+  if (!noSymbol.valid) {
+    assert.equal(noSymbol.error, "symbol");
+    assert.match(noSymbol.message, /symbol/);
+  }
+
+  // Spaces do not count as symbols
+  const spaceNotSymbol = validatePatientPassword("Password 123");
+  assert.equal(spaceNotSymbol.valid, false);
+  if (!spaceNotSymbol.valid) {
+    assert.equal(spaceNotSymbol.error, "symbol");
+  }
+
+  // Too short (< 6 characters) with other requirements satisfied
+  const tooShort = validatePatientPassword("Pas@1");
+  assert.equal(tooShort.valid, false);
+  if (!tooShort.valid) {
+    assert.equal(tooShort.error, "min_length");
+    assert.match(tooShort.message, /6 characters/);
+  }
+
+  // Empty password
+  const empty = validatePatientPassword("");
+  assert.equal(empty.valid, false);
+  if (!empty.valid) {
+    assert.equal(empty.error, "required");
+  }
+});
+
+test("checkPasswordRequirements computes individual breakdown accurately", () => {
+  const reqs = checkPasswordRequirements("Pass@1");
+  assert.equal(reqs.firstCapital, true);
+  assert.equal(reqs.lowercase, true);
+  assert.equal(reqs.number, true);
+  assert.equal(reqs.symbol, true);
+  assert.equal(reqs.minLength, true);
+  assert.equal(reqs.allValid, true);
+
+  const reqsPartial = checkPasswordRequirements("pa");
+  assert.equal(reqsPartial.firstCapital, false);
+  assert.equal(reqsPartial.lowercase, true);
+  assert.equal(reqsPartial.number, false);
+  assert.equal(reqsPartial.symbol, false);
+  assert.equal(reqsPartial.minLength, false);
+  assert.equal(reqsPartial.allValid, false);
 });

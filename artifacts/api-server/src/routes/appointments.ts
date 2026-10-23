@@ -71,6 +71,20 @@ export function notifyAdminNewDonation(donation: any) {
   }
 }
 
+export function notifyAdminNewAccountDeletionRequest(deletionRequest: any) {
+  const msg = JSON.stringify({ type: "new_deletion_request", request: deletionRequest });
+  for (const client of sseClients) {
+    try { client.write(`data: ${msg}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
+export function notifyAdminAccountDeletionRequestCancelled(deletionRequest: any) {
+  const msg = JSON.stringify({ type: "deletion_request_cancelled", request: deletionRequest });
+  for (const client of sseClients) {
+    try { client.write(`data: ${msg}\n\n`); } catch { sseClients.delete(client); }
+  }
+}
+
 router.get("/notifications", requireAdmin, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");

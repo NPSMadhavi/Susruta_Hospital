@@ -14,9 +14,9 @@ import { sendMobileOtp } from "../lib/sms";
 import { broadcastNewDonation } from "../lib/donationSse";
 import { randomBytes, randomInt, createHash, timingSafeEqual } from "crypto";
 import { z } from "zod/v4";
-import { notifyNewAppointment, notifyAdminNewDonation } from "./appointments";
+import { notifyNewAppointment, notifyAdminNewDonation, notifyAdminNewAccountDeletionRequest, notifyAdminAccountDeletionRequestCancelled } from "./appointments";
 import { extractClinicalNotes } from "./doctor";
-import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone } from "@workspace/patient-contact";
+import { normalizePatientEmail, validatePatientPhone, detectCountryFromPhone, validatePatientPassword } from "@workspace/patient-contact";
 import { normalizeVerificationEmail } from "../lib/verification";
 import { addDirectCallPatientClient } from "../lib/directCallSse";
 import { registerNewPatientWithNextId } from "../lib/patient-id";
@@ -213,6 +213,11 @@ router.post("/auth/register", verifyRecaptcha("patient_register"), async (req, r
     return;
   }
   const { name, age, gender, address, password } = parsed.data;
+  const passwordValidation = validatePatientPassword(password);
+  if (!passwordValidation.valid) {
+    res.status(400).json({ error: passwordValidation.error, message: passwordValidation.message });
+    return;
+  }
   const email = normalizePatientEmail(parsed.data.email);
   if (!email) {
     res.status(400).json({ error: "invalid_email", message: "Please enter a valid email address." });
@@ -516,8 +521,9 @@ router.post("/auth/reset-password", verifyRecaptcha("patient_reset_password"), a
     res.status(400).json({ error: "validation_error", message: "Token and new password are required." });
     return;
   }
-  if (password.length < 6) {
-    res.status(400).json({ error: "weak_password", message: "Password must be at least 6 characters." });
+  const passwordValidation = validatePatientPassword(password);
+  if (!passwordValidation.valid) {
+    res.status(400).json({ error: passwordValidation.error, message: passwordValidation.message });
     return;
   }
 
@@ -773,10 +779,13 @@ router.post("/account/delete-request", requirePatient, async (req: any, res) => 
         status: "PENDING",
         reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : null,
         cancellationDeadline,
+        isSeen: false,
         deleteColumn: 0,
         createdAt: now,
       })
       .returning();
+
+    notifyAdminNewAccountDeletionRequest(formatDeletionRequest(newRequest, now));
 
     res.status(201).json({
       success: true,
@@ -913,6 +922,8 @@ router.post("/account/delete-request/cancel", requirePatient, async (req: any, r
         .set({ deleteColumn: 0 })
         .where(eq(patientsTable.id, patient.id));
     });
+
+    notifyAdminAccountDeletionRequestCancelled({ id: latestReq.id, patientId: patient.id, status: "CANCELLED" });
 
     res.json({
       success: true,

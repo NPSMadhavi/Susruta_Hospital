@@ -163,3 +163,116 @@ export function normalizePatientEmail(emailInput: string): string | null {
   const email = emailInput.trim().toLowerCase();
   return z.string().email().max(254).safeParse(email).success ? email : null;
 }
+
+export type PasswordRequirementError =
+  | "required"
+  | "first_capital"
+  | "lowercase"
+  | "number"
+  | "symbol"
+  | "min_length";
+
+export interface PasswordRequirementsStatus {
+  firstCapital: boolean;
+  lowercase: boolean;
+  number: boolean;
+  symbol: boolean;
+  minLength: boolean;
+  allValid: boolean;
+}
+
+export function checkPasswordRequirements(password: unknown): PasswordRequirementsStatus {
+  const str = typeof password === "string" ? password : "";
+  const firstCapital = /^[A-Z]/.test(str);
+  const lowercase = /[a-z]/.test(str);
+  const number = /[0-9]/.test(str);
+  const symbol = /[^A-Za-z0-9\s]/.test(str);
+  const minLength = str.length >= 6;
+  const allValid = firstCapital && lowercase && number && symbol && minLength;
+
+  return {
+    firstCapital,
+    lowercase,
+    number,
+    symbol,
+    minLength,
+    allValid,
+  };
+}
+
+export type PasswordValidationResult =
+  | {
+      valid: true;
+      status: PasswordRequirementsStatus;
+    }
+  | {
+      valid: false;
+      error: PasswordRequirementError;
+      message: string;
+      status: PasswordRequirementsStatus;
+    };
+
+export function validatePatientPassword(password: unknown): PasswordValidationResult {
+  const str = typeof password === "string" ? password : "";
+  const status = checkPasswordRequirements(str);
+
+  if (!str) {
+    return {
+      valid: false,
+      error: "required",
+      message: "Password is required.",
+      status,
+    };
+  }
+
+  if (!status.minLength) {
+    return {
+      valid: false,
+      error: "min_length",
+      message: "Password must be at least 6 characters long.",
+      status,
+    };
+  }
+
+  if (!status.firstCapital) {
+    return {
+      valid: false,
+      error: "first_capital",
+      message: "Password must start with a capital letter (A-Z).",
+      status,
+    };
+  }
+
+  if (!status.lowercase) {
+    return {
+      valid: false,
+      error: "lowercase",
+      message: "Password must contain small letters (a-z).",
+      status,
+    };
+  }
+
+  if (!status.number) {
+    return {
+      valid: false,
+      error: "number",
+      message: "Password must contain numbers (0-9).",
+      status,
+    };
+  }
+
+  if (!status.symbol) {
+    return {
+      valid: false,
+      error: "symbol",
+      message: "Password must contain at least one symbol (e.g. @, #, $, %, etc.).",
+      status,
+    };
+  }
+
+  return {
+    valid: true,
+    status,
+  };
+}
+

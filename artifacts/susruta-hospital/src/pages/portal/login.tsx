@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Leaf, Mail, Lock, Eye, EyeOff, User, ArrowRight, Sparkles, Globe, CheckCircle2, KeyRound, ChevronDown, MapPin, Loader2 } from "lucide-react";
 import logoImg from "@assets/logo_1773840200056.png";
 import { patientApi } from "@/lib/patient-api";
-import { COUNTRIES, normalizePatientEmail, validatePatientPhone } from "@workspace/patient-contact";
+import { COUNTRIES, normalizePatientEmail, validatePatientPhone, checkPasswordRequirements, validatePatientPassword } from "@workspace/patient-contact";
 import { executeRecaptcha, RecaptchaLegalNotice } from "@/lib/recaptcha";
 
 type Mode = "login" | "register" | "forgot" | "reset";
@@ -20,6 +20,28 @@ async function detectCountryCode(): Promise<string> {
   } catch {
     return "IN";
   }
+}
+
+function PasswordRequirementsGuide({ password }: { password?: string }) {
+  const status = checkPasswordRequirements(password || "");
+
+  const isValid =
+    status.firstCapital &&
+    status.lowercase &&
+    status.number &&
+    status.symbol &&
+    status.minLength;
+
+  if (!password || isValid) {
+    return null;
+  }
+
+  return (
+    <p className="mt-2 text-xs text-red-600">
+      Password must start with a capital letter and contain small letters, numbers,
+      symbols, and at least 6 characters.
+    </p>
+  );
 }
 
 export default function PortalLogin() {
@@ -70,7 +92,8 @@ export default function PortalLogin() {
     const err = params.get("error");
     if (err === "expired_token") setError("This verification link has expired. Please sign in and request a new one.");
     else if (err === "invalid_token") setError("This verification link is invalid.");
-    if (params.get("deactivated") === "true") setSuccess("Your account has been deactivated. You can sign in and reactivate it anytime.");
+    const deact = params.get("deactivated");
+    if (deact === "true" || deact === "1") setSuccess("Your account has been deactivated. You can sign in and reactivate it anytime.");
   }, [search]);
 
   async function submitForgot(e: React.FormEvent) {
@@ -88,7 +111,8 @@ export default function PortalLogin() {
 
   async function submitReset(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    const passwordValidation = validatePatientPassword(newPassword);
+    if (!passwordValidation.valid) { setError(passwordValidation.message); return; }
     if (newPassword !== confirmNewPassword) { setError("Passwords do not match."); return; }
     setLoading(true); setError("");
     try {
@@ -130,7 +154,8 @@ export default function PortalLogin() {
         setError("Please enter your address.");
         return;
       }
-      if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+      const passwordValidation = validatePatientPassword(form.password);
+      if (!passwordValidation.valid) { setError(passwordValidation.message); return; }
       if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
       if (!agreeDisclaimer) { setError("Please read and accept the Privacy & Medical Data Disclaimer to continue."); return; }
       if (!agreeTerms) { setError("Please accept the Terms & Conditions and Privacy Policy to continue."); return; }
@@ -397,6 +422,7 @@ export default function PortalLogin() {
                           {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                         </button>
                       </div>
+                      <PasswordRequirementsGuide password={newPassword} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1.5">Confirm Password *</label>
@@ -573,6 +599,7 @@ export default function PortalLogin() {
                         {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
                     </div>
+                    {mode === "register" && <PasswordRequirementsGuide password={form.password} />}
                   </div>
 
                   {/* Confirm Password — register only */}
