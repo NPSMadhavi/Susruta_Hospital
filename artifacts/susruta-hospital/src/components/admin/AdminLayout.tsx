@@ -26,8 +26,8 @@ function CarbonUserActivity({ size = 18, className, ...props }: React.SVGProps<S
 
 const API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
-async function adminFetch(path: string) {
-  const r = await fetch(`${API}${path}`, { credentials: "include" });
+async function adminFetch(path: string, init?: RequestInit) {
+  const r = await fetch(`${API}${path}`, { credentials: "include", ...init });
   if (!r.ok) throw new Error("admin fetch failed");
   return r.json();
 }
@@ -45,7 +45,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     adminFetch("/admin/donations/count")
       .then(res => {
         if (typeof res?.count === "number") {
-          setDonationCount(res.count);
+          if (location === "/admin/donations") {
+            setDonationCount(0);
+          } else {
+            setDonationCount(res.count);
+          }
         }
       })
       .catch(() => {});
@@ -84,10 +88,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // When admin navigates to /admin/account-delete-requests, clear the unseen badge count
+  // When admin navigates to /admin/account-delete-requests or /admin/donations, clear the unseen badge count
   useEffect(() => {
     if (location === "/admin/account-delete-requests") {
       setPendingDeletionCount(0);
+    }
+    if (location === "/admin/donations") {
+      setDonationCount(0);
+      adminFetch("/admin/donations/mark-seen", { method: "PATCH" }).catch(() => {});
     }
   }, [location]);
 
@@ -148,7 +156,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         } else if (data.type === "direct_call_updated" && data.status === "ended") {
           notify("Direct Call Ended", "The patient consultation call has ended.");
         } else if (data.type === "new_donation") {
-          setDonationCount(prev => prev + 1);
+          if (window.location.pathname === "/admin/donations") {
+            setDonationCount(0);
+          } else {
+            setDonationCount(prev => prev + 1);
+          }
           const name = data.donation?.patientName || "A donor";
           const amount = data.donation?.amount ? `₹${data.donation.amount}` : "";
           notify("New Donation Received!", `${name} made a donation of ${amount}.`);

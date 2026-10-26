@@ -47,6 +47,16 @@ export default function AdminDonations() {
       const params = allTime ? "" : `?month=${filterMonth}&year=${filterYear}`;
       const data = await fetch(`${BASE}/api/admin/donations${params}`, { credentials: "include" }).then(r => r.ok ? r.json() : []);
       setDonations(Array.isArray(data) ? data : []);
+
+      // Mark all donations as seen so notification count badge clears
+      await fetch(`${BASE}/api/admin/donations/mark-seen`, {
+        method: "PATCH",
+        credentials: "include",
+      }).catch(() => {});
+
+      window.dispatchEvent(
+        new CustomEvent("susruta:donation_count_change", { detail: { count: 0 } })
+      );
     } catch {}
     setLoading(false);
   }, [filterMonth, filterYear, allTime]);
@@ -67,7 +77,12 @@ export default function AdminDonations() {
     es.addEventListener("new_donation", (e) => {
       const d = JSON.parse((e as MessageEvent).data) as Donation;
       setDonations(prev => [d, ...prev]);
-      window.dispatchEvent(new CustomEvent("susruta:donation_count_change", { detail: { delta: 1 } }));
+      // Mark as seen immediately since admin is active on the donations page
+      fetch(`${BASE}/api/admin/donations/mark-seen`, {
+        method: "PATCH",
+        credentials: "include",
+      }).catch(() => {});
+      window.dispatchEvent(new CustomEvent("susruta:donation_count_change", { detail: { count: 0 } }));
     });
     return () => es.close();
   }, []);

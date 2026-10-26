@@ -1016,11 +1016,48 @@ router.get("/donations/count", requireAdmin, async (_req, res) => {
     const [result] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(donationsTable)
-      .where(eq(donationsTable.deleteColumn, 0));
+      .where(and(
+        eq(donationsTable.deleteColumn, 0),
+        eq(donationsTable.isSeen, false)
+      ));
     res.json({ count: result?.count ?? 0 });
   } catch (err) {
     console.error("Admin donations count error:", err);
     res.status(500).json({ error: "Failed to fetch donations count" });
+  }
+});
+
+// ── PATCH /admin/donations/mark-seen ──────────────────────────
+router.patch("/donations/mark-seen", requireAdmin, async (_req, res) => {
+  try {
+    await db
+      .update(donationsTable)
+      .set({ isSeen: true, seenAt: new Date() })
+      .where(and(
+        eq(donationsTable.deleteColumn, 0),
+        eq(donationsTable.isSeen, false)
+      ));
+    res.json({ success: true, count: 0 });
+  } catch (err) {
+    console.error("Admin mark-seen donations error:", err);
+    res.status(500).json({ error: "Failed to mark donations as seen" });
+  }
+});
+
+// ── POST /admin/donations/mark-seen ───────────────────────────
+router.post("/donations/mark-seen", requireAdmin, async (_req, res) => {
+  try {
+    await db
+      .update(donationsTable)
+      .set({ isSeen: true, seenAt: new Date() })
+      .where(and(
+        eq(donationsTable.deleteColumn, 0),
+        eq(donationsTable.isSeen, false)
+      ));
+    res.json({ success: true, count: 0 });
+  } catch (err) {
+    console.error("Admin mark-seen donations error:", err);
+    res.status(500).json({ error: "Failed to mark donations as seen" });
   }
 });
 
@@ -1046,6 +1083,16 @@ router.get("/donations", requireAdmin, async (req, res) => {
     }
 
     const rows = await query;
+
+    // Automatically mark unseen donations as seen since admin is viewing them
+    await db
+      .update(donationsTable)
+      .set({ isSeen: true, seenAt: new Date() })
+      .where(and(
+        eq(donationsTable.deleteColumn, 0),
+        eq(donationsTable.isSeen, false)
+      ));
+
     res.json(rows);
   } catch (err) {
     console.error("Admin donations list error:", err);
