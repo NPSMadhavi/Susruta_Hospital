@@ -1,10 +1,10 @@
 import { useEffect } from "react";
+import { loadRecaptchaScript } from "@/lib/recaptcha";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { loadRecaptchaScript } from "@/lib/recaptcha";
 
 import { ActiveCallProvider } from "./context/ActiveCallContext";
 

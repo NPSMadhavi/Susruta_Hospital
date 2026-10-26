@@ -8,6 +8,7 @@ import {
 import { patientApi } from "@/lib/patient-api";
 import { dualSlotTime, isSlotExceeded, isOfflineSessionExceeded, getDefaultOfflineSession } from "@/lib/ist";
 import { MedicalDocumentUploader } from "@/components/MedicalDocumentUploader";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import {
   useListOpenMonths,
   useGetAvailability,
@@ -101,7 +102,7 @@ function CalendarGrid({ month, openMonths, availability, selectedDate, onSelect 
   return (
     <div className="grid grid-cols-7 gap-1">
       {DAYS.map(d => (
-        <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
+        <div key={d} className="text-center text-[11px] sm:text-xs font-semibold text-gray-400 py-0.5 sm:py-1">{d}</div>
       ))}
       {cells.map((day, i) => {
         if (!day) return <div key={`e${i}`} />;
@@ -115,8 +116,8 @@ function CalendarGrid({ month, openMonths, availability, selectedDate, onSelect 
         return (
           <button key={dateStr} disabled={isDisabled} onClick={() => onSelect(dateStr)}
             className={[
-              "w-full aspect-square rounded-xl text-sm font-medium transition-all",
-              isSelected ? "bg-[#1a3d2b] text-white shadow-md scale-105"
+              "w-full aspect-square rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center justify-center",
+              isSelected ? "bg-[#1a3d2b] text-white shadow-md font-bold sm:scale-105"
                 : isDisabled ? "text-gray-300 cursor-not-allowed"
                 : isToday ? "bg-[#1a3d2b]/10 text-[#1a3d2b] font-bold ring-1 ring-[#1a3d2b]/30 hover:bg-[#1a3d2b]/20"
                 : "hover:bg-[#1a3d2b]/10 text-gray-800",
@@ -133,15 +134,15 @@ function CalendarGrid({ month, openMonths, availability, selectedDate, onSelect 
 // ── Step progress bar ────────────────────────────────────────────
 function StepBar({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <div className="flex items-center gap-1.5 mb-6">
+    <div className="flex items-center gap-1.5 mb-3.5 sm:mb-6">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
         return (
           <React.Fragment key={label}>
             <div className={`flex items-center gap-1.5 text-xs font-bold shrink-0 ${active ? "text-[#D95B2F]" : done ? "text-emerald-600" : "text-gray-300"}`}>
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${active ? "bg-[#D95B2F] text-white" : done ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-400"}`}>
-                {done ? <CheckCircle2 size={12} /> : i + 1}
+              <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] font-black ${active ? "bg-[#D95B2F] text-white" : done ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+                {done ? <CheckCircle2 size={11} /> : i + 1}
               </div>
               <span className="hidden sm:block">{label}</span>
             </div>
@@ -179,6 +180,9 @@ interface Props {
 
 export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const { data: settings } = useGetSettings();
+
+  // Centralized scroll lock: freezes background and prevents touch/wheel scroll
+  useScrollLock(true);
   const [wizType, setWizType] = useState<WizardType | null>(null);
   const [wizardResending, setWizardResending] = useState(false);
   const [wizardResent, setWizardResent] = useState(false);
@@ -186,7 +190,12 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   if (settings && settings.appointmentBookingEnabled === false) {
     const clinicPhone = settings.clinicPhone1 || "9492068180";
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overscroll-contain select-none"
+        style={{ touchAction: "none" }}
+        onTouchMove={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+        onWheel={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      >
         <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-xl border border-border">
           <Calendar className="mx-auto text-muted-foreground mb-3 opacity-40" size={40} />
           <h3 className="text-lg font-bold text-gray-900 mb-2">Online Booking Unavailable</h3>
@@ -493,73 +502,93 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const isDone = (wizType === "offline" && offlineStep === "done") || (wizType === "online" && onlineStep === "done");
 
   return (
-    <div onClick={handleClose} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm font-sans font-['DM_Sans',sans-serif]">
+    <div
+      onClick={handleClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm font-sans font-['DM_Sans',sans-serif] overflow-y-auto overscroll-contain select-none"
+      style={{ touchAction: "none" }}
+      onTouchMove={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      onWheel={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+    >
       <motion.div
         onClick={e => e.stopPropagation()}
-        initial={{ y: 80, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 80, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="bg-white w-full max-w-3xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-        style={{ height: "90vh", maxHeight: "90vh" }}
+        initial={{ scale: 0.95, opacity: 0, y: 15 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 15 }}
+        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+        className="bg-white w-full max-w-[420px] sm:max-w-2xl md:max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto overscroll-contain select-text sm:h-[88vh] md:h-[90vh]"
+        style={{ maxHeight: "90vh", touchAction: "auto" }}
       >
         {/* Modal header */}
-        <div className="bg-[#D95B2F] px-6 py-5 flex items-center gap-3 shrink-0">
+        <div className="bg-[#D95B2F] px-5 py-3.5 sm:px-7 sm:py-5 flex items-center gap-3 sm:gap-4 shrink-0">
           <div className="flex-1">
-            <p className="text-white/60 text-xs font-medium tracking-wider">
+            <p className="text-white/80 text-[11px] sm:text-xs font-semibold tracking-wide">
               {wizType === null ? "Appointment" : wizType === "offline" ? "Offline Consultation" : "Online Consultation"}
             </p>
-            <p className="text-white font-bold text-base leading-tight">
+            <p className="text-white font-extrabold text-base sm:text-lg md:text-xl leading-tight">
               {isDone ? "Booking Confirmed!" : "Book Appointment"}
             </p>
           </div>
-          <button onClick={handleClose}
-            className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
-            <X size={18} />
+          <button
+            onClick={handleClose}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors cursor-pointer"
+            aria-label="Close"
+          >
+            <X size={16} className="sm:hidden" />
+            <X size={18} className="hidden sm:block" />
           </button>
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 md:p-8">
           <AnimatePresence mode="wait">
 
             {/* ── STEP 0: Type selection ──────────────────────── */}
             {wizType === null && (
-              <motion.div key="type" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
-                <p className="text-xl font-bold text-gray-900 mb-1">How would you like to consult?</p>
-                <p className="text-sm text-gray-500 mb-6">Choose your preferred appointment type</p>
+              <motion.div key="type" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.15 }}>
+                <p className="text-base sm:text-lg font-bold text-gray-900 leading-snug sm:mb-1">How would you like to consult?</p>
+                <p className="text-xs sm:text-sm text-gray-500 mt-0.5 mb-3 sm:mb-6">Choose your preferred appointment type</p>
 
-                <div className="space-y-3">
-                  {/* In-Person */}
-                  <button onClick={() => handleTypeSelect("offline")}
-                    className="w-full bg-white border-2 border-gray-200 hover:border-[#1a3d2b] hover:bg-[#1a3d2b]/5 rounded-2xl p-6 text-left transition-all group">
-                    <div className="flex items-start gap-5">
-                      <div className="bg-green-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-green-200 transition-colors" style={{ width: 64, height: 64 }}>
-                        <MapPin size={30} className="text-green-700" />
+                <div className="space-y-2.5 sm:space-y-4">
+                  {/* In-Person / Offline */}
+                  <button
+                    onClick={() => handleTypeSelect("offline")}
+                    className="w-full bg-white border sm:border-2 border-gray-200 hover:border-[#1a3d2b] hover:bg-[#1a3d2b]/5 rounded-2xl p-3 sm:p-5 md:p-6 text-left transition-all group cursor-pointer shadow-xs sm:shadow-none"
+                  >
+                    <div className="flex items-start gap-3 sm:gap-5">
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-green-50 sm:bg-green-100 flex items-center justify-center shrink-0 group-hover:bg-green-100 sm:group-hover:bg-green-200 transition-colors">
+                        <MapPin size={20} className="text-green-600 sm:hidden" />
+                        <MapPin size={28} className="text-[#1a3d2b] hidden sm:block" />
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-xl">Offline Consultation</p>
-                        <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-gray-900 text-sm sm:text-base md:text-lg leading-tight group-hover:text-[#1a3d2b] transition-colors">Offline Consultation</p>
+                        <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-1.5 leading-snug sm:leading-relaxed">
                           Visit the clinic in Tirupati. Book a time slot and get hands-on Ayurvedic treatment.
                         </p>
-                        <p className="text-sm text-green-700 font-semibold mt-2.5">📍 119, Ramulavari North Mada Street</p>
+                        <p className="text-[11px] sm:text-xs text-green-700 font-semibold mt-1.5 sm:mt-2 flex items-center gap-1.5">
+                          <span>📍</span> 119, Ramulavari North Mada Street
+                        </p>
                       </div>
                     </div>
                   </button>
 
                   {/* Online */}
-                  <button onClick={() => handleTypeSelect("online")}
-                    className="w-full bg-white border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 rounded-2xl p-6 text-left transition-all group">
-                    <div className="flex items-start gap-5">
-                      <div className="bg-red-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors" style={{ width: 64, height: 64 }}>
-                        <Video size={30} className="text-[#D95B2F]" />
+                  <button
+                    onClick={() => handleTypeSelect("online")}
+                    className="w-full bg-white border sm:border-2 border-gray-200 hover:border-[#D95B2F] hover:bg-red-50/50 rounded-2xl p-3 sm:p-5 md:p-6 text-left transition-all group cursor-pointer shadow-xs sm:shadow-none"
+                  >
+                    <div className="flex items-start gap-3 sm:gap-5">
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-red-50 sm:bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-100 sm:group-hover:bg-red-200 transition-colors">
+                        <Video size={20} className="text-[#D95B2F] sm:hidden" />
+                        <Video size={28} className="text-[#D95B2F] hidden sm:block" />
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-xl">Online Consultation</p>
-                        <p className="text-gray-500 text-base mt-1.5 leading-relaxed">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-gray-900 text-sm sm:text-base md:text-lg leading-tight group-hover:text-[#D95B2F] transition-colors">Online Consultation</p>
+                        <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-1.5 leading-snug sm:leading-relaxed">
                           Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.
                         </p>
-                        <p className="text-sm text-gray-500 font-semibold mt-2.5">🎥 Requires uploading medical reports</p>
+                        <p className="text-[11px] sm:text-xs text-gray-600 font-semibold mt-1.5 sm:mt-2 flex items-center gap-1.5">
+                          <span>👥</span> Requires uploading medical reports
+                        </p>
                       </div>
                     </div>
                   </button>
@@ -573,36 +602,36 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* OFFLINE: Date picker */}
             {wizType === "offline" && offlineStep === "date" && (
-              <motion.div key="offline-date" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+              <motion.div key="offline-date" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={0} />
-                <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Calendar size={20} className="text-[#D95B2F]" /> Pick a Date
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-2.5 flex items-center gap-2">
+                  <Calendar size={18} className="text-[#D95B2F]" /> Pick a Date
                 </p>
 
                 {openMonths.length === 0 ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
-                    <AlertCircle size={24} className="mx-auto mb-2 text-amber-500" />
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+                    <AlertCircle size={22} className="mx-auto mb-1.5 text-amber-500" />
                     <p className="text-sm font-semibold text-amber-800">No months are open for booking yet.</p>
-                    <p className="text-xs text-amber-700 mt-1">Please check back later or call the clinic directly.</p>
+                    <p className="text-xs text-amber-700 mt-0.5">Please check back later or call the clinic directly.</p>
                   </div>
                 ) : (
                   <>
                     {/* Month nav */}
-                    <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 mb-4">
-                      <div className="flex items-center justify-between mb-4">
+                    <div className="bg-gray-50 rounded-2xl border border-gray-200 p-3 sm:p-4 mb-2 sm:mb-4">
+                      <div className="flex items-center justify-between mb-2 sm:mb-4">
                         <button disabled={monthIdx <= 0}
                           onClick={() => { setMonthIdx(m => m - 1); setSelectedDate(null); }}
-                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-lg"
+                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-base cursor-pointer"
                           title="Previous month"
                         >
                           ‹
                         </button>
-                        <p className="font-bold text-gray-900 text-base">
+                        <p className="font-bold text-gray-900 text-sm sm:text-base">
                           {currentMonth ? format(parseISO(currentMonth + "-01"), "MMMM yyyy") : ""}
                         </p>
                         <button disabled={monthIdx >= openMonths.length - 1}
                           onClick={() => { setMonthIdx(m => m + 1); setSelectedDate(null); }}
-                          className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-lg"
+                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-bold text-base cursor-pointer"
                           title="Next month"
                         >
                           ›
@@ -620,25 +649,25 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* OFFLINE: Time slot picker */}
             {wizType === "offline" && offlineStep === "slots" && (
-              <motion.div key="offline-slots" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+              <motion.div key="offline-slots" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={1} />
-                <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <Clock size={20} className="text-[#D95B2F]" /> Choose a Time
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-0.5 flex items-center gap-2">
+                  <Clock size={18} className="text-[#D95B2F]" /> Choose a Time
                 </p>
-                <p className="text-sm text-gray-500 mb-4">{selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM yyyy")}</p>
+                <p className="text-xs sm:text-sm text-gray-500 mb-3">{selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM yyyy")}</p>
 
                 {loadingOfflineSlots ? (
-                  <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+                  <div className="flex items-center justify-center py-8 text-gray-400 text-xs sm:text-sm gap-2">
                     <Loader2 size={16} className="animate-spin text-[#1a3d2b]" /> Loading available slots…
                   </div>
                 ) : (
-                  <div className="space-y-3 mb-4">
+                  <div className="space-y-2.5 sm:space-y-3 mb-3">
                     {selectedDate && (
                       isOfflineSessionExceeded(selectedDate, "morning") || (offlineSlotStatus?.morning?.remaining ?? 0) <= 0 || !offlineSlotStatus?.morning?.isAvailable
                     ) && (
                       isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0 || !offlineSlotStatus?.evening?.isAvailable
                     ) && (
-                      <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                      <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-2.5">
                         <AlertCircle size={15} className="shrink-0 text-red-500" />
                         <span>No consultation slots are available for this date. All sessions have either been booked or session timings have passed. Please select another date.</span>
                       </div>
@@ -671,7 +700,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                           onClick={() => {
                             if (isAvailable) setSelectedSlot(session.label);
                           }}
-                          className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
+                          className={`w-full p-3 sm:p-4 rounded-2xl border text-left transition-all flex items-center justify-between gap-2.5 sm:gap-3.5 ${
                             !isAvailable
                               ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
                               : isSelected
@@ -679,9 +708,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                               : "bg-white border-gray-200 hover:border-[#1a3d2b]/50 hover:bg-[#1a3d2b]/5 text-gray-800 cursor-pointer"
                           }`}
                         >
-                          <div className="flex items-center gap-3.5">
+                          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                             <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${
                                 isSelected
                                   ? "bg-white/20 text-white"
                                   : !isAvailable
@@ -689,24 +718,24 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                                   : "bg-[#1a3d2b]/10 text-[#1a3d2b]"
                               }`}
                             >
-                              <Clock size={20} />
+                              <Clock size={18} />
                             </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-base">{session.label}</span>
-                                <span className={`text-xs font-medium ${isSelected ? "text-white/80" : "text-gray-500"}`}>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-sm sm:text-base leading-tight">{session.label}</span>
+                                <span className={`text-[11px] sm:text-xs font-medium ${isSelected ? "text-white/80" : "text-gray-500"}`}>
                                   ({session.title})
                                 </span>
                               </div>
-                              <span className={`text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}>
+                              <span className={`text-[10px] sm:text-[11px] block mt-0.5 ${isSelected ? "text-white/70" : "text-gray-400"}`}>
                                 15 mins duration per consultation
                               </span>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span
-                              className={`text-xs px-3 py-1 rounded-full font-bold ${
+                              className={`text-[10px] sm:text-xs px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${
                                 !isAvailable
                                   ? "bg-red-100 text-red-600 border border-red-200"
                                   : isSelected
@@ -722,7 +751,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                                 ? "Closed"
                                 : "No slots available"}
                             </span>
-                            {isSelected && <CheckCircle2 size={18} className="text-white shrink-0" />}
+                            {isSelected && <CheckCircle2 size={16} className="text-white shrink-0" />}
                           </div>
                         </button>
                       );
@@ -734,34 +763,34 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* OFFLINE: Confirm */}
             {wizType === "offline" && offlineStep === "confirm" && (
-              <motion.div key="offline-confirm" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+              <motion.div key="offline-confirm" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Date", "Choose Time", "Confirm"]} current={2} />
-                <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 size={20} className="text-[#D95B2F]" /> Confirm Booking
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-[#D95B2F]" /> Confirm Booking
                 </p>
 
                 {/* Summary card */}
-                <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/10 rounded-2xl p-4 mb-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={15} className="text-[#1a3d2b] shrink-0" />
-                    <p className="text-sm font-semibold text-gray-800">Offline Visit · Tirupati Clinic</p>
+                <div className="bg-[#1a3d2b]/5 border border-[#1a3d2b]/10 rounded-2xl p-3 sm:p-3.5 mb-2.5 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin size={14} className="text-[#1a3d2b] shrink-0" />
+                    <p className="text-xs sm:text-sm font-semibold text-gray-800">Offline Visit · Tirupati Clinic</p>
                   </div>
-                  <p className="text-base font-bold text-[#1a3d2b] ml-6">
+                  <p className="text-sm sm:text-base font-bold text-[#1a3d2b] ml-5">
                     {selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM yyyy")}
                   </p>
-                  <p className="text-sm font-semibold text-gray-700 ml-6">at {selectedSlot}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-700 ml-5">at {selectedSlot}</p>
                 </div>
 
                 {/* Patient info */}
-                <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 mb-4">
-                  <p className="text-xs text-gray-400 font-bold tracking-wider mb-2">Booking as</p>
-                  <p className="text-base font-bold text-gray-900">{patient?.name}</p>
-                  {patient?.phone && <p className="text-sm text-gray-500">{patient.phone}</p>}
+                <div className="bg-gray-50 rounded-2xl border border-gray-200 p-3 sm:p-3.5 mb-2.5">
+                  <p className="text-[10px] text-gray-400 font-bold tracking-wider mb-1">Booking as</p>
+                  <p className="text-sm sm:text-base font-bold text-gray-900">{patient?.name}</p>
+                  {patient?.phone && <p className="text-xs sm:text-sm text-gray-500">{patient.phone}</p>}
                 </div>
 
                 {!patient?.phone && (
-                  <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+                  <div className="mb-2.5">
+                    <label className="text-xs sm:text-sm font-semibold text-gray-700 block mb-1">
                       Phone Number <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -771,18 +800,18 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                       maxLength={10}
                       placeholder="10-digit mobile number"
                       inputMode="numeric"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all tracking-wider"
+                      className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all tracking-wider"
                     />
                   </div>
                 )}
 
-                <div className="mb-4">
-                  <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+                <div className="mb-2.5">
+                  <label className="text-xs sm:text-sm font-semibold text-gray-700 block mb-1">
                     Reason for Visit <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
-                  <textarea rows={3} value={reason} onChange={e => setReason(e.target.value)}
+                  <textarea rows={2} value={reason} onChange={e => setReason(e.target.value)}
                     placeholder="e.g. Joint pain, digestive issues, general consultation…"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all" />
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] transition-all" />
                 </div>
 
                 {offlineError && <ErrorBanner msg={offlineError} />}
@@ -792,20 +821,20 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
             {/* OFFLINE: Done */}
             {wizType === "offline" && offlineStep === "done" && (
               <motion.div key="offline-done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-6">
-                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
-                  <CheckCircle2 size={40} className="text-emerald-600" />
+                className="text-center py-4 sm:py-6">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <CheckCircle2 size={32} className="text-emerald-600 sm:w-10 sm:h-10" />
                 </div>
-                <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Appointment Requested!</h2>
-                <p className="text-gray-500 text-sm mb-1">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1.5">Appointment Requested!</h2>
+                <p className="text-gray-500 text-xs sm:text-sm mb-1">
                   Your appointment on <strong className="text-gray-800">{selectedDate && format(parseISO(selectedDate), "EEEE, d MMMM")}</strong>
                 </p>
-                <p className="text-gray-500 text-sm mb-6">at <strong className="text-gray-800">{selectedSlot}</strong> has been submitted.</p>
-                <p className="text-xs text-gray-400 mb-8 max-w-xs mx-auto leading-relaxed">
+                <p className="text-gray-500 text-xs sm:text-sm mb-4">at <strong className="text-gray-800">{selectedSlot}</strong> has been submitted.</p>
+                <p className="text-[11px] sm:text-xs text-gray-400 mb-6 max-w-xs mx-auto leading-relaxed">
                   The clinic will confirm your booking shortly. You can track the status in your dashboard.
                 </p>
                 <button onClick={() => { handleClose(); onSuccess(); }}
-                  className="w-[200px] bg-[#D95B2F] text-white font-bold py-4 rounded-2xl hover:bg-[#D95B2F]/90 transition-colors text-base">
+                  className="w-[180px] bg-[#D95B2F] text-white font-bold py-3 sm:py-3.5 rounded-xl hover:bg-[#D95B2F]/90 transition-colors text-sm sm:text-base cursor-pointer">
                   Back to Dashboard
                 </button>
               </motion.div>
@@ -817,27 +846,27 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* ONLINE: Slot picker */}
             {wizType === "online" && onlineStep === "slots" && (
-              <motion.div key="online-slots" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+              <motion.div key="online-slots" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Slot", "Upload Docs", "Confirm"]} current={0} />
-                <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <Video size={20} className="text-[#D95B2F]" /> Choose a Slot
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-0.5 flex items-center gap-2">
+                  <Video size={18} className="text-[#D95B2F]" /> Choose a Slot
                 </p>
-                <p className="text-sm text-gray-500 mb-4">Video consultation · Sunday slots only</p>
+                <p className="text-xs sm:text-sm text-gray-500 mb-3">Video consultation · Sunday slots only</p>
 
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
                 {onlineLoading ? (
-                  <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
+                  <div className="flex items-center gap-2 text-gray-500 py-8 justify-center text-xs sm:text-sm">
                     <Loader2 size={16} className="animate-spin" /> Loading available slots…
                   </div>
                 ) : (dateGroups.length === 0 || dateGroups.every(g => g.slots.filter(s => !s.isBooked && !isSlotExceeded(g.date, s.startTime) && !s.isExceeded).length === 0)) ? (
-                  <div className="text-center py-10 bg-gray-50 rounded-2xl border border-gray-200">
-                    <Video size={32} className="mx-auto mb-3 text-red-400" />
-                    <p className="text-base font-bold text-red-600">Slots are not available</p>
+                  <div className="text-center py-8 bg-gray-50 rounded-2xl border border-gray-200">
+                    <Video size={28} className="mx-auto mb-2 text-red-400" />
+                    <p className="text-sm sm:text-base font-bold text-red-600">Slots are not available</p>
                     <p className="text-xs text-gray-400 mt-1">All online consultation slots are currently booked or have ended. Please check back later.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3 mb-4">
+                  <div className="space-y-3 mb-3">
                     {dateGroups.map(group => {
                       const availableSlots = group.slots.filter(s => !s.isBooked && !isSlotExceeded(group.date, s.startTime) && !s.isExceeded);
                       const allUnavailable = availableSlots.length === 0;
@@ -846,42 +875,42 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         : "Online Session";
                       return (
                         <div key={group.date} className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
-                          <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white">
+                          <div className="px-4 py-2.5 sm:px-5 sm:py-3.5 border-b border-gray-200 flex items-center justify-between bg-white">
                             <div>
-                              <p className="font-bold text-gray-900 text-sm">{fmtDate(group.date)}</p>
-                              <p className={`text-xs mt-0.5 font-medium ${allUnavailable ? "text-[#D95B2F] font-semibold" : "text-gray-500"}`}>
+                              <p className="font-bold text-gray-900 text-xs sm:text-sm">{fmtDate(group.date)}</p>
+                              <p className={`text-[11px] sm:text-xs mt-0.5 font-medium ${allUnavailable ? "text-[#D95B2F] font-semibold" : "text-gray-500"}`}>
                                 {sessionTimeRange} <span className="ml-1">
-                                              {allUnavailable ? "0 available slots" : `${availableSlots.length} available slots`}
-                                            </span>
+                                  {allUnavailable ? "· 0 available slots" : `· ${availableSlots.length} available slots`}
+                                </span>
                               </p>
                             </div>
                             {allUnavailable && (
-                              <span className="text-[11px] font-bold text-[#D95B2F] bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
+                              <span className="text-[10px] sm:text-[11px] font-bold text-[#D95B2F] bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full">
                                 Slots are not available
                               </span>
                             )}
                           </div>
 
-                          <div className="p-4">
+                          <div className="p-3 sm:p-4">
                             {allUnavailable ? (
-                              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-3">
+                              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center gap-2 mb-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                                 <span>Slots are not available for this date. All consultation slots have been booked or time slots have passed.</span>
                               </div>
                             ) : null}
                             <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <p className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                                  <Clock size={14} className="text-[#D95B2F]" />
-                                  Select Consultation Timing (15 mins duration):
+                              <div className="flex items-center justify-between mb-2 sm:mb-2.5">
+                                <p className="text-[11px] sm:text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                                  <Clock size={13} className="text-[#D95B2F]" />
+                                  Select Consultation Timing (15 mins):
                                 </p>
                                 {onlineSlot && onlineSlot.date === group.date && (
-                                  <span className="text-[11px] font-semibold text-[#D95B2F] bg-red-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                                    Selected: {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)}
+                                  <span className="text-[10px] sm:text-[11px] font-semibold text-[#D95B2F] bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                                    Selected: {fmtTime(onlineSlot.startTime)}
                                   </span>
                                 )}
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-2.5">
                                 {group.slots.map((slot) => {
                                   const isExceeded = isSlotExceeded(group.date, slot.startTime) || slot.isExceeded;
                                   const isSlotAvailable = !slot.isBooked && !isExceeded;
@@ -894,12 +923,12 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                                       onClick={() => {
                                         if (isSlotAvailable) setOnlineSlot(slot);
                                       }}
-                                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                                      className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
                                         !isSlotAvailable
                                           ? "bg-gray-100/70 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
                                           : isSlotSelected
-                                          ? "bg-[#D95B2F]/10 border-[#D95B2F] text-[#D95B2F] shadow-sm ring-2 ring-[#D95B2F]/30 cursor-pointer"
-                                          : "bg-white border-gray-200 hover:border-red-400 hover:bg-blue-50/40 text-gray-800 cursor-pointer"
+                                          ? "bg-[#D95B2F]/10 border-[#D95B2F] text-[#D95B2F] shadow-xs ring-2 ring-[#D95B2F]/30 cursor-pointer"
+                                          : "bg-white border-gray-200 hover:border-red-400 hover:bg-orange-50/30 text-gray-800 cursor-pointer"
                                       }`}
                                     >
                                       <div className="flex items-center justify-between w-full">
@@ -910,7 +939,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                                           <CheckCircle2 size={13} className="text-[#D95B2F] shrink-0 ml-1" />
                                         )}
                                       </div>
-                                      <span className={`text-[10px] mt-1.5 font-medium ${
+                                      <span className={`text-[10px] mt-1 font-medium ${
                                         !isSlotAvailable
                                           ? "text-red-500 font-semibold"
                                           : isSlotSelected
@@ -937,17 +966,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* ONLINE: Docs step */}
             {wizType === "online" && onlineStep === "docs" && (
-              <motion.div key="online-docs" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col h-full">
+              <motion.div key="online-docs" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={1} />
-                <p className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                  <FileText size={20} className="text-[#D95B2F]" /> Medical Documents
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-0.5 flex items-center gap-2">
+                  <FileText size={18} className="text-[#D95B2F]" /> Medical Documents
                 </p>
 
                 {onlineError && <ErrorBanner msg={onlineError} />}
 
-                <div className="flex-1 flex flex-col min-h-0">
-                  <p className="text-sm text-gray-500 mb-4">
-                    Attach any medical reports, test results, or prescriptions for this consultation. You can also skip this step.
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-500 mb-3">
+                    Attach any medical reports or prescriptions. You can also skip this step.
                   </p>
 
                   {/* Unified Medical Document Uploader */}
@@ -959,11 +988,11 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
                   {/* Attached docs for this consultation */}
                   {docs.length > 0 && (
-                    <div className="space-y-2 mb-3">
+                    <div className="space-y-1.5 mb-2.5">
                       {docs.map((doc, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 py-2">
-                          <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                            <FileText size={14} className="text-[#D95B2F]" />
+                        <div key={idx} className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
+                          <div className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                            <FileText size={13} className="text-[#D95B2F]" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-gray-800 truncate">{doc.name}</p>
@@ -972,10 +1001,10 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                           <button
                             type="button"
                             onClick={() => removeDoc(idx)}
-                            className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                            className="text-gray-400 hover:text-red-500 p-1 transition-colors cursor-pointer"
                             title="Remove document"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
@@ -983,13 +1012,13 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   )}
 
                   {/* Reason */}
-                  <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+                  <div className="mb-2">
+                    <label className="text-xs sm:text-sm font-semibold text-gray-700 block mb-1">
                       Reason for Consultation <span className="text-gray-400 font-normal">(optional)</span>
                     </label>
                     <textarea rows={2} value={onlineReason} onChange={e => setOnlineReason(e.target.value)}
                       placeholder="Brief summary of your health concerns…"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all" />
+                      className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#D95B2F]/30 focus:border-[#D95B2F] transition-all" />
                   </div>
                 </div>
               </motion.div>
@@ -997,35 +1026,35 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
             {/* ONLINE: Confirm */}
             {wizType === "online" && onlineStep === "confirm" && onlineSlot && (
-              <motion.div key="online-confirm" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+              <motion.div key="online-confirm" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <StepBar steps={["Choose Slot", "Documents", "Confirm"]} current={2} />
-                <p className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 size={20} className="text-[#D95B2F]" /> Confirm Booking
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-[#D95B2F]" /> Confirm Booking
                 </p>
 
-                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Video size={15} className="text-gray-700 shrink-0" />
-                    <p className="text-sm font-semibold text-gray-800">Online Video Consultation</p>
+                <div className="bg-orange-50/60 border border-orange-200/80 rounded-2xl p-3 sm:p-3.5 mb-2.5 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Video size={14} className="text-[#D95B2F] shrink-0" />
+                    <p className="text-xs sm:text-sm font-semibold text-gray-800">Online Video Consultation</p>
                   </div>
-                  <p className="text-base font-bold text-gray-700 ml-6">{fmtDate(onlineSlot.date)}</p>
-                  <p className="text-sm font-semibold text-gray-700 ml-6">
+                  <p className="text-sm sm:text-base font-bold text-gray-800 ml-5">{fmtDate(onlineSlot.date)}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-700 ml-5">
                     {fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)} (15 mins duration)
                   </p>
-                  <p className="text-xs text-gray-500 ml-6">
+                  <p className="text-[11px] sm:text-xs text-gray-500 ml-5">
                     {docs.length > 0
                       ? `${docs.length} document(s) attached`
                       : "No documents attached"}
                   </p>
                 </div>
 
-                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3 text-sm text-emerald-800 flex items-start gap-2 mb-4">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-3.5 py-2.5 text-xs text-emerald-800 flex items-start gap-2 mb-2.5">
                   <Leaf size={14} className="shrink-0 mt-0.5" />
                   <p>After the consultation, Dr. Murali Krishna will issue your Ayurvedic prescription. You can view it in your dashboard.</p>
                 </div>
 
                 {patient?.email && !patient?.emailVerified && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-800 flex items-start gap-2 mb-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-3.5 py-2.5 text-xs text-amber-800 flex items-start gap-2 mb-2.5">
                     <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-600" />
                     <div>
                       <p className="font-semibold text-amber-900">Email unverified</p>
@@ -1035,21 +1064,21 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                 )}
 
                 {onlineError && (
-                  <div className="mb-4 bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-800">
-                    <div className="flex items-start gap-2.5">
-                      <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                  <div className="mb-2.5 bg-red-50 border border-red-200 rounded-2xl p-3 text-xs sm:text-sm text-red-800">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={15} className="text-red-600 shrink-0 mt-0.5" />
                       <div className="flex-1">
                         <p className="font-semibold">{onlineError}</p>
                         {onlineError.toLowerCase().includes("verify") && (
-                          <div className="mt-2.5 flex items-center gap-2">
+                          <div className="mt-2 flex items-center gap-2">
                             <button
                               type="button"
                               onClick={handleResendVerificationInWizard}
                               disabled={wizardResending}
-                              className="text-xs font-bold text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-xl border border-red-300 transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                              className="text-xs font-bold text-red-900 bg-red-100 hover:bg-red-200 px-2.5 py-1 rounded-xl border border-red-300 transition-colors inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                             >
                               {wizardResending ? <Loader2 size={12} className="animate-spin" /> : null}
-                              {wizardResent ? "Verification email sent! Check inbox" : "Resend verification email"}
+                              {wizardResent ? "Verification email sent!" : "Resend verification email"}
                             </button>
                           </div>
                         )}
@@ -1063,22 +1092,22 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
             {/* ONLINE: Done */}
             {wizType === "online" && onlineStep === "done" && onlineSlot && (
               <motion.div key="online-done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-6">
-                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
-                  <CheckCircle2 size={40} className="text-[#D95B2F]" />
+                className="text-center py-4 sm:py-6">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <CheckCircle2 size={32} className="text-[#D95B2F] sm:w-10 sm:h-10" />
                 </div>
-                <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Booking Confirmed!</h2>
-                <p className="text-gray-500 text-sm mb-1">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1.5">Booking Confirmed!</h2>
+                <p className="text-gray-500 text-xs sm:text-sm mb-1">
                   Your online consultation on <strong className="text-gray-800">{fmtDate(onlineSlot.date)}</strong>
                 </p>
-                <p className="text-gray-500 text-sm mb-1">
-                  at <strong className="text-gray-800">{fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)} (15 mins duration)</strong> is booked.
+                <p className="text-gray-500 text-xs sm:text-sm mb-4">
+                  at <strong className="text-gray-800">{fmtTime(onlineSlot.startTime)} – {fmtTime(onlineSlot.endTime)} (15 mins)</strong> is booked.
                 </p>
-                <p className="text-xs text-gray-400 mb-8 max-w-xs mx-auto leading-relaxed">
+                <p className="text-[11px] sm:text-xs text-gray-400 mb-6 max-w-xs mx-auto leading-relaxed">
                   Dr. Murali Krishna will review your documents before the session. Keep your dashboard open on the day — you'll hear a chime when he's ready.
                 </p>
                 <button onClick={() => { handleClose(); onSuccess(); }}
-                  className="w-[200px] bg-[#D95B2F] text-white font-bold py-4 rounded-2xl hover:bg-[#D95B2F]/90 transition-colors text-base">
+                  className="w-[180px] bg-[#D95B2F] text-white font-bold py-3 sm:py-3.5 rounded-xl hover:bg-[#D95B2F]/90 transition-colors text-sm sm:text-base cursor-pointer">
                   Back to Dashboard
                 </button>
               </motion.div>
@@ -1089,7 +1118,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
 
         {/* Fixed Bottom Action Bar */}
         {wizType !== null && !isDone && (
-          <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-20">
+          <div className="bg-white border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-20">
             {/* OFFLINE FOOTER */}
             {wizType === "offline" && (
               <>
@@ -1098,17 +1127,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setWizType(null)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <button
                       type="button"
                       disabled={!selectedDate}
                       onClick={() => { setSelectedSlot(null); setOfflineStep("slots"); }}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 text-sm shadow-sm"
+                      className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 text-xs sm:text-sm shadow-sm cursor-pointer disabled:cursor-not-allowed"
                     >
-                      Next <ArrowRight size={15} />
+                      Next <ArrowRight size={14} />
                     </button>
                   </>
                 )}
@@ -1117,9 +1146,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setOfflineStep("date")}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <button
                       type="button"
@@ -1130,9 +1159,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         ((selectedSlot === offlineSlotStatus?.evening?.label || selectedSlot?.includes("Evening") || selectedSlot?.includes("6 PM")) && (isOfflineSessionExceeded(selectedDate, "evening") || (offlineSlotStatus?.evening?.remaining ?? 0) <= 0))
                       }
                       onClick={() => setOfflineStep("confirm")}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-sm"
+                      className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs sm:text-sm shadow-sm cursor-pointer"
                     >
-                      Next <ArrowRight size={15} />
+                      Next <ArrowRight size={14} />
                     </button>
                   </>
                 )}
@@ -1141,17 +1170,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setOfflineStep("slots")}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <button
                       type="button"
                       onClick={submitOffline}
                       disabled={submitting}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-lg"
+                      className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-xs sm:text-sm shadow-md cursor-pointer disabled:cursor-not-allowed"
                     >
-                      {submitting ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm"}
+                      {submitting ? <><Loader2 size={14} className="animate-spin" /> Booking…</> : "Confirm"}
                     </button>
                   </>
                 )}
@@ -1166,17 +1195,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setWizType(null)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <button
                       type="button"
                       disabled={!onlineSlot || onlineSlot.isBooked || isSlotExceeded(onlineSlot.date, onlineSlot.startTime) || !!onlineSlot.isExceeded}
                       onClick={() => setOnlineStep("docs")}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                      className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors text-xs sm:text-sm disabled:opacity-40 disabled:cursor-not-allowed shadow-sm cursor-pointer"
                     >
-                      Next <ArrowRight size={15} />
+                      Next <ArrowRight size={14} />
                     </button>
                   </>
                 )}
@@ -1185,16 +1214,16 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setOnlineStep("slots")}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         disabled={uploading}
                         onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                        className="px-4 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm text-gray-600 border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
                       >
                         Skip
                       </button>
@@ -1202,9 +1231,9 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                         type="button"
                         disabled={uploading}
                         onClick={() => { setOnlineError(""); setOnlineStep("confirm"); }}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-md"
+                        className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-xs sm:text-sm shadow-sm cursor-pointer disabled:cursor-not-allowed"
                       >
-                        Next <ArrowRight size={15} />
+                        Next <ArrowRight size={14} />
                       </button>
                     </div>
                   </>
@@ -1214,17 +1243,17 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setOnlineStep("docs")}
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={15} /> Back
+                      <ArrowLeft size={14} /> Back
                     </button>
                     <button
                       type="button"
                       onClick={submitOnline}
                       disabled={booking}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-sm shadow-lg"
+                      className="flex items-center gap-1.5 sm:gap-2 px-5 py-2 sm:px-6 sm:py-2.5 bg-[#D95B2F] text-white rounded-xl font-bold hover:bg-[#D95B2F]/90 transition-colors disabled:opacity-60 text-xs sm:text-sm shadow-md cursor-pointer disabled:cursor-not-allowed"
                     >
-                      {booking ? <><Loader2 size={15} className="animate-spin" /> Booking…</> : "Confirm"}
+                      {booking ? <><Loader2 size={14} className="animate-spin" /> Booking…</> : "Confirm"}
                     </button>
                   </>
                 )}

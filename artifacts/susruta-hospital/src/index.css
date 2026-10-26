@@ -161,3 +161,24 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .doctor-portal .font-dm-serif-display {
   font-family: 'DM Sans', sans-serif !important;
 }
+
+
+/* Google reCAPTCHA floating badge */
+.grecaptcha-badge {
+  visibility: visible !important;
+  display: block !important;
+  z-index: 9999 !important;
+}
+
+/* Centralized Modal Scroll Lock styles */
+html[data-modal-scroll-locked="true"],
+body[data-modal-scroll-locked="true"] {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+body[data-modal-scroll-locked="true"] main {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+

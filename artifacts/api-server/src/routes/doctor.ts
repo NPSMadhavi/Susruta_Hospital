@@ -47,7 +47,8 @@ router.post("/login", verifyRecaptcha("doctor_login"), async (req, res) => {
 
     const [settings] = await db.select().from(siteSettingsTable);
     if (!settings?.doctorPasswordHash) {
-      res.status(401).json({
+      res.json({
+        ok: false,
         error: "not_configured",
         message: "Doctor portal is not yet configured. Ask the admin to set the doctor password in Settings.",
       });
@@ -56,7 +57,7 @@ router.post("/login", verifyRecaptcha("doctor_login"), async (req, res) => {
 
     const ok = await bcrypt.compare(password, settings.doctorPasswordHash);
     if (!ok) {
-      res.status(401).json({ error: "invalid_password", message: "Incorrect password." });
+      res.json({ ok: false, error: "invalid_password", message: "Incorrect password." });
       return;
     }
 
@@ -93,9 +94,9 @@ router.post("/logout", async (req, res) => {
 // ── GET /api/doctor/me ────────────────────────────────────────
 router.get("/me", async (req, res) => {
   const token = req.cookies?.[COOKIE];
-  if (!token) { res.status(401).json({ error: "unauthorized" }); return; }
+  if (!token) { res.json(null); return; }
   const valid = await verifyDoctorSession(token);
-  if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
+  if (!valid) { res.clearCookie(COOKIE); res.json(null); return; }
   res.json({ name: "Dr. P. Murali Krishna", role: "doctor" });
 });
 

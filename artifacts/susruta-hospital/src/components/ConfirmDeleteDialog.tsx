@@ -1,5 +1,6 @@
 import React from "react";
 import { Trash2, Loader2 } from "lucide-react";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 interface ConfirmDeleteDialogProps {
   isOpen: boolean;
@@ -24,11 +25,23 @@ export function ConfirmDeleteDialog({
   onConfirm,
   onClose,
 }: ConfirmDeleteDialogProps) {
+  useScrollLock(isOpen);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-7 border border-border animate-in zoom-in-95 duration-150">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-150 overscroll-contain select-none"
+      style={{ touchAction: "none" }}
+      onTouchMove={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      onWheel={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-7 border border-border animate-in zoom-in-95 duration-150 select-text"
+        style={{ touchAction: "auto" }}
+      >
         <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4">
           <Trash2 size={24} />
         </div>

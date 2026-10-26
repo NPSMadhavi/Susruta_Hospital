@@ -650,6 +650,25 @@ router.get("/me/export-data", requirePatient, async (req: any, res) => {
         eq(prescriptionsTable.deleteColumn, 0)
       ));
 
+    const physicalConditions = [
+      and(
+        eq(appointmentsTable.patientId, patient.id),
+        eq(appointmentsTable.deleteColumn, 0)
+      )
+    ];
+    if (patient.email) {
+      physicalConditions.push(and(
+        sql`lower(${appointmentsTable.patientEmail}) = ${patient.email.toLowerCase().trim()}`,
+        eq(appointmentsTable.deleteColumn, 0)
+      ));
+    }
+    if (patient.phone) {
+      physicalConditions.push(and(
+        eq(appointmentsTable.patientPhone, patient.phone),
+        eq(appointmentsTable.deleteColumn, 0)
+      ));
+    }
+
     const physicalRx = await db
       .select({
         id: prescriptionsTable.id,
@@ -659,8 +678,7 @@ router.get("/me/export-data", requirePatient, async (req: any, res) => {
       .from(prescriptionsTable)
       .innerJoin(appointmentsTable, eq(prescriptionsTable.appointmentId, appointmentsTable.id))
       .where(and(
-        eq(appointmentsTable.patientId, patient.id),
-        eq(appointmentsTable.deleteColumn, 0),
+        or(...physicalConditions),
         eq(prescriptionsTable.deleteColumn, 0)
       ));
 
@@ -1899,8 +1917,9 @@ router.post("/donations", requirePatient, async (req: any, res) => {
   const patient = req.patient;
   const { amount, lastSixDigits, appointmentId } = req.body;
 
-  if (!amount || typeof amount !== "string" || amount.trim() === "") {
-    res.status(400).json({ error: "amount_required", message: "Please enter a valid donation amount." });
+  const numericAmount = parseFloat(typeof amount === "string" ? amount.trim() : String(amount || ""));
+  if (!amount || typeof amount !== "string" || amount.trim() === "" || isNaN(numericAmount) || numericAmount <= 0) {
+    res.status(400).json({ error: "invalid_amount", message: "Donation amount must be greater than ₹0." });
     return;
   }
   if (!lastSixDigits || typeof lastSixDigits !== "string" || lastSixDigits.trim().length < 4) {

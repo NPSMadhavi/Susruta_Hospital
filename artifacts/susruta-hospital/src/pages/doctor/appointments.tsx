@@ -21,6 +21,7 @@ import { downloadFileDirectly, downloadPrescriptionPdf, type PrintPrescriptionDa
 import { HOSPITAL_LOGO_DATA_URL } from "@/lib/hospital-logo-b64";
 import { DigitalPrescriptionPages } from "@/components/DigitalPrescriptionPages";
 import { useToast } from "@/hooks/use-toast";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -907,13 +908,42 @@ export function PrintPrescriptionModal({
   data: PrintPrescriptionData;
   onClose: () => void;
 }) {
+  useScrollLock(true);
   const printableRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [scaledHeight, setScaledHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (printableRef.current) {
       printableRef.current.scrollTop = 0;
     }
   }, []);
+
+  useEffect(() => {
+    const updateScale = () => {
+      const a4WidthPx = 794;
+      const padding = window.innerWidth < 640 ? 24 : 48;
+      const availableWidth = window.innerWidth - padding;
+      if (availableWidth < a4WidthPx) {
+        const s = Math.max(0.32, availableWidth / a4WidthPx);
+        setScale(s);
+        if (printableRef.current) {
+          setScaledHeight(printableRef.current.scrollHeight * s);
+        }
+      } else {
+        setScale(1);
+        setScaledHeight(undefined);
+      }
+    };
+
+    updateScale();
+    const timer = setTimeout(updateScale, 150);
+    window.addEventListener("resize", updateScale);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updateScale);
+    };
+  }, [data]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -965,22 +995,25 @@ export function PrintPrescriptionModal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
       style={{ fontFamily: "'DM Sans', sans-serif" }}
-      className="print-modal-overlay fixed inset-0 z-[160] bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-4 sm:p-6 print:p-0 print:bg-white print:static print:overflow-visible"
+      className="print-modal-overlay fixed inset-0 z-[160] bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-3 sm:p-6 print:p-0 print:bg-white print:static print:overflow-visible overscroll-contain select-none"
     >
       {/* Screen-only top action bar */}
       <div className="no-print sticky top-0 z-50 w-full max-w-[210mm] flex items-center justify-between pb-3 pt-1 bg-slate-950/90 backdrop-blur-md px-2 rounded-b-xl shrink-0">
-        <div className="flex items-center gap-2 text-white">
-          <Printer className="w-4 h-4 text-[#D95B2F]" />
-          <span className="font-bold text-xs sm:text-sm tracking-wide text-slate-200" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            Digital Prescription — Print Preview
+        <div className="flex items-center gap-2 text-white min-w-0">
+          <Printer className="w-4 h-4 text-[#D95B2F] shrink-0" />
+          <span className="font-bold text-xs sm:text-sm tracking-wide text-slate-200 truncate" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            Digital Prescription
           </span>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer border border-white/10 shadow-xs"
+            className="px-3 sm:px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer border border-white/10 shadow-xs"
           >
             Close
           </button>
@@ -989,22 +1022,35 @@ export function PrintPrescriptionModal({
             type="button"
             onClick={handlePrintPrescription}
             disabled={isDownloading || isPrinting}
-            className="px-5 py-2 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+            className="px-3 sm:px-5 py-2 rounded-xl bg-[#D95B2F] hover:bg-[#c04e26] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5 sm:gap-2"
           >
             {isPrinting ? <Loader2 size={14} className="animate-spin text-white" /> : <Printer size={14} />}
-            <span>{isPrinting ? "Preparing Print..." : "Print"}</span>
+            <span>{isPrinting ? "Preparing..." : "Print"}</span>
           </button>
         </div>
       </div>
 
       {/* A4 Sheet(s) Container */}
       <div
-        id="printable-prescription-container"
-        ref={printableRef}
-        className="print-modal-container w-[210mm] max-w-[210mm] flex flex-col items-center gap-8 py-4 pb-16 print:p-0 print:m-0 print:max-w-none print:w-[210mm] print:gap-0 print:block"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}
+        className="w-full flex justify-center py-2 sm:py-4 pb-16 print:p-0 print:m-0 print:block"
+        style={{
+          height: scaledHeight ? `${scaledHeight}px` : undefined,
+          width: scale < 1 ? `${Math.round(794 * scale)}px` : undefined,
+          maxWidth: "100%",
+        }}
       >
-        <DigitalPrescriptionPages data={data} />
+        <div
+          id="printable-prescription-container"
+          ref={printableRef}
+          className="print-modal-container w-[210mm] max-w-[210mm] flex flex-col items-center gap-8 print:p-0 print:m-0 print:max-w-none print:w-[210mm] print:gap-0 print:block"
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top center",
+          }}
+        >
+          <DigitalPrescriptionPages data={data} />
+        </div>
       </div>
 
       <style>{`
@@ -1036,6 +1082,11 @@ export function PrintPrescriptionModal({
           margin: 0 !important;
         }
         @media print {
+          #printable-prescription-container {
+            transform: none !important;
+            width: 210mm !important;
+            max-width: 210mm !important;
+          }
           html, body {
             width: 210mm !important;
             height: auto !important;
@@ -1934,7 +1985,7 @@ function DigitalPrescriptionForm({
                         <div className="space-y-1.5 py-3 px-2 border-l border-[#E2E4DE]">
                           {row.medicines.length > 1 && (
                             <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF5F2] border border-[#FDCFBF] text-[#D95B2F] text-[9px] font-bold mb-1 shadow-2xs">
-                              <Users size={9} />
+                              
                               <span>Combined Set</span>
                             </div>
                           )}
@@ -3350,7 +3401,6 @@ export default function DoctorPortal() {
 
           {/* System Footer matching Admin Layout */}
           <div className="p-4 border-t border-[#EDEFEB] shrink-0 space-y-1 bg-white">
-            <p className="px-2 pb-1 text-[10px] font-bold text-[#8E938B] tracking-wider">System</p>
             <button
               onClick={logout}
               className="w-full flex items-center gap-2.5 px-2 py-2 text-xs font-bold text-[#D95B2F] hover:bg-[#D95B2F]/10 rounded-lg transition-colors text-left cursor-pointer"

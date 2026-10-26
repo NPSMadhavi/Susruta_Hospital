@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { patientApi } from "@/lib/patient-api";
 import { COUNTRIES, validatePatientPhone, detectCountryFromPhone } from "@workspace/patient-contact";
 import JSZip from "jszip";
@@ -149,6 +150,19 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
   const [cancellingDeletion, setCancellingDeletion] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [cancelSuccess, setCancelSuccess] = useState("");
+
+  const isAnyProfileModalOpen =
+    editNameModal ||
+    editAgeModal ||
+    editGenderModal ||
+    editAddressModal ||
+    showEmailModal ||
+    showPhoneModal ||
+    showDeactivateModal ||
+    showDeleteModal ||
+    showCancelModal;
+
+  useScrollLock(isAnyProfileModalOpen);
 
   useEffect(() => {
     patientApi.getAccountDeletionRequest()
@@ -428,7 +442,10 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
     setExportSuccess("");
     setExportLoading(true);
     try {
-      const [appts, docs] = await Promise.all([
+      const [myOnline, myPhysical, docs] = await Promise.all([
+        fetch(`${BASE}/api/online-appointments/mine`, { credentials: "include" })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
         patientApi.getAppointments().catch(() => []),
         fetch(`${BASE}/api/patient/documents`, { credentials: "include" })
           .then((r) => (r.ok ? r.json() : []))
@@ -440,8 +457,26 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
       zip.folder("Medical_Documents");
 
       const rxUsedNames = new Set<string>();
-      const validAppts = Array.isArray(appts) ? appts : [];
-      const apptsWithRx = validAppts.filter((a: any) => hasAppointmentPrescription(a.prescription));
+      const allApptsForRx = [
+        ...(Array.isArray(myOnline) ? myOnline : []).map((a: any) => ({
+          id: a.id,
+          type: "online" as const,
+          slot: a.slot,
+          apptDate: a.slot?.date || a.apptDate || a.date || "",
+          timeLabel: a.slot?.startTime ? `${a.slot.startTime} - ${a.slot.endTime}` : (a.timeLabel || ""),
+          prescription: a.prescription,
+        })),
+        ...(Array.isArray(myPhysical) ? myPhysical : []).map((a: any) => ({
+          id: a.id,
+          type: "offline" as const,
+          slot: { id: 0, date: a.date || a.apptDate || "", startTime: "", endTime: "" },
+          apptDate: a.date || a.apptDate || "",
+          timeLabel: a.timeSlot || a.timeLabel || "",
+          prescription: a.prescription,
+        })),
+      ];
+
+      const apptsWithRx = allApptsForRx.filter((a: any) => hasAppointmentPrescription(a.prescription));
 
       for (const item of apptsWithRx) {
         const rx = item.prescription;
@@ -465,7 +500,15 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
               zip.folder("Prescriptions")?.file(safeName, fileBlob);
             }
           } catch (fileErr) {
-            console.warn("Could not download prescription file:", fileErr);
+            console.warn("Could not download prescription file, attempting server fallback:", fileErr);
+            try {
+              const fallbackRes = await fetch(`${BASE}/api/patient/prescriptions/appointment/${item.type}/${item.id}/download`, { credentials: "include" });
+              if (fallbackRes.ok) {
+                const fallbackBlob = await fallbackRes.blob();
+                const safeName = getDeduplicatedFilename(`Prescription_${item.apptDate || "document"}.pdf`, rxUsedNames);
+                zip.folder("Prescriptions")?.file(safeName, fallbackBlob);
+              }
+            } catch {}
           }
         } else {
           try {
@@ -510,7 +553,15 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
               zip.folder("Prescriptions")?.file(fileName, pdfBlob);
             }
           } catch (pdfErr) {
-            console.warn("Could not render digital prescription PDF:", pdfErr);
+            console.warn("Could not render digital prescription PDF, attempting server fallback:", pdfErr);
+            try {
+              const fallbackRes = await fetch(`${BASE}/api/patient/prescriptions/appointment/${item.type}/${item.id}/download`, { credentials: "include" });
+              if (fallbackRes.ok) {
+                const fallbackBlob = await fallbackRes.blob();
+                const safeName = getDeduplicatedFilename(`Prescription_${item.apptDate || "digital"}.pdf`, rxUsedNames);
+                zip.folder("Prescriptions")?.file(safeName, fallbackBlob);
+              }
+            } catch {}
           }
         }
       }
@@ -742,139 +793,163 @@ export default function PatientProfile({ patient, onPatientUpdate }: PatientProf
 
           <div className="divide-y divide-gray-100">
             {/* 1. Full Name */}
-            <div className="flex items-center justify-between gap-4 py-3.5 first:pt-0">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+            <div className="py-3.5 first:pt-0">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 mt-0.5">
                   <User size={16} />
                 </div>
 
-                <span className="w-20 sm:w-24 text-xs font-semibold text-gray-500 shrink-0">
-                  Full Name
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-500">
+                      Full Name
+                    </span>
 
-                <span className="font-bold text-sm text-gray-900 truncate">
-                  {patient.name}
-                </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNameInput(patient.name || "");
+                        setNameError("");
+                        setEditNameModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                  </div>
+
+                  <p className="mt-1">
+                    <span className="font-bold text-sm text-gray-900 break-words">
+                      {patient.name}
+                    </span>
+                  </p>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setNameInput(patient.name || "");
-                  setNameError("");
-                  setEditNameModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
-              >
-                <Pencil size={12} />
-                Edit
-              </button>
             </div>
 
             {/* 2. Age */}
-            <div className="flex items-center justify-between gap-4 py-3.5">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+            <div className="py-3.5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 mt-0.5">
                   <Calendar size={16} />
                 </div>
 
-                <span className="w-20 sm:w-24 text-xs font-semibold text-gray-500 shrink-0">
-                  Age
-                </span>
-
-                <span className="font-bold text-sm text-gray-900">
-                  {patient.age ? (
-                    `${patient.age} Years`
-                  ) : (
-                    <span className="text-gray-400 font-normal italic">
-                      Not provided
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-500">
+                      Age
                     </span>
-                  )}
-                </span>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setAgeInput(patient.age ? String(patient.age) : "");
-                  setAgeError("");
-                  setEditAgeModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
-              >
-                <Pencil size={12} />
-                Edit
-              </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAgeInput(patient.age ? String(patient.age) : "");
+                        setAgeError("");
+                        setEditAgeModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                  </div>
+
+                  <p className="mt-1">
+                    <span className="font-bold text-sm text-gray-900">
+                      {patient.age ? (
+                        `${patient.age} Years`
+                      ) : (
+                        <span className="text-gray-400 font-normal italic">
+                          Not provided
+                        </span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* 3. Gender */}
-            <div className="flex items-center justify-between gap-4 py-3.5">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+            <div className="py-3.5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 mt-0.5">
                   <User size={16} />
                 </div>
 
-                <span className="w-20 sm:w-24 text-xs font-semibold text-gray-500 shrink-0">
-                  Gender
-                </span>
-
-                <span className="font-bold text-sm text-gray-900">
-                  {patient.gender || (
-                    <span className="text-gray-400 font-normal italic">
-                      Not provided
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-500">
+                      Gender
                     </span>
-                  )}
-                </span>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setGenderInput(patient.gender || "");
-                  setGenderError("");
-                  setEditGenderModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
-              >
-                <Pencil size={12} />
-                Edit
-              </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenderInput(patient.gender || "");
+                        setGenderError("");
+                        setEditGenderModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                  </div>
+
+                  <p className="mt-1">
+                    <span className="font-bold text-sm text-gray-900">
+                      {patient.gender || (
+                        <span className="text-gray-400 font-normal italic">
+                          Not provided
+                        </span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* 4. Address */}
-            <div className="flex items-start justify-between gap-4 py-3.5 last:pb-0">
-              <div className="flex items-start gap-3 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 mt-0.5">
+            <div className="py-3.5 last:pb-0">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 mt-0.5">
                   <MapPin size={16} />
                 </div>
 
-                <span className="w-20 sm:w-24 text-xs font-semibold text-gray-500 shrink-0 pt-0.5">
-                  Address
-                </span>
-
-                <span className="font-bold text-sm text-gray-900 whitespace-pre-line leading-relaxed">
-                  {patient.address && patient.address.trim() ? (
-                    patient.address.trim()
-                  ) : (
-                    <span className="text-gray-400 font-normal italic">
-                      Not provided
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-500">
+                      Address
                     </span>
-                  )}
-                </span>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setAddressInput(patient.address || "");
-                  setAddressError("");
-                  setEditAddressModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
-              >
-                <Pencil size={12} />
-                Edit
-              </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddressInput(patient.address || "");
+                        setAddressError("");
+                        setEditAddressModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-[#D95B2F] bg-[#FFF2EC] border border-[#FCD9C8] hover:bg-[#FEE5D8] transition-colors shrink-0 active:scale-95 cursor-pointer font-sans"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                  </div>
+
+                  <p className="mt-1">
+                    <span className="font-bold text-sm text-gray-900 whitespace-pre-line leading-relaxed break-words">
+                      {patient.address && patient.address.trim() ? (
+                        patient.address.trim()
+                      ) : (
+                        <span className="text-gray-400 font-normal italic">
+                          Not provided
+                        </span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

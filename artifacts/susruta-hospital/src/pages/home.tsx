@@ -410,7 +410,7 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               md:mb-9
             "
           >
-            Led by Dr. P. Murali Krishna — Gold Medalist, Ph.D., and former
+            Led by Dr. P. Murali Krishna — Gold Medalist, Ph.D. and former
             Principal of S.V. Ayurvedic College — bringing three decades of
             authentic healing to Tirupati.
           </motion.p>

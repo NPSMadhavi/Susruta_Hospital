@@ -204,7 +204,7 @@ const scrollTo = (
       <img
         src={logoImg}
         alt="Susruta Hospital"
-        className="h-10 sm:h-10 w-auto max-w-[55vw] sm:max-w-[26vw]  object-contain"
+        className="h-9 sm:h-10 w-auto max-w-[50vw] sm:max-w-[26vw] object-contain"
       />
     </a>
 
@@ -265,7 +265,12 @@ const scrollTo = (
 
   {/* Mobile nav */}
   {isMobileMenuOpen && (
-    <div className="relative lg:hidden bg-white border-t border-border shadow-xl py-4 px-4 flex flex-col gap-1">
+    <>
+      <div
+        className="fixed inset-0 top-[75px] bg-black/25 z-40 lg:hidden backdrop-blur-xs"
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+      <div className="relative z-50 lg:hidden bg-white border-t border-border shadow-xl py-4 px-4 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-200">
       {navLinks.map((link) => (
         <a
           key={link.id}
@@ -301,6 +306,7 @@ const scrollTo = (
         </a>
       </div>
     </div>
+    </>
   )}
 </header>
 
@@ -523,8 +529,7 @@ const scrollTo = (
       </a>
     </p>
 
-<div>
-
+<div className="pr-5">
     {/* Terms */}
 
     <a

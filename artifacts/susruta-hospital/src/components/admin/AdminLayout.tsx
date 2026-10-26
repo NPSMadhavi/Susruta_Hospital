@@ -42,7 +42,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!admin) return;
-    adminFetch("/donations/count")
+    adminFetch("/admin/donations/count")
       .then(res => {
         if (typeof res?.count === "number") {
           setDonationCount(res.count);
@@ -50,7 +50,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
 
-    adminFetch("/account-deletion-requests/count")
+    adminFetch("/admin/account-deletion-requests/count")
       .then(res => {
         if (typeof res?.count === "number") {
           setPendingDeletionCount(res.count);

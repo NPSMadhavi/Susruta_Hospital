@@ -19,6 +19,7 @@ async function doctorFetch(path: string, opts: RequestInit = {}) {
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw data;
+  if (data && data.ok === false) throw data;
   return data;
 }
 
@@ -30,7 +31,11 @@ export default function DoctorLogin() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    doctorFetch("/me").then(() => navigate("/doctor/appointments")).catch(() => {});
+    doctorFetch("/me").then((user) => {
+      if (user && user.role === "doctor") {
+        navigate("/doctor/appointments");
+      }
+    }).catch(() => {});
   }, []);
 
   async function submit(e: React.FormEvent) {

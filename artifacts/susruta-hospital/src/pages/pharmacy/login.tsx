@@ -30,7 +30,11 @@ export default function PharmacyLogin() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    pharmaFetch("/me").then(() => navigate("/pharmacy/orders")).catch(() => {});
+    pharmaFetch("/me").then((user) => {
+      if (user && user.authenticated) {
+        navigate("/pharmacy/orders");
+      }
+    }).catch(() => {});
   }, []);
 
   async function submit(e: React.FormEvent) {

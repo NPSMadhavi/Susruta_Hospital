@@ -68,7 +68,7 @@ router.post("/logout", async (req, res) => {
 router.get("/me", async (req, res) => {
   const token = req.cookies?.pharmacy_session;
   const valid = await verifyPharmacySession(token);
-  if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
+  if (!valid) { res.json(null); return; }
   res.json({ authenticated: true });
 });
 

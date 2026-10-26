@@ -26,6 +26,8 @@ router.use("/appointments", appointmentsRouter);
 router.use("/availability", availabilityRouter);
 router.use("/testimonials", testimonialsRouter);
 router.use("/admin", adminRouter);
+router.use("/donations", adminRouter);
+router.use("/account-deletion-requests", adminRouter);
 router.use("/patient", patientRouter);
 router.use("/subscribers", subscribersRouter);
 router.use("/doctor", doctorRouter);
