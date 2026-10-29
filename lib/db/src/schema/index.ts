@@ -23,4 +23,5 @@ export * from "./custom_day_timings";
 export * from "./offline_qr_tokens";
 export * from "./medicines";
 export * from "./website_visitors";
+export * from "./visitor_days";
 export * from "./account_deletion_requests";

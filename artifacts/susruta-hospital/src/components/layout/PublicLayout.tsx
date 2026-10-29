@@ -503,7 +503,7 @@ const scrollTo = (
                 <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 text-[#D95B2F]">
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 stroke-[2.3]" aria-hidden="true" />
                   <span className="text-[13px] sm:text-[15px] font-bold font-sans whitespace-nowrap">
-                    +{visitorStats !== null ? visitorStats.todayVisitors.toLocaleString() : "0"} today
+                    {visitorStats !== null ? visitorStats.todayVisitors.toLocaleString() : "0"} today
                   </span>
                 </div>
               </div>

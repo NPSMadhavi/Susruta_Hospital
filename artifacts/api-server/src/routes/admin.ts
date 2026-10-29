@@ -1150,20 +1150,26 @@ router.post("/donations/:id/thank-you", requireAdmin, async (req, res) => {
 // ── GET /admin/visitors/stats ──────────────────────────────────
 router.get("/visitors/stats", requireAdmin, async (_req, res) => {
   try {
+    // Dedicated presence window based on 30s heartbeat interval + network jitter (60s)
     const query = `
       SELECT 
-        COUNT(id)::int AS "totalUniqueVisitors",
-        COUNT(CASE WHEN last_seen >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') THEN 1 END)::int AS "todayVisitors",
-        COUNT(CASE WHEN last_seen >= NOW() - INTERVAL '90 seconds' THEN 1 END)::int AS "liveVisitors"
-      FROM website_visitors;
+        (SELECT COUNT(*)::int FROM website_visitors WHERE last_heartbeat >= NOW() - INTERVAL '60 seconds') AS "viewingNow",
+        (SELECT COUNT(*)::int FROM visitor_days WHERE day_ist = (NOW() AT TIME ZONE 'Asia/Kolkata')::date) AS "todayVisitors",
+        (SELECT COUNT(*)::int FROM website_visitors) AS "totalUniqueVisitors";
     `;
     const result = await pool.query(query);
     const row = result.rows[0] || {};
 
+    const viewingNow = Number(row.viewingNow) || 0;
+    const todayVisitors = Number(row.todayVisitors) || 0;
+    const totalUniqueVisitors = Number(row.totalUniqueVisitors) || 0;
+
     res.json({
-      liveVisitors: Number(row.liveVisitors) || 0,
-      todayVisitors: Number(row.todayVisitors) || 0,
-      totalUniqueVisitors: Number(row.totalUniqueVisitors) || 0,
+      viewingNow,
+      todayVisitors,
+      totalUniqueVisitors,
+      // Backwards compatibility alias
+      liveVisitors: viewingNow,
     });
   } catch (err: any) {
     console.error("⚠️ [AdminVisitorStats] Error fetching visitor stats:", err.message);

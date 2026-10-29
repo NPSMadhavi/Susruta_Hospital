@@ -1032,7 +1032,7 @@ export default function PatientDashboard() {
   async function patientFetch(path: string, opts?: RequestInit) {
     const r = await fetch(`${BASE}/api/patient${path}`, { credentials: "include", ...opts });
     if (r.status === 401) {
-      window.location.replace("/");
+      nav("/portal", { replace: true });
       return null;
     }
     return r.json();
@@ -1046,17 +1046,17 @@ export default function PatientDashboard() {
           .then(res => res.ok ? res.json() : null)
           .then(me => {
             if (!me || !me.id) {
-              window.location.replace("/");
+              nav("/portal", { replace: true });
             }
           })
           .catch(() => {
-            window.location.replace("/");
+            nav("/portal", { replace: true });
           });
       }
     };
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
-  }, []);
+  }, [nav]);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -1064,12 +1064,12 @@ export default function PatientDashboard() {
       // 1. Verify patient session first before firing other queries
       const meRes = await fetch(`${BASE}/api/patient/me`, { credentials: "include" });
       if (!meRes.ok) {
-        window.location.replace("/");
+        nav("/portal", { replace: true });
         return;
       }
       const me = await meRes.json().catch(() => null);
       if (!me || !me.id) {
-        window.location.replace("/");
+        nav("/portal", { replace: true });
         return;
       }
       setPatient(me);
@@ -1105,7 +1105,7 @@ export default function PatientDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [endCall]);
+  }, [endCall, nav]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -1190,9 +1190,7 @@ export default function PatientDashboard() {
     } catch (err) {
       console.error("Logout error:", err);
     }
-    // Set previous history state to landing page, then navigate to /portal
-    window.history.replaceState(null, "", "/");
-    window.location.href = "/portal";
+    nav("/portal", { replace: true });
   }
 
   async function uploadPatientDoc(file: File) {

@@ -7,11 +7,11 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function AdminVisitors() {
   const [visitorStats, setVisitorStats] = useState<{
-    liveVisitors: number;
+    viewingNow: number;
     todayVisitors: number;
     totalUniqueVisitors: number;
   }>({
-    liveVisitors: 0,
+    viewingNow: 0,
     todayVisitors: 0,
     totalUniqueVisitors: 0,
   });
@@ -24,7 +24,7 @@ export default function AdminVisitors() {
       if (res.ok) {
         const data = await res.json();
         setVisitorStats({
-          liveVisitors: Number(data.liveVisitors) || 0,
+          viewingNow: Number(data.viewingNow ?? data.liveVisitors) || 0,
           todayVisitors: Number(data.todayVisitors) || 0,
           totalUniqueVisitors: Number(data.totalUniqueVisitors) || 0,
         });
@@ -44,7 +44,7 @@ export default function AdminVisitors() {
 
   useEffect(() => {
     fetchVisitorStats();
-    // 30-second polling as specified in requirements
+    // 30-second polling for live presence refresh
     const interval = setInterval(fetchVisitorStats, 30000);
     return () => clearInterval(interval);
   }, [fetchVisitorStats]);
@@ -56,14 +56,25 @@ export default function AdminVisitors() {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-sans font-bold text-foreground">Visitors</h1>
           </div>
-          
+          <p className="text-sm text-muted-foreground mt-1">
+            Real-time public website visitor statistics in Indian Standard Time (IST).
+          </p>
         </div>
 
-        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="self-start sm:self-auto gap-2 text-xs font-medium"
+        >
+          <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+          Refresh Stats
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Live Visitors Card */}
+        {/* Card 1: Viewing Now */}
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm transition-all hover:shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -78,14 +89,14 @@ export default function AdminVisitors() {
             </div>
           </div>
           <p className="text-5xl font-bold font-sans text-emerald-600 tracking-tight">
-            {visitorLoading ? "-" : visitorStats.liveVisitors}
+            {visitorLoading ? "-" : visitorStats.viewingNow}
           </p>
           <p className="text-xs text-muted-foreground mt-3">
-            Visitors active on the website in the last 90 seconds
+            Users currently viewing the website
           </p>
         </div>
 
-        {/* Today's Visitors Card */}
+        {/* Card 2: Today's Visitors */}
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm transition-all hover:shadow-md">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-muted-foreground text-sm">Today's Visitors</h3>
@@ -96,12 +107,9 @@ export default function AdminVisitors() {
           <p className="text-5xl font-bold font-sans text-primary tracking-tight">
             {visitorLoading ? "-" : visitorStats.todayVisitors}
           </p>
-          <p className="text-xs text-muted-foreground mt-3">
-            Distinct anonymous visitors today
-          </p>
         </div>
 
-        {/* Total Unique Visitors Card */}
+        {/* Card 3: Total Unique Visitors */}
         <div className="bg-white p-6 rounded-2xl border border-border shadow-sm transition-all hover:shadow-md">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-muted-foreground text-sm">Total Unique Visitors</h3>
@@ -111,9 +119,6 @@ export default function AdminVisitors() {
           </div>
           <p className="text-5xl font-bold font-sans text-blue-600 tracking-tight">
             {visitorLoading ? "-" : visitorStats.totalUniqueVisitors}
-          </p>
-          <p className="text-xs text-muted-foreground mt-3">
-            All-time distinct anonymous visitor
           </p>
         </div>
       </div>

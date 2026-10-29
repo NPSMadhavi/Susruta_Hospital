@@ -78,14 +78,6 @@ export default function PortalLogin() {
       const match = COUNTRIES.find(c => c.code === code);
       if (match) setForm(f => ({ ...f, countryCode: match.code }));
     });
-
-    const handlePopState = () => {
-      if (window.location.pathname.startsWith("/portal/dashboard")) {
-        window.location.replace("/");
-      }
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {

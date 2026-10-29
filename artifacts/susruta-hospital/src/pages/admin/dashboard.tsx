@@ -19,13 +19,15 @@ export default function AdminDashboard() {
 
   // Visitor statistics state
   const [visitorStats, setVisitorStats] = useState<{
-    liveVisitors: number;
+    viewingNow: number;
     todayVisitors: number;
     totalUniqueVisitors: number;
+    liveVisitors: number;
   }>({
-    liveVisitors: 0,
+    viewingNow: 0,
     todayVisitors: 0,
     totalUniqueVisitors: 0,
+    liveVisitors: 0,
   });
   const [visitorLoading, setVisitorLoading] = useState(true);
 
@@ -34,10 +36,12 @@ export default function AdminDashboard() {
       const res = await fetch(`${BASE}/api/admin/visitors/stats`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
+        const viewingNow = Number(data.viewingNow ?? data.liveVisitors) || 0;
         setVisitorStats({
-          liveVisitors: Number(data.liveVisitors) || 0,
+          viewingNow,
           todayVisitors: Number(data.todayVisitors) || 0,
           totalUniqueVisitors: Number(data.totalUniqueVisitors) || 0,
+          liveVisitors: viewingNow,
         });
       }
     } catch {

@@ -7,7 +7,7 @@
     "dev": "tsx watch ./src/index.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/lib/verification.test.ts src/lib/recaptcha.test.ts src/lib/cancellation-period.test.ts src/lib/account-system.test.ts src/lib/prescription-medicine-resolver.test.ts"
+    "test": "tsx --test src/lib/verification.test.ts src/lib/recaptcha.test.ts src/lib/cancellation-period.test.ts src/lib/account-system.test.ts src/lib/prescription-medicine-resolver.test.ts src/lib/visitor-tracking.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
