@@ -367,7 +367,7 @@ export default function AdminSettings() {
                 checked={!!form.appointmentBookingEnabled}
                 onChange={(v) => toggleWebsiteFeature("appointmentBookingEnabled", v)}
                 label="Enable Online Booking"
-                description="When off, the booking form is hidden and patients are asked to call."
+                description="When off, online consultations are hidden and disabled for patients."
                 disabled={featureUpdating === "appointmentBookingEnabled"}
               />
               <Toggle

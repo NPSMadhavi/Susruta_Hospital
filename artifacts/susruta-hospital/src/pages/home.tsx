@@ -182,9 +182,6 @@ const HERO_TEXTS: Array<{ en: string; te: string }> = [
 
 function HeroSection({ lang }: { lang: "en" | "te" }) {
   const [activeHeroText, setActiveHeroText] = useState(0);
-  const { data: settings } = useGetSettings();
-  const isBookingDisabled = settings && settings.appointmentBookingEnabled === false;
-  const clinicPhone = settings?.clinicPhone1 || "9492068180";
 
   // ───────────────── HERO TEXT AUTO CHANGE ─────────────────
   useEffect(() => {
@@ -430,72 +427,39 @@ function HeroSection({ lang }: { lang: "en" | "te" }) {
               duration: 0.6,
             }}
           >
-            {isBookingDisabled ? (
-              <a
-                href={`tel:${clinicPhone}`}
-                className="
-                  group
-                  inline-flex
-                  items-center
-                  justify-center
-                  gap-3
-                  px-7
-                  md:px-8
-                  py-3.5
-                  md:py-4
-                  bg-[#D95B2F]
-                  text-white
-                  rounded-[10px]
-                  text-[14px]
-                  md:text-[16px]
-                  shadow-lg
-                  shadow-[#D95B2F]/20
-                  hover:bg-[#c84f28]
-                  hover:-translate-y-0.5
-                  transition-all
-                "
-                style={{
-                  fontWeight: 600,
-                }}
-              >
-                <Phone size={18} />
-                {lang === "te" ? `కాల్ చేయండి: ${clinicPhone}` : `Call to Book: ${clinicPhone}`}
-              </a>
-            ) : (
-              <button
-                onClick={() =>
-                  window.dispatchEvent(
-                    new CustomEvent("open-booking-modal")
-                  )
-                }
-                className="
-                  group
-                  inline-flex
-                  items-center
-                  justify-center
-                  gap-3
-                  px-7
-                  md:px-8
-                  py-3.5
-                  md:py-4
-                  bg-[#D95B2F]
-                  text-white
-                  rounded-[10px]
-                  text-[14px]
-                  md:text-[16px]
-                  shadow-lg
-                  shadow-[#D95B2F]/20
-                  hover:bg-[#c84f28]
-                  hover:-translate-y-0.5
-                  transition-all
-                "
-                style={{
-                  fontWeight: 600,
-                }}
-              >
-                Book Appointment
-              </button>
-            )}
+            <button
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("open-booking-modal")
+                )
+              }
+              className="
+                group
+                inline-flex
+                items-center
+                justify-center
+                gap-3
+                px-7
+                md:px-8
+                py-3.5
+                md:py-4
+                bg-[#D95B2F]
+                text-white
+                rounded-[10px]
+                text-[14px]
+                md:text-[16px]
+                shadow-lg
+                shadow-[#D95B2F]/20
+                hover:bg-[#c84f28]
+                hover:-translate-y-0.5
+                transition-all
+              "
+              style={{
+                fontWeight: 600,
+              }}
+            >
+              Book Appointment
+            </button>
           </motion.div>
         </div>
       </div>
@@ -2275,20 +2239,6 @@ function AppointmentsSection({ lang }: { lang: "en" | "te" }) {
     );
   };
 
-  if (settings && !settings.appointmentBookingEnabled) {
-    return (
-      <TexturedSection id="appointments" className="py-20 bg-[#f7f7f7]">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <Reveal>
-            <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
-            <h2 className="text-2xl font-serif font-bold mb-2">{tr("appt.label", lang)}</h2>
-            <p className="text-muted-foreground">{tr("appt.unavailable", lang)}</p>
-          </Reveal>
-        </div>
-      </TexturedSection>
-    );
-  }
-
   return (
     <TexturedSection id="appointments" className="py-20 bg-[#f7f7f7]">
       <SC>
@@ -2699,9 +2649,6 @@ function TestimonialsSection({ lang }: { lang: "en" | "te" }) {
 // ─── CONTACT ──────────────────────────────────────────────────
 function ContactSection({ lang }: { lang: "en" | "te" }) {
   const { data: settings } = useGetSettings();
-  const isBookingDisabled = settings && settings.appointmentBookingEnabled === false;
-  const clinicPhone = settings?.clinicPhone1 || "9492068180";
-
   const galleryViewportRef = useRef<HTMLDivElement>(null);
   const gallerySetRef = useRef<HTMLDivElement>(null);
   const [galleryCopies, setGalleryCopies] = useState(2);
@@ -2735,10 +2682,6 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
   ];
 
   const handleBookClick = () => {
-    if (isBookingDisabled) {
-      window.location.href = `tel:${clinicPhone}`;
-      return;
-    }
     window.dispatchEvent(new CustomEvent("open-booking-modal"));
   };
 
@@ -3129,54 +3072,27 @@ function ContactSection({ lang }: { lang: "en" | "te" }) {
               "
               style={{ lineHeight: "29px" }}
             >
-              {isBookingDisabled
-                ? (lang === "te" ? "కాల్ ద్వారా అపాయింట్‌మెంట్ పొందండి" : "Call us today to schedule your appointment")
-                : (lang === "te" ? "ఈరోజే మీ అపాయింట్‌మెంట్‌ను బుక్ చేసుకోండి" : "Book your appointment today")}
+              {lang === "te" ? "ఈరోజే మీ అపాయింట్‌మెంట్‌ను బుక్ చేసుకోండి" : "Book your appointment today"}
             </p>
 
-            {isBookingDisabled ? (
-              <a
-                href={`tel:${clinicPhone}`}
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  px-8
-                  py-3.5
-                  bg-[#E65D2F]
-                  text-white
-                  rounded-[10px]
-                  text-[14px]
-                  md:text-[16px]
-                  font-semibold
-                  hover:bg-[#D95B2F]
-                  transition-all
-                  duration-200
-                "
-              >
-                <Phone size={18} />
-                {lang === "te" ? `కాల్ చేయండి: ${clinicPhone}` : `Call ${clinicPhone}`}
-              </a>
-            ) : (
-              <button
-                onClick={handleBookClick}
-                className="
-                  px-8
-                  py-3.5
-                  bg-[#E65D2F]
-                  text-white
-                  rounded-[10px]
-                  text-[14px]
-                  md:text-[16px]
-                  font-semibold
-                  hover:bg-[#D95B2F]
-                  transition-all
-                  duration-200
-                "
-              >
-                Book appointment
-              </button>
-            )}
+            <button
+              onClick={handleBookClick}
+              className="
+                px-8
+                py-3.5
+                bg-[#E65D2F]
+                text-white
+                rounded-[10px]
+                text-[14px]
+                md:text-[16px]
+                font-semibold
+                hover:bg-[#D95B2F]
+                transition-all
+                duration-200
+              "
+            >
+              Book appointment
+            </button>
           </div>
         </div>
       </SC>

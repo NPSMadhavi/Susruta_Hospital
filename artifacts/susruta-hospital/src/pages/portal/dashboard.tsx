@@ -166,6 +166,9 @@ function AppointmentStatus({ status }: { status: string }) {
   )}><span className="size-1 rounded-full bg-current" />{status === "pending" ? "Pending" : STATUS_CONFIG[status]?.label || status}</span>;
 }
 
+const PORTAL_ACTION_BTN_CLASS =
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 select-none h-8 w-[150px] px-2.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium leading-none text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs";
+
 function AppointmentActions({
   item,
   onJoin,
@@ -182,21 +185,40 @@ function AppointmentActions({
 
   useScrollLock(showDocsModal);
 
-  return <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-nowrap">
-    {online?.joinEnabled && <button onClick={() => onJoin(online.id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-[12px] text-white hover:bg-emerald-700 font-medium whitespace-nowrap shrink-0"><Video size={12} /> Join Video Call</button>}
-    {hasRx && onViewPrescription && (
+  return (
+    <>
+    <div className="flex flex-row md:flex-col items-center md:items-start justify-start gap-1.5 sm:gap-2 md:gap-1.5 flex-wrap md:flex-nowrap">
+      {online?.joinEnabled && (
+        <button
+          type="button"
+          onClick={() => onJoin(online.id)}
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 select-none h-8 w-[150px] px-2.5 rounded-lg bg-emerald-600 text-[12px] font-medium leading-none text-white hover:bg-emerald-700 cursor-pointer transition-colors shadow-2xs"
+        >
+          <Video size={13} className="shrink-0" />
+          <span>Join Video Call</span>
+        </button>
+      )}
       <button
         type="button"
-        onClick={() => onViewPrescription(item)}
-        aria-label={"View prescription for " + fmtDateShort(item.date)}
-        className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs shrink-0"
+        onClick={() => setShowDocsModal(true)}
+        aria-label={"View documents for " + fmtDateShort(item.date)}
+        className={PORTAL_ACTION_BTN_CLASS}
       >
-        <Eye size={12} /> View Prescription
+        <Eye size={13} className="shrink-0" />
+        <span>View Documents</span>
       </button>
-    )}
-    <button onClick={() => setShowDocsModal(true)} aria-label={"View documents for " + fmtDateShort(item.date)} 
-    className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-medium leading-3 text-[#D95B2F] hover:bg-[#D95B2F]/10 cursor-pointer transition-colors shadow-2xs shrink-0">
-      <Eye size={12} /> View Documents</button>
+      {hasRx && onViewPrescription && (
+        <button
+          type="button"
+          onClick={() => onViewPrescription(item)}
+          aria-label={"View prescription for " + fmtDateShort(item.date)}
+          className={PORTAL_ACTION_BTN_CLASS}
+        >
+          <Eye size={13} className="shrink-0" />
+          <span>View Prescription</span>
+        </button>
+      )}
+    </div>
 
     {showDocsModal && (
       <div
@@ -242,7 +264,8 @@ function AppointmentActions({
       </div>
     )}
     {previewDocument && <MedicalDocumentPreview key={previewDocument.objectPath} doc={previewDocument} onClose={() => setPreviewDocument(null)} />}
-  </div>;
+    </>
+  );
 }
 
 function AppointmentMobileCard({
@@ -2010,17 +2033,40 @@ export default function PatientDashboard() {
 
                 {/* Desktop table - 100% preserved */}
                 <div className="hidden md:block flex-1 overflow-x-auto">
-                  <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-[14px] text-[#202420]">
-                    <colgroup><col className="w-[17%]" /><col className="w-[26%]" /><col className="w-[23.5%]" /><col className="w-[18%]" /><col className="w-[15.5%]" /></colgroup>
-                    <thead className="bg-[#FAF7F4] text-[16px]"><tr>{["Date", "Time", "Type", "Status", "Action"].map(label => <th key={label} scope="col" className="h-11 px-[18px] font-medium">{label}</th>)}</tr></thead>
+                  <table className="w-full min-w-[820px] table-fixed border-collapse text-left text-[14px] text-[#202420]">
+                    <colgroup>
+                      <col className="w-[15%]" />
+                      <col className="w-[21%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[26%]" />
+                    </colgroup>
+                    <thead className="bg-[#FAF7F4] text-[16px]">
+                      <tr>
+                        {["Date", "Time", "Type", "Status", "Action"].map(label => (
+                          <th
+                            key={label}
+                            scope="col"
+                            className={cn(
+                              "h-11 px-[18px] font-medium",
+                              label === "Action" && "min-w-[176px] text-left"
+                            )}
+                          >
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
                     <tbody>
-                      {pagedPast.items.map(item => <tr key={item.type + item.data.id} className="h-[54px] border-t border-[#f1efec]">
-                        <td className="px-[18px] py-3 font-medium">{fmtDateShort(item.date)}</td>
-                        <td className="whitespace-nowrap px-[18px] py-3">{appointmentTime(item)}</td>
-                        <td className="px-[18px] py-3 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
-                        <td className="px-[18px]  py-3"><AppointmentStatus status={item.data.status} /></td>
-                        <td className="px-[18px] py-3"><AppointmentActions item={item} onJoin={handleJoinCall} onViewPrescription={handleViewApptRx} /></td>
-                      </tr>)}
+                      {pagedPast.items.map(item => (
+                        <tr key={item.type + item.data.id} className="border-t border-[#f1efec]">
+                          <td className="px-[18px] py-3.5 font-medium">{fmtDateShort(item.date)}</td>
+                          <td className="whitespace-nowrap px-[18px] py-3.5">{appointmentTime(item)}</td>
+                          <td className="px-[18px] py-3.5 text-[14px]">{item.type === "online" ? "Online Consultation" : "Offline Consultation"}</td>
+                          <td className="px-[18px] py-3.5"><AppointmentStatus status={item.data.status} /></td>
+                          <td className="px-[18px] py-3.5 min-w-[176px] text-left"><AppointmentActions item={item} onJoin={handleJoinCall} onViewPrescription={handleViewApptRx} /></td>
+                        </tr>
+                      ))}
                       {pastAppts.length === 0 && <tr><td colSpan={5} className="p-5 text-center text-sm text-gray-500">No past appointments</td></tr>}
                     </tbody>
                   </table>

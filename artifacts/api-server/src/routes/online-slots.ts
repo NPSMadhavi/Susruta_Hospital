@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable, appointmentsTable } from "@workspace/db";
+import { db, siteSettingsTable, onlineSlotSessionsTable, onlineSlotsTable, onlineAppointmentsTable, appointmentsTable } from "@workspace/db";
 import { eq, desc, asc, and, gte, inArray, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/auth";
 import { sendSlotAvailabilityUpdateBroadcastEmail } from "../lib/email";
@@ -277,6 +277,12 @@ router.delete("/sessions/:id", requireAdmin, async (req, res): Promise<void> => 
 // ── Public: GET /api/online-slots/available ───────────────────
 // Returns slots for today and future dates (including booked ones so UI can render them disabled)
 router.get("/available", async (_req, res) => {
+  const [settings] = await db.select().from(siteSettingsTable);
+  if (settings && settings.appointmentBookingEnabled === false) {
+    res.json([]);
+    return;
+  }
+
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const parts = new Intl.DateTimeFormat("en-GB", {

@@ -219,31 +219,6 @@ export default function Appointments() {
     );
   };
 
-  // Booking disabled
-  if (settings && !settings.appointmentBookingEnabled) {
-    const clinicPhone = settings.clinicPhone1 || "9492068180";
-    return (
-      <PublicLayout>
-        <TexturedSection className="py-24 bg-[#f7f7f7]">
-          <div className="max-w-2xl mx-auto px-4 text-center">
-            <Reveal>
-              <Calendar size={48} className="mx-auto text-muted-foreground mb-4 opacity-30" />
-              <h2 className="text-2xl font-serif font-bold mb-2">{tr("appt.label", lang)}</h2>
-              <p className="text-muted-foreground mb-6">{tr("appt.unavailable", lang)}</p>
-              <a
-                href={`tel:${clinicPhone}`}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#D95B2F] text-white font-semibold shadow hover:opacity-90 transition-all"
-              >
-                <Phone size={18} />
-                Call {clinicPhone}
-              </a>
-            </Reveal>
-          </div>
-        </TexturedSection>
-      </PublicLayout>
-    );
-  }
-
   return (
     <PublicLayout>
       <TexturedSection className="py-16 md:py-24 bg-[#f7f7f7]">

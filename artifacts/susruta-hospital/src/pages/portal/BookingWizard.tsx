@@ -187,38 +187,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   const [wizardResending, setWizardResending] = useState(false);
   const [wizardResent, setWizardResent] = useState(false);
 
-  if (settings && settings.appointmentBookingEnabled === false) {
-    const clinicPhone = settings.clinicPhone1 || "9492068180";
-    return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overscroll-contain select-none"
-        style={{ touchAction: "none" }}
-        onTouchMove={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
-        onWheel={e => { if (e.target === e.currentTarget) e.preventDefault(); }}
-      >
-        <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-xl border border-border">
-          <Calendar className="mx-auto text-muted-foreground mb-3 opacity-40" size={40} />
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Online Booking Unavailable</h3>
-          <p className="text-sm text-gray-600 mb-6">
-            Online booking is currently disabled. Please contact the hospital directly to schedule your appointment.
-          </p>
-          <a
-            href={`tel:${clinicPhone}`}
-            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#D95B2F] text-white font-semibold rounded-xl hover:bg-[#c44e25] transition-colors"
-          >
-            <Phone size={16} />
-            Call {clinicPhone}
-          </a>
-          <button
-            onClick={onClose}
-            className="mt-3 text-xs text-muted-foreground hover:text-gray-900 block w-full py-1 cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const onlineBookingEnabled = settings?.appointmentBookingEnabled !== false;
 
   async function handleResendVerificationInWizard() {
     setWizardResending(true);
@@ -411,6 +380,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
   }
 
   function handleTypeSelect(type: WizardType) {
+    if (type === "online" && !onlineBookingEnabled) return;
     setWizType(type);
     if (type === "online") {
       fetchOnlineSlots();
@@ -562,7 +532,7 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-gray-900 text-sm sm:text-base md:text-lg leading-tight group-hover:text-[#1a3d2b] transition-colors">Offline Consultation</p>
                         <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-1.5 leading-snug sm:leading-relaxed">
-                          Visit the clinic in Tirupati. Book a time slot and get hands-on Ayurvedic treatment.
+                          Visit the clinic in Tirupati. Book a offline slot and get Ayurvedic treatment.
                         </p>
                         <p className="text-[11px] sm:text-xs text-green-700 font-semibold mt-1.5 sm:mt-2 flex items-center gap-1.5">
                           <span>📍</span> 119, Ramulavari North Mada Street
@@ -572,26 +542,28 @@ export function BookingWizard({ patient, onClose, onSuccess }: Props) {
                   </button>
 
                   {/* Online */}
-                  <button
-                    onClick={() => handleTypeSelect("online")}
-                    className="w-full bg-white border sm:border-2 border-gray-200 hover:border-[#D95B2F] hover:bg-red-50/50 rounded-2xl p-3 sm:p-5 md:p-6 text-left transition-all group cursor-pointer shadow-xs sm:shadow-none"
-                  >
-                    <div className="flex items-start gap-3 sm:gap-5">
-                      <div className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-red-50 sm:bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-100 sm:group-hover:bg-red-200 transition-colors">
-                        <Video size={20} className="text-[#D95B2F] sm:hidden" />
-                        <Video size={28} className="text-[#D95B2F] hidden sm:block" />
+                  {onlineBookingEnabled && (
+                    <button
+                      onClick={() => handleTypeSelect("online")}
+                      className="w-full bg-white border sm:border-2 border-gray-200 hover:border-[#D95B2F] hover:bg-red-50/50 rounded-2xl p-3 sm:p-5 md:p-6 text-left transition-all group cursor-pointer shadow-xs sm:shadow-none"
+                    >
+                      <div className="flex items-start gap-3 sm:gap-5">
+                        <div className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-red-50 sm:bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-100 sm:group-hover:bg-red-200 transition-colors">
+                          <Video size={20} className="text-[#D95B2F] sm:hidden" />
+                          <Video size={28} className="text-[#D95B2F] hidden sm:block" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-gray-900 text-sm sm:text-base md:text-lg leading-tight group-hover:text-[#D95B2F] transition-colors">Online Consultation</p>
+                          <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-1.5 leading-snug sm:leading-relaxed">
+                            Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.
+                          </p>
+                          <p className="text-[11px] sm:text-xs text-gray-600 font-semibold mt-1.5 sm:mt-2 flex items-center gap-1.5">
+                            <span>👥</span> Requires uploading medical reports
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-gray-900 text-sm sm:text-base md:text-lg leading-tight group-hover:text-[#D95B2F] transition-colors">Online Consultation</p>
-                        <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-1.5 leading-snug sm:leading-relaxed">
-                          Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.
-                        </p>
-                        <p className="text-[11px] sm:text-xs text-gray-600 font-semibold mt-1.5 sm:mt-2 flex items-center gap-1.5">
-                          <span>👥</span> Requires uploading medical reports
-                        </p>
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}

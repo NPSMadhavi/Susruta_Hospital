@@ -157,16 +157,9 @@ const scrollTo = (
   setLangDropOpen(false);
 };
 
-  const isBookingDisabled = settings && settings.appointmentBookingEnabled === false;
-  const clinicPhone = settings?.clinicPhone1 || "9492068180";
-
   const handleBookClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsMobileMenuOpen(false);
-    if (isBookingDisabled) {
-      window.location.href = `tel:${clinicPhone}`;
-      return;
-    }
     if (isPatientLoggedIn) {
       navigate("/portal/dashboard");
     } else {
@@ -238,18 +231,11 @@ const scrollTo = (
       </a> */}
 
       <a
-        href={isBookingDisabled ? `tel:${clinicPhone}` : "/portal"}
+        href="/portal"
         onClick={handleBookClick}
         className="px-5 py-2.5 rounded-[10px] bg-[#D95B2F] font-manrope text-[#F5F2E9] font-semibold text-[15px] shadow-md hover:opacity-90 hover:-translate-y-0.5 transition-all whitespace-nowrap inline-flex items-center justify-center cursor-pointer"
       >
-        {isBookingDisabled ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Phone size={14} />
-            {lang === "te" ? "కాల్ చేయండి" : "Call to Book"}
-          </span>
-        ) : (
-          tr("btn.book", lang)
-        )}
+        {tr("btn.book", lang)}
       </a>
     </div>
 
@@ -291,18 +277,11 @@ const scrollTo = (
         
 
         <a
-          href={isBookingDisabled ? `tel:${clinicPhone}` : "/portal"}
+          href="/portal"
           onClick={handleBookClick}
           className="flex-1 px-4 py-3 rounded-xl bg-[#D95B2F] text-white font-bold text-center inline-flex items-center justify-center cursor-pointer"
         >
-          {isBookingDisabled ? (
-            <span className="inline-flex items-center gap-1.5 justify-center">
-              <Phone size={14} />
-              {lang === "te" ? "కాల్ చేయండి" : "Call to Book"}
-            </span>
-          ) : (
-            tr("btn.book", lang)
-          )}
+          {tr("btn.book", lang)}
         </a>
       </div>
     </div>

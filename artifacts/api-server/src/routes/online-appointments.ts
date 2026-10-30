@@ -43,6 +43,11 @@ const BookBody = z.object({
 router.post("/", requirePatient, async (req: any, res) => {
   const patient = req.patient;
 
+  const [settings] = await db.select().from(siteSettingsTable);
+  if (settings && settings.appointmentBookingEnabled === false) {
+    res.status(403).json({ error: "online_booking_disabled", message: "Online booking is currently disabled." });
+    return;
+  }
 
   const parsed = BookBody.safeParse(req.body);
   if (!parsed.success) {

@@ -108,33 +108,7 @@ export default function PortalBook() {
   const [apptType, setApptType] = useState<"offline" | "online" | null>(null);
   const [hasOnlineSlots, setHasOnlineSlots] = useState(false);
 
-  if (settings && settings.appointmentBookingEnabled === false) {
-    const clinicPhone = settings.clinicPhone1 || "9492068180";
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center shadow-md border border-border">
-          <Calendar className="mx-auto text-muted-foreground mb-4 opacity-40" size={48} />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Online Booking Unavailable</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Online booking is currently disabled. Please contact the hospital directly to schedule your appointment.
-          </p>
-          <a
-            href={`tel:${clinicPhone}`}
-            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#D95B2F] text-white font-semibold rounded-xl hover:bg-[#c44e25] transition-colors"
-          >
-            <Phone size={16} />
-            Call {clinicPhone}
-          </a>
-          <button
-            onClick={() => navigate("/portal/dashboard")}
-            className="mt-4 text-sm text-muted-foreground hover:text-gray-900 block w-full py-1 cursor-pointer"
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const onlineBookingEnabled = settings?.appointmentBookingEnabled !== false;
 
   const [monthIdx, setMonthIdx] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -350,33 +324,35 @@ export default function PortalBook() {
             </button>
 
             {/* Online Consultation */}
-            <button
-              onClick={() => hasOnlineSlots ? navigate("/portal/online-book") : undefined}
-              disabled={!hasOnlineSlots}
-              className={[
-                "w-full border-2 rounded-2xl p-5 text-left transition-all group shadow-sm",
-                hasOnlineSlots
-                  ? "bg-white border-border hover:border-blue-400 hover:bg-blue-50 cursor-pointer"
-                  : "bg-gray-50 border-dashed border-gray-200 cursor-not-allowed opacity-60",
-              ].join(" ")}
-            >
-              <div className="flex items-start gap-4">
-                <div className={["w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors",
-                  hasOnlineSlots ? "bg-blue-100 group-hover:bg-blue-200" : "bg-gray-100"].join(" ")}>
-                  <Video size={22} className={hasOnlineSlots ? "text-blue-700" : "text-gray-400"} />
+            {onlineBookingEnabled && (
+              <button
+                onClick={() => hasOnlineSlots ? navigate("/portal/online-book") : undefined}
+                disabled={!hasOnlineSlots}
+                className={[
+                  "w-full border-2 rounded-2xl p-5 text-left transition-all group shadow-sm",
+                  hasOnlineSlots
+                    ? "bg-white border-border hover:border-blue-400 hover:bg-blue-50 cursor-pointer"
+                    : "bg-gray-50 border-dashed border-gray-200 cursor-not-allowed opacity-60",
+                ].join(" ")}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={["w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                    hasOnlineSlots ? "bg-blue-100 group-hover:bg-blue-200" : "bg-gray-100"].join(" ")}>
+                    <Video size={22} className={hasOnlineSlots ? "text-blue-700" : "text-gray-400"} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground text-base flex items-center gap-2">
+                      Online Consultation
+                      {!hasOnlineSlots && <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Not Available</span>}
+                    </p>
+                    <p className="text-muted-foreground text-sm mt-1 leading-relaxed">Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.</p>
+                    {hasOnlineSlots
+                      ? <p className="text-xs text-blue-700 font-medium mt-2">Slots available — upload medical reports required</p>
+                      : <p className="text-xs text-gray-400 font-medium mt-2">No slots currently open. Check back soon.</p>}
+                  </div>
                 </div>
-                <div>
-                  <p className="font-bold text-foreground text-base flex items-center gap-2">
-                    Online Consultation
-                    {!hasOnlineSlots && <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Not Available</span>}
-                  </p>
-                  <p className="text-muted-foreground text-sm mt-1 leading-relaxed">Video call with Dr. Murali Krishna from the comfort of your home. Sunday slots only.</p>
-                  {hasOnlineSlots
-                    ? <p className="text-xs text-blue-700 font-medium mt-2">Slots available — upload medical reports required</p>
-                    : <p className="text-xs text-gray-400 font-medium mt-2">No slots currently open. Check back soon.</p>}
-                </div>
-              </div>
-            </button>
+              </button>
+            )}
           </motion.div>
         </div>
       </div>
